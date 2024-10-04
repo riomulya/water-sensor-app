@@ -10,6 +10,7 @@ import { SvgXml } from 'react-native-svg';
 import { MotiView } from 'moti';
 import Entypo from '@expo/vector-icons/build/Entypo';
 import { Easing } from 'react-native-reanimated';
+import { LinearGradient } from "expo-linear-gradient";
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -43,7 +44,11 @@ export default function RootLayout() {
 
   if (!appIsReady) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', }}>
+      <LinearGradient
+        // Use the LinearGradient component from expo-linear-gradient
+        colors={['#ffffff', '#ffcccc']}
+        style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }} // Full-screen gradient
+      >
         <View
           style={{
             width: 144,
@@ -91,7 +96,6 @@ export default function RootLayout() {
             />
           </MotiView>
         </View>
-
         {/* Text with sliding effect */}
         <MotiView
           from={{ translateY: 20, opacity: 0 }}
@@ -103,11 +107,11 @@ export default function RootLayout() {
             easing: Easing.inOut(Easing.ease),
           }}
         >
-          <Text style={{ marginTop: 20, fontSize: 18, fontWeight: 'bold', color: '#00796B' }}>
+          <Text style={{ marginTop: 20, fontSize: 18, fontWeight: 'bold', color: 'black' }}>
             Memantau dan Memprediksi Kualitas Air
           </Text>
         </MotiView>
-      </View>
+      </LinearGradient>
     );
   }
 
