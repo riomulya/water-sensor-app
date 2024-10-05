@@ -1,10 +1,10 @@
 // components/navigation/Tabs.tsx
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import HomeScreen from '../../app/Home/_layout';
-import ChartScreen from '../../app/Chart/_layout';
-import AnalysisScreen from '../../app/Analysis/_layout';
-import MapScreen from '../../app/Map/_layout';
-import SensorsScreen from '../../app/Sensors/_layout';
+import HomeScreen from '../../app/(tabs)/home/Home';
+import ChartScreen from '../../app/(tabs)/chart/Chart';
+import AnalysisScreen from '../../app/(tabs)/analysis/Analysis';
+import MapScreen from '../../app/(tabs)/map/Map';
+import SensorsScreen from '../../app/(tabs)/sensors/Sensors';
 import { StyleSheet, Text, View } from 'react-native'; // Mengimpor View dari react-native
 import { Center } from '@/components/ui/center';
 import { House } from 'lucide-react-native';

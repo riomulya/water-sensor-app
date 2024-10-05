@@ -96,29 +96,15 @@ export default function RootLayout() {
             />
           </MotiView>
         </View>
-        {/* Text with sliding effect */}
-        <MotiView
-          from={{ translateY: 20, opacity: 0 }}
-          animate={{ translateY: 0, opacity: 1 }}
-          transition={{
-            type: 'timing',
-            duration: 800,
-            delay: 1500,
-            easing: Easing.inOut(Easing.ease),
-          }}
-        >
-          <Text style={{ marginTop: 20, fontSize: 18, fontWeight: 'bold', color: 'black' }}>
-            Memantau dan Memprediksi Kualitas Air
-          </Text>
-        </MotiView>
       </LinearGradient>
     );
   }
 
   return (
     <GluestackUIProvider mode="light">
-      <Stack>
-        <Stack.Screen name="index" options={{ header: () => <CustomAppBar /> }} />
+      <Stack >
+        <Stack.Screen name="(tabs)" options={{ header: CustomAppBar }} />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
       </Stack>
     </GluestackUIProvider>
   );
