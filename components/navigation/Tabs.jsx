@@ -1,10 +1,10 @@
 // components/navigation/Tabs.tsx
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import HomeScreen from '../../screens/HomeScreen';
-import ChartScreen from '../../screens/ChartScreen';
-import AnalysisScreen from '../../screens/AnalysisScreen';
-import AddScreen from '../../screens/AddScreen';
-import SensorsScreen from '../../screens/SensorsScreen';
+import HomeScreen from '../../app/Home/_layout';
+import ChartScreen from '../../app/Chart/_layout';
+import AnalysisScreen from '../../app/Analysis/_layout';
+import MapScreen from '../../app/Map/_layout';
+import SensorsScreen from '../../app/Sensors/_layout';
 import { StyleSheet, Text, View } from 'react-native'; // Mengimpor View dari react-native
 import { Center } from '@/components/ui/center';
 import { House } from 'lucide-react-native';
@@ -73,8 +73,8 @@ const Tabs = () => {
                 }}
             />
             <Tab.Screen
-                name="Add"
-                component={AddScreen}
+                name="Map"
+                component={MapScreen}
                 options={{
                     tabBarIcon: ({ focused }) => (
                         <Center>
