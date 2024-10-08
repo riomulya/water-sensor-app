@@ -1,3 +1,4 @@
+
 import { useReducer } from 'react';
 import { StyleSheet, Pressable, View, Image, StatusBar } from 'react-native';
 import { MotiView } from 'moti';

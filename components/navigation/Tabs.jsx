@@ -1,10 +1,10 @@
 // components/navigation/Tabs.tsx
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import HomeScreen from '../../app/(tabs)/home/Home';
-import ChartScreen from '../../app/(tabs)/chart/Chart';
-import AnalysisScreen from '../../app/(tabs)/analysis/Analysis';
-import MapScreen from '../../app/(tabs)/map/Map';
-import SensorsScreen from '../../app/(tabs)/sensors/Sensors';
+import HomeScreen from '../../app/screens/Home';
+import ChartScreen from '../../app/screens/Chart';
+import AnalysisScreen from '../../app/screens/Analysis';
+import MapScreen from '../../app/screens/Map';
+import SensorsScreen from '../../app/screens/Sensors';
 import { StyleSheet, Text, View } from 'react-native'; // Mengimpor View dari react-native
 import { Center } from '@/components/ui/center';
 import { House } from 'lucide-react-native';
@@ -64,6 +64,7 @@ const Tabs = () => {
                 name="Chart"
                 component={ChartScreen}
                 options={{
+                    headerShown: false,
                     tabBarIcon: ({ focused }) => (
                         <Center>
                             <House color={focused ? '#fc0335' : 'gray'} />
@@ -76,6 +77,7 @@ const Tabs = () => {
                 name="Map"
                 component={MapScreen}
                 options={{
+                    headerShown: false,
                     tabBarIcon: ({ focused }) => (
                         <Center>
                             <House
@@ -96,6 +98,7 @@ const Tabs = () => {
                 name="Analysis"
                 component={AnalysisScreen}
                 options={{
+                    headerShown: false,
                     tabBarIcon: ({ focused }) => (
                         <Center>
                             <House color={focused ? '#fc0335' : 'gray'} />
@@ -108,6 +111,7 @@ const Tabs = () => {
                 name="Sensors"
                 component={SensorsScreen}
                 options={{
+                    headerShown: false,
                     tabBarIcon: ({ focused }) => (
                         <Center>
                             <House color={focused ? '#fc0335' : 'gray'} />

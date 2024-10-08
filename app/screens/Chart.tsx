@@ -3,9 +3,9 @@ import React from 'react'
 
 const ChartScreen = () => {
     return (
-        <View>
-            <Text>ChartScreen</Text>
-        </View>
+        // <View>
+        <Text>ChartScreen</Text>
+        // </View>
     )
 }
 

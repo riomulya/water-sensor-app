@@ -103,7 +103,7 @@ export default function RootLayout() {
   return (
     <GluestackUIProvider mode="light">
       <Stack >
-        <Stack.Screen name="(tabs)" options={{ header: CustomAppBar }} />
+        <Stack.Screen name="screens" options={{ header: CustomAppBar }} />
         <Stack.Screen name="index" options={{ headerShown: false }} />
       </Stack>
     </GluestackUIProvider>

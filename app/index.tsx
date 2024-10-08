@@ -1,8 +1,8 @@
 import React from 'react';
-import { Text, Image, Dimensions, StyleSheet, Pressable } from 'react-native';
+import { Text, Image, Dimensions, StyleSheet, } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView, MotiText } from 'moti';
-import { router } from 'expo-router';
+import { Link } from 'expo-router';
 
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
@@ -79,16 +79,13 @@ export default function Index() {
         from={{ scale: 0.9 }}
         animate={{ scale: 1 }}
         transition={{
-          loop: true,
           type: 'timing',
           duration: 1500,
           delay: 1200,
         }}
         style={styles.button}
       >
-        <Pressable onPress={() => router.replace('/Home')}>
-          <Text style={styles.buttonText}>LANJUTKAN</Text>
-        </Pressable>
+        <Link href='./screens/Home' style={styles.buttonText}>Lanjutkan</Link>
       </MotiView>
     </LinearGradient >
   );
