@@ -1,4 +1,4 @@
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Pressable, StyleSheet, } from 'react-native';
 import React, { useEffect } from 'react';
 import Animated, {
     runOnUI,

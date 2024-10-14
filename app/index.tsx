@@ -2,7 +2,7 @@ import React from 'react';
 import { Text, Image, Dimensions, StyleSheet, } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView, MotiText } from 'moti';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
@@ -85,7 +85,11 @@ export default function Index() {
         }}
         style={styles.button}
       >
-        <Link href='./screens/Home' style={styles.buttonText}>Lanjutkan</Link>
+        <Link href='./screens/Home'
+          style={styles.buttonText}
+          onPress={() => router.replace('/screens/Home')}
+        >Lanjutkan
+        </Link>
       </MotiView>
     </LinearGradient >
   );

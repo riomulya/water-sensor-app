@@ -21,8 +21,8 @@ const BottomTab = createBottomTabNavigator<RootStackParamList>();
 
 function ScreensLayout() {
     return (
-        <GestureHandlerRootView >
-            <BottomTab.Navigator tabBar={TabBar}  >
+        <GestureHandlerRootView>
+            <BottomTab.Navigator tabBar={TabBar}>
                 <BottomTab.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
                 <BottomTab.Screen name="Feeds" component={FeedsScreen} options={{ headerShown: false }} />
                 <BottomTab.Screen name="Analysis" component={AnalysisScreen} options={{ headerShown: false }} />
