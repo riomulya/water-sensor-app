@@ -171,12 +171,9 @@ const HomeScreen = () => {
                 region={location}
                 showsUserLocation
                 onPress={handleMapPress}
+                className='z-0'
             >
                 <DestinationMarker destination={destination} address={address} />
-
-                {markerLocation && (
-                    <Marker coordinate={markerLocation} />
-                )}
             </MapView>
 
             {/* Input pencarian lokasi dengan tombol X untuk menghapus */}
@@ -211,12 +208,11 @@ const HomeScreen = () => {
                 )}
             </View>
             <BottomSheet>
-                <BottomSheetTrigger>
-                    <Fab size="sm" placement="top left" isHovered={false} isDisabled={false} isPressed={true} className='z-0 bg-white opacity-90'>
+                <Fab size="sm" placement="top left" isHovered={false} isDisabled={false} isPressed={true} className='z-0 bg-white opacity-90'>
+                    <BottomSheetTrigger>
                         <AntDesign name="piechart" size={20} color="#ea5757" />
-                    </Fab>
-                </BottomSheetTrigger>
-
+                    </BottomSheetTrigger>
+                </Fab>
                 <BottomSheetPortal
                     snapPoints={["50%", "70%", "100%"]}
                     backdropComponent={BottomSheetBackdrop}
