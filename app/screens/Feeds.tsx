@@ -1,60 +1,68 @@
 import React from 'react';
-import {
-    Actionsheet,
-    ActionsheetBackdrop,
-    ActionsheetContent,
-    ActionsheetDragIndicator,
-    ActionsheetDragIndicatorWrapper,
-    ActionsheetItem,
-    ActionsheetItemText,
-} from '@/components/ui/actionsheet';
-import { Fab, FabIcon, FabLabel } from '@/components/ui/fab';
-import AntDesign from '@expo/vector-icons/AntDesign';
-import { Button } from '@/components/ui/button';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { LineChart } from 'react-native-gifted-charts';
 
-const FeedsScreen = () => {
-    const [showActionsheet, setShowActionsheet] = React.useState(false);
-    const handleClose = () => setShowActionsheet(false);
+interface DataPoint {
+    value: number;
+}
+
+const FeedsScreen: React.FC = () => {
+    const data: DataPoint[] = [
+        { value: 60 },
+        { value: 30 },
+        { value: 70 },
+        { value: 50 },
+        { value: 80 },
+        { value: 40 },
+        { value: 60 },
+        { value: 20 },
+        { value: 90 },
+    ];
+
+    const chartTitles: string[] = ['Accel X', 'Accel Y', 'Accel Z', "pH Sensor", "Temperature Sensor", "Turbidity Sensor"];
+
+    const renderChart = (title: string, data: DataPoint[]): JSX.Element => (
+        <View style={styles.chartContainer} key={title}>
+            <Text style={styles.title}>{title}</Text>
+            <LineChart
+                data={data}
+                thickness={2}
+                color={'purple'}
+                hideDataPoints={false}
+                dataPointsColor={'purple'}
+                hideYAxisText={false}
+                xAxisColor={'gray'}
+                yAxisColor={'gray'}
+            />
+        </View>
+    );
 
     return (
-        <>
-            {/* <Button
-                className='bg-background-50 rounded-md'
-                onPress={() => setShowActionsheet(true)}
-            > */}
-            <Fab size="lg" placement="top right" isHovered={false} isDisabled={false} isPressed={false} onPress={() => setShowActionsheet(true)} >
-                <AntDesign name="piechart" size={24} color="white" />
-            </Fab >
-            {/* </Button> */}
-
-            {/* <Box
-                className='bg-background-50 rounded-md'
-                onPress={() => setShowActionsheet(true)}
-            >
-                <Fab size="lg" placement="top right" isHovered={true} isDisabled={false} isPressed={true} >
-                </Fab>
-            </Box> */}
-
-            {/* ActionSheet content */}
-            <Actionsheet isOpen={showActionsheet} onClose={handleClose}>
-                <ActionsheetBackdrop />
-                <ActionsheetContent>
-                    <ActionsheetDragIndicatorWrapper>
-                        <ActionsheetDragIndicator />
-                    </ActionsheetDragIndicatorWrapper>
-                    <ActionsheetItem onPress={handleClose}>
-                        <ActionsheetItemText>Edit Message</ActionsheetItemText>
-                    </ActionsheetItem>
-                    <ActionsheetItem onPress={handleClose}>
-                        <ActionsheetItemText>Mark Unread</ActionsheetItemText>
-                    </ActionsheetItem>
-                    <ActionsheetItem onPress={handleClose}>
-                        <ActionsheetItemText>Remind Me</ActionsheetItemText>
-                    </ActionsheetItem>
-                </ActionsheetContent>
-            </Actionsheet>
-        </>
+        <ScrollView style={styles.container}>
+            {chartTitles.map((title) => renderChart(title, data))}
+        </ScrollView>
     );
 };
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        padding: 10,
+        backgroundColor: '#f5f5f5',
+    },
+    chartContainer: {
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        padding: 10,
+        marginBottom: 20,
+        elevation: 2, // untuk shadow di Android
+    },
+    title: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 10,
+        alignSelf: 'center',
+    },
+});
 
 export default FeedsScreen;
