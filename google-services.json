@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "158863628611",
+    "firebase_url": "https://e-commerce-93a09-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "e-commerce-93a09",
+    "storage_bucket": "e-commerce-93a09.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:158863628611:android:35c0efb3549c2c74f837f6",
+        "android_client_info": {
+          "package_name": "com.watersensor.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "158863628611-k6j3r5h26r2k396dlakcqb0tthcv2v9t.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAUAwLTCgz4gEauMSr7f_QjX03fFhoHUm0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "158863628611-k6j3r5h26r2k396dlakcqb0tthcv2v9t.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

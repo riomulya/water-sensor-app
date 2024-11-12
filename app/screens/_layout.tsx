@@ -8,7 +8,6 @@ import FeedsScreen from './Feeds';
 import SettingsScreen from './Settings';
 
 import TabBar from '@/components/navigation/TabBar';
-import { StyleSheet } from 'react-native';
 
 type RootStackParamList = {
     Home: undefined;

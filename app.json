@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "water sensor app",
-    "slug": "water sensor app",
+    "slug": "water-sensor-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -21,7 +21,12 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.watersensor.app"
+      "package": "com.watersensor.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAUAwLTCgz4gEauMSr7f_QjX03fFhoHUm0"
+        }
+      }
     },
     "web": {
       "bundler": "metro",
@@ -30,7 +35,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Show current location on map."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

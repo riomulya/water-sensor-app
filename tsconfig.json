@@ -14,6 +14,9 @@
     "app/index.tsx",
     "components/navigation/Tabs.jsx",
     "components/navigation/TabBarIcon.tsx",
-    "app/(tabs)/_layout.jsx"
+    "app/(tabs)/_layout.jsx",
+    "nativewind-env.d.ts",
+    "expo-env.d.ts",
+    "maplibre.d.ts"
   ]
 }

@@ -80,14 +80,14 @@ export default function Index() {
         animate={{ scale: 1 }}
         transition={{
           type: 'timing',
-          duration: 1500,
-          delay: 1200,
+          duration: 150,
+          delay: 120,
         }}
         style={styles.button}
       >
-        <Link href='./screens/Home'
+        <Link replace href='./screens/Home'
           style={styles.buttonText}
-          onPress={() => router.replace('/screens/Home')}
+        // onPress={() => router.replace('./screens/Home')}
         >Lanjutkan
         </Link>
       </MotiView>
