@@ -7,7 +7,7 @@ const CustomAppBar = () => {
         <LinearGradient
             colors={['#ffffff', '#ffcccc']}
             start={{ x: 0, y: .1 }}
-            end={{ x: 1, y: .1 }}
+            end={{ x: 1, y: .1 }}   
             style={{ ...styles.appBar, ...styles.shadow }}
         >
             <View style={styles.logoContainer} >
