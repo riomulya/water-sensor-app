@@ -22,10 +22,8 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.watersensor.app",
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyAUAwLTCgz4gEauMSr7f_QjX03fFhoHUm0"
-        }
+      "googleMaps": {
+        "apiKey": "AIzaSyBMQJvTCDIMs-cbrPb7Q0zrlBvUr1CsGrE"
       }
     },
     "web": {

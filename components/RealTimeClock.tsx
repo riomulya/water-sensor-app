@@ -39,10 +39,9 @@ const RealTimeClock: React.FC = () => {
     };
 
     return (
-        <Center className="h-[200px] w-[300px] p-5">
+        <Center className="h-[50px] p-5">
             <Text className="text-typography-1 font-bold">
                 {formatTime(currentTime)}{' '}
-                {/* Tentukan periode waktu */}
                 {getPeriodOfDay(currentTime.getHours())}
             </Text>
         </Center>

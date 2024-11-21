@@ -1,8 +1,9 @@
 import React from 'react';
-import { Text, Image, Dimensions, StyleSheet, } from 'react-native';
+import { Text, Image, Dimensions, StyleSheet, Pressable, } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView, MotiText } from 'moti';
 import { Link, router } from 'expo-router';
+import "../global.css";
 
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
@@ -35,7 +36,7 @@ export default function Index() {
         from={{ translateY: 30, opacity: 0 }}
         animate={{ translateY: 0, opacity: 1 }}
         transition={{
-          delay: 500,
+          delay: 50,
           type: 'timing',
           duration: 800,
         }}
@@ -48,7 +49,7 @@ export default function Index() {
         from={{ translateY: 30, opacity: 0 }}
         animate={{ translateY: 0, opacity: 1 }}
         transition={{
-          delay: 700,
+          delay: 70,
           type: 'timing',
           duration: 800,
         }}
@@ -62,7 +63,7 @@ export default function Index() {
         from={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{
-          delay: 900,
+          delay: 90,
           type: 'timing',
           duration: 700,
         }}
@@ -75,22 +76,25 @@ export default function Index() {
       </MotiView>
 
       {/* Button */}
-      <MotiView
-        from={{ scale: 0.9 }}
-        animate={{ scale: 1 }}
-        transition={{
-          type: 'timing',
-          duration: 150,
-          delay: 120,
-        }}
-        style={styles.button}
-      >
-        <Link replace href='./screens/Home'
-          style={styles.buttonText}
-        // onPress={() => router.replace('./screens/Home')}
-        >Lanjutkan
-        </Link>
-      </MotiView>
+
+      <Pressable onPress={() => { router.push('./screens/Home'); }}>
+        <MotiView
+          from={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{
+            type: 'timing',
+            duration: 900,
+            delay: 120,
+          }}
+          style={styles.button}
+        >
+          <Text
+            style={styles.buttonText}
+          >
+            Lanjutkan
+          </Text>
+        </MotiView>
+      </Pressable>
     </LinearGradient >
   );
 }

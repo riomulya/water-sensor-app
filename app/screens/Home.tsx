@@ -2,13 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import MapView, { PROVIDER_GOOGLE, Marker } from 'react-native-maps';
+import MapView, { PROVIDER_DEFAULT } from 'react-native-maps';
+// import OsmMapView from 'react-native-maps-osmdroid';
+// import OsmTileLayer from 'react-native-maps-osmdroid';
 import { Text } from '@/components/ui/text';
 import { BottomSheet, BottomSheetBackdrop, BottomSheetContent, BottomSheetDragIndicator, BottomSheetPortal, BottomSheetTrigger } from '@/components/ui/bottomsheet';
 import Donut from '@/components/Donut';
 import RealTimeClock from '@/components/RealTimeClock';
-import { Fab } from '@/components/ui/fab';
+import { Fab, FabIcon, FabLabel } from '@/components/ui/fab';
 import DestinationMarker from '@/components/destination/DestinationMarker';
+import { Box } from '@/components/ui/box';
+import { AddIcon } from '@/components/ui/icon';
+
 
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
 
@@ -167,7 +172,7 @@ const HomeScreen = () => {
         <>
             <MapView
                 style={StyleSheet.absoluteFill}
-                provider={PROVIDER_GOOGLE}
+                provider={PROVIDER_DEFAULT}
                 region={location}
                 showsUserLocation
                 onPress={handleMapPress}
@@ -177,7 +182,7 @@ const HomeScreen = () => {
             </MapView>
 
             {/* Input pencarian lokasi dengan tombol X untuk menghapus */}
-            <View style={styles.searchBox}>
+            < View style={styles.searchBox} >
                 <View style={styles.inputContainer}>
                     <TextInput
                         style={styles.input}
@@ -194,23 +199,36 @@ const HomeScreen = () => {
                         </TouchableOpacity>
                     )}
                 </View>
-                {suggestions.length > 0 && (
-                    <FlatList
-                        style={styles.suggestions}
-                        data={suggestions}
-                        keyExtractor={(item) => item.place_id}
-                        renderItem={({ item }) => (
-                            <TouchableOpacity onPress={() => selectSuggestion(item)}>
-                                <Text style={styles.suggestionText}>{item.display_name}</Text>
-                            </TouchableOpacity>
-                        )}
-                    />
-                )}
-            </View>
+                {
+                    suggestions.length > 0 && (
+                        <FlatList
+                            style={styles.suggestions}
+                            data={suggestions}
+                            keyExtractor={(item) => item.place_id}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity onPress={() => selectSuggestion(item)}>
+                                    <Text style={styles.suggestionText}>{item.display_name}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    )
+                }
+            </ View>
             <BottomSheet>
-                <Fab size="sm" placement="top left" isHovered={false} isDisabled={false} isPressed={true} className='z-0 bg-white opacity-90'>
+                <Fab
+                    size="sm"
+                    isHovered={false}
+                    isDisabled={false}
+                    isPressed={true}
+                    style={{
+                        position: 'absolute', // FAB menjadi elemen absolut di layar
+                        bottom: 120,           // Jarak dari bagian bawah layar
+                        right: 25,            // Jarak dari sisi kanan layar
+                        zIndex: 0,           // Memastikan FAB berada di atas elemen lain
+                    }}
+                >
                     <BottomSheetTrigger>
-                        <AntDesign name="piechart" size={20} color="#ea5757" />
+                        <AntDesign name="piechart" size={35} color="#ea5757" />
                     </BottomSheetTrigger>
                 </Fab>
                 <BottomSheetPortal
@@ -264,7 +282,7 @@ const styles = StyleSheet.create({
     },
     searchBox: {
         position: 'absolute',
-        top: 10,
+        top: 6,
         width: '70%',
         alignSelf: 'center',
         backgroundColor: 'white',

@@ -11,7 +11,7 @@ const CustomAppBar = () => {
             style={{ ...styles.appBar, ...styles.shadow }}
         >
             <View style={styles.logoContainer} >
-                <Image
+                <Image 
                     source={require('../assets/images/logo.png')}
                     style={styles.logoImage}
                 />

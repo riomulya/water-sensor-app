@@ -1,37 +1,26 @@
 {
   "project_info": {
-    "project_number": "158863628611",
-    "firebase_url": "https://e-commerce-93a09-default-rtdb.asia-southeast1.firebasedatabase.app",
-    "project_id": "e-commerce-93a09",
-    "storage_bucket": "e-commerce-93a09.appspot.com"
+    "project_number": "770415743021",
+    "project_id": "water-sensor-app-627b3",
+    "storage_bucket": "water-sensor-app-627b3.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:158863628611:android:35c0efb3549c2c74f837f6",
+        "mobilesdk_app_id": "1:770415743021:android:f57b659e2a624932be28a4",
         "android_client_info": {
           "package_name": "com.watersensor.app"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "158863628611-k6j3r5h26r2k396dlakcqb0tthcv2v9t.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAUAwLTCgz4gEauMSr7f_QjX03fFhoHUm0"
+          "current_key": "AIzaSyBMQJvTCDIMs-cbrPb7Q0zrlBvUr1CsGrE"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "158863628611-k6j3r5h26r2k396dlakcqb0tthcv2v9t.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }
