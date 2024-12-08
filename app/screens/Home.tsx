@@ -1,43 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, Button } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
-import * as Location from 'expo-location';
-import MapView, { PROVIDER_DEFAULT } from 'react-native-maps';
-// import OsmMapView from 'react-native-maps-osmdroid';
-// import OsmTileLayer from 'react-native-maps-osmdroid';
-import { Text } from '@/components/ui/text';
+import { Marker } from 'react-native-maps'; // Import Marker
 import { BottomSheet, BottomSheetBackdrop, BottomSheetContent, BottomSheetDragIndicator, BottomSheetPortal, BottomSheetTrigger } from '@/components/ui/bottomsheet';
 import Donut from '@/components/Donut';
 import RealTimeClock from '@/components/RealTimeClock';
 import { Fab, FabIcon, FabLabel } from '@/components/ui/fab';
-import DestinationMarker from '@/components/destination/DestinationMarker';
-import { Box } from '@/components/ui/box';
-import { AddIcon } from '@/components/ui/icon';
-
+import Map from '@/components/map/Map';
+import * as Location from 'expo-location';
+import { get } from 'react-native/Libraries/TurboModule/TurboModuleRegistry';
 
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
-
-// Tipe lokasi awal
-interface LocationType {
-    latitude: number;
-    longitude: number;
-    latitudeDelta: number;
-    longitudeDelta: number;
-}
-
-interface NominatimResult {
-    place_id: string;
-    lat: string;
-    lon: string;
-    display_name: string;
-}
-
-const INITIAL_LOCATION: LocationType = {
-    latitude: -6.3580484,
-    longitude: 106.6340785,
-    latitudeDelta: 0.005,
-    longitudeDelta: 0.005,
-};
 
 const data = [{
     percentage: 8,
@@ -65,83 +38,10 @@ const data = [{
     max: 10
 },]
 
-const NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search?";
 
 const HomeScreen = () => {
-    const [location, setLocation] = useState<LocationType>(INITIAL_LOCATION);
-    const [searchQuery, setSearchQuery] = useState<string>('');
-    const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
-    const [markerLocation, setMarkerLocation] = useState<LocationType | null>(null);
     const [destination, setDestination] = useState<{ latitude: number, longitude: number } | null>(null); // Untuk marker destinasi
     const [address, setAddress] = useState<string | null>(null); // Untuk menyimpan alamat lengkap
-
-    useEffect(() => {
-        const getLocation = async () => {
-            try {
-                const { status } = await Location.requestForegroundPermissionsAsync();
-                if (status !== 'granted') {
-                    Alert.alert(
-                        "Izin Lokasi Ditolak",
-                        "Menggunakan lokasi default karena izin akses lokasi ditolak."
-                    );
-                    return;
-                }
-
-                const userLocation = await Location.getCurrentPositionAsync({});
-                setLocation({
-                    latitude: userLocation.coords.latitude,
-                    longitude: userLocation.coords.longitude,
-                    latitudeDelta: 0.005,
-                    longitudeDelta: 0.005,
-                });
-            } catch (error) {
-                Alert.alert(
-                    "Kesalahan",
-                    "Tidak dapat mengakses lokasi. Menggunakan lokasi default."
-                );
-            }
-        };
-
-        getLocation();
-    }, []);
-
-    const fetchSuggestions = async (query: string) => {
-        if (query.length < 3) {
-            setSuggestions([]); // Minimal 3 karakter untuk mulai mencari
-            return;
-        }
-
-        try {
-            const response = await fetch(
-                `${NOMINATIM_BASE_URL}q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5&countrycodes=ID`
-            );
-            const data: NominatimResult[] = await response.json();
-            setSuggestions(data);
-        } catch (error) {
-            Alert.alert("Kesalahan", "Gagal mengambil saran lokasi.");
-        }
-    };
-
-    const selectSuggestion = (item: NominatimResult) => {
-        const { lat, lon, display_name } = item;
-        const latNumber = parseFloat(lat);
-        const lonNumber = parseFloat(lon);
-
-        setLocation({
-            latitude: latNumber,
-            longitude: lonNumber,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-        });
-        setMarkerLocation({ latitude: latNumber, longitude: lonNumber, latitudeDelta: 0.005, longitudeDelta: 0.005 });
-        setSearchQuery(display_name); // Mengisi input dengan alamat lengkap
-        setSuggestions([]); // Kosongkan saran setelah dipilih
-    };
-
-    const clearSearch = () => {
-        setSearchQuery('');  // Kosongkan input
-        setSuggestions([]);  // Hapus saran
-    };
 
     // Fungsi untuk melakukan reverse geocoding (mengambil alamat dari lat dan lon)
     const fetchAddressFromCoordinates = async (latitude: number, longitude: number) => {
@@ -161,59 +61,48 @@ const HomeScreen = () => {
     };
 
     // Event handler untuk klik di peta
-    const handleMapPress = (event: any) => {
-        const { latitude, longitude } = event.nativeEvent.coordinate;
+    const handleMapPress = (coordinates: [number, number]) => {
+        const latitude = coordinates[0];
+        const longitude = coordinates[1];
         setDestination({ latitude, longitude });
-        fetchAddressFromCoordinates(latitude, longitude); // Ambil alamat dari lat dan lon
+        fetchAddressFromCoordinates(latitude, longitude);
+
         Alert.alert("Destinasi Dipilih", `Alamat: ${address}, Lat: ${latitude}, Long: ${longitude}`);
     };
 
+    const zoomToGeoJSONFuncRef = useRef<() => void>();
+
+    const getCurrentLocationFuncRef = useRef<() => void>();
+
     return (
         <>
-            <MapView
-                style={StyleSheet.absoluteFill}
-                provider={PROVIDER_DEFAULT}
-                region={location}
-                showsUserLocation
-                onPress={handleMapPress}
-                className='z-0'
+            <SafeAreaView style={styles.container}>
+                <Map
+                    onInitialized={(zoomToGeoJSON) =>
+                        (zoomToGeoJSONFuncRef.current = zoomToGeoJSON)
+                    }
+                    onMapPress={handleMapPress}
+                    onGetCurrentLocation={(getCurrentLocationFunc) =>
+                        (getCurrentLocationFuncRef.current = getCurrentLocationFunc)
+                    }
+                />
+            </SafeAreaView>
+            <Fab
+                size="sm"
+                isHovered={false}
+                isDisabled={false}
+                isPressed={true}
+                onPress={() => getCurrentLocationFuncRef.current?.()}
+                placement='bottom left'
+                style={{
+                    position: 'absolute', // FAB menjadi elemen absolut di layar
+                    bottom: 120,           // Jarak dari bagian bawah layar
+                    left: 25,            // Jarak dari sisi kiri layar
+                    zIndex: 0,           // Memastikan FAB berada di atas elemen lain
+                }}
             >
-                <DestinationMarker destination={destination} address={address} />
-            </MapView>
-
-            {/* Input pencarian lokasi dengan tombol X untuk menghapus */}
-            < View style={styles.searchBox} >
-                <View style={styles.inputContainer}>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Cari lokasi..."
-                        value={searchQuery}
-                        onChangeText={(text) => {
-                            setSearchQuery(text);
-                            fetchSuggestions(text);
-                        }}
-                    />
-                    {searchQuery.length > 0 && (
-                        <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
-                            <AntDesign name="closecircle" size={20} color="#999" />
-                        </TouchableOpacity>
-                    )}
-                </View>
-                {
-                    suggestions.length > 0 && (
-                        <FlatList
-                            style={styles.suggestions}
-                            data={suggestions}
-                            keyExtractor={(item) => item.place_id}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity onPress={() => selectSuggestion(item)}>
-                                    <Text style={styles.suggestionText}>{item.display_name}</Text>
-                                </TouchableOpacity>
-                            )}
-                        />
-                    )
-                }
-            </ View>
+                <AntDesign name="home" size={35} color="#ea5757" />
+            </Fab>
             <BottomSheet>
                 <Fab
                     size="sm"
@@ -231,6 +120,7 @@ const HomeScreen = () => {
                         <AntDesign name="piechart" size={35} color="#ea5757" />
                     </BottomSheetTrigger>
                 </Fab>
+
                 <BottomSheetPortal
                     snapPoints={["50%", "70%", "100%"]}
                     backdropComponent={BottomSheetBackdrop}

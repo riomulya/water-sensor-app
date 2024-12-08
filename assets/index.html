@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/x-icon" href="https://openlayers.org/favicon.ico" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/3.0.0/leaflet-search.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-gesture-handling@0.6.0/dist/leaflet-gesture-handling.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maps Sensors</title>
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      height: 100%
+    }
+
+    #map {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 100%
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/3.0.0/leaflet-search.min.js"></script>
+  <script src="https://unpkg.com/leaflet-gesture-handling@0.6.0/dist/leaflet-gesture-handling.js"></script>
+  <script>
+    const map = L.map('map', {
+      gestureHandling: true // Enable gesture handling (for pinch-zoom and rotate)
+    }).setView([-6.3580484, 106.6340785], 5);
+
+    const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
+    let currentMarker = null;
+    let baseLocationMarker = null;
+
+    const fetchAddressFromCoordinates = async (latitude, longitude) => {
+      try {
+        const response = await fetch(
+          `${NOMINATIM_REVERSE_URL}lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`
+        );
+        const data = await response.json();
+        if (data && data.display_name) {
+          return data.display_name;
+        } else {
+          return "Alamat tidak ditemukan";
+        }
+      } catch (error) {
+        return "Gagal memuat alamat";
+      }
+    };
+
+
+    // Tambahkan tile layer OpenStreetMap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    // Function to update the map location from React Native
+    window.updateMapLocation = async function (lat, lng) {
+      map.setView([lat, lng], 18); // Zoom level 18 for user location
+      // Jika ada marker sebelumnya, hapus marker tersebut
+
+      const address = await fetchAddressFromCoordinates(lat, lng);
+      if (baseLocationMarker) {
+        baseLocationMarker.remove(); // Menghapus marker yang ada
+      }
+
+      // Tambahkan marker baru di lokasi baru
+      baseLocationMarker = L.marker([lat, lng]).addTo(map).bindPopup("Lokasi baru anda : " + address + ", Lat: " + lat + ", Long: " + lng + "").openPopup();
+    };
+
+    // Kontrol pencarian dengan geocoder
+    const searchControl = new L.Control.Geocoder({
+      geocoder: L.Control.Geocoder.nominatim()
+    }).addTo(map);
+
+    // Tombol pencarian lokasi
+    L.DomEvent.on(searchControl, 'search', function (e) {
+      // Menampilkan hasil pencarian
+      alert('Lokasi ditemukan: ' + e.geocode.name);
+
+      // Mengirim koordinat ke aplikasi Native (React Native)
+      window.ReactNativeWebView.postMessage(JSON.stringify([e.geocode.center.lat, e.geocode.center.lng]));
+
+      // Zoom ke lokasi yang ditemukan
+      map.setView(e.geocode.center, 13);
+    });
+
+    // Function to handle map click and send coordinates to React Native  
+    map.on('click', function (e) {
+      const lat = e.latlng.lat;
+      const lng = e.latlng.lng;
+
+      // Jika ada marker sebelumnya, hapus marker tersebut
+      if (currentMarker) {
+        currentMarker.remove(); // Menghapus marker yang ada
+      }
+
+      // Mendapatkan alamat secara asinkron
+      fetchAddressFromCoordinates(lat, lng)
+        .then(address => {
+          // Menambahkan marker baru setelah alamat berhasil diambil
+          currentMarker = L.marker([lat, lng]).addTo(map);
+          currentMarker.bindPopup(`Alamat: ${address}, Lat: ${lat}, Long: ${lng}`).openPopup();
+
+          // Mengirim koordinat ke aplikasi Native (React Native)
+          window.ReactNativeWebView.postMessage(JSON.stringify([lat, lng]));
+        })
+        .catch(error => {
+          // Jika ada error saat fetch alamat
+          console.error("Terjadi kesalahan: ", error);
+        });
+    });
+
+
+    // Enable rotation with two-finger gesture using leaflet-gesture-handling
+    map.on('gesturestart', function (e) {
+      console.log('Gesture started');
+    });
+
+    map.on('gestureend', function (e) {
+      console.log('Gesture ended');
+    });
+
+    // Fungsi untuk menerima data koordinat dari React Native
+    window.zoomToGeoJSON = function () {
+      map.fitBounds([
+        [-6.5, 106.0],
+        [-6.0, 107.0]
+      ]);
+    };
+  </script>
+</body>
+
+</html>

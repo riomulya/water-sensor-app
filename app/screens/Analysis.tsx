@@ -65,7 +65,7 @@ const AnalysisScreen = () => {
             </View>
             <ScrollView contentContainerStyle={styles.scrollViewContainer}>
                 {data.map((item, index) => (
-                    <Card size="lg" variant="outline" className={`m-3 ${index === data.length - 1 ? 'mb-28' : ''}`}
+                    <Card key={index} size="lg" variant="outline" className={`m-3 ${index === data.length - 1 ? 'mb-28' : ''}`}
                     >
                         <View className='flex flex-row'>
                             <Image
