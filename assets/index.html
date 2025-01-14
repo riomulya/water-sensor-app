@@ -34,46 +34,37 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/3.0.0/leaflet-search.min.js"></script>
   <script src="https://unpkg.com/leaflet-gesture-handling@0.6.0/dist/leaflet-gesture-handling.js"></script>
   <script>
+    const markerLocation = L.icon({
+      iconUrl: "https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/markerBaseLocation.png",
+      iconSize: [40, 40],
+    });
+
+    const markerSelected = L.icon({
+      iconUrl: "https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/waterSelected.png?t=2024-12-08T10%3A32%3A27.014Z",
+      iconSize: [40, 40],
+    });
+
     const map = L.map('map', {
       gestureHandling: true // Enable gesture handling (for pinch-zoom and rotate)
-    }).setView([-6.3580484, 106.6340785], 5);
+    }).setView([-6.3580484, 106.6340785], 10);
 
-    const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
     let currentMarker = null;
     let baseLocationMarker = null;
-
-    const fetchAddressFromCoordinates = async (latitude, longitude) => {
-      try {
-        const response = await fetch(
-          `${NOMINATIM_REVERSE_URL}lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`
-        );
-        const data = await response.json();
-        if (data && data.display_name) {
-          return data.display_name;
-        } else {
-          return "Alamat tidak ditemukan";
-        }
-      } catch (error) {
-        return "Gagal memuat alamat";
-      }
-    };
-
 
     // Tambahkan tile layer OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
     // Function to update the map location from React Native
-    window.updateMapLocation = async function (lat, lng) {
+    const baseLocation = window.updateMapLocation = function (lat, lng) {
       map.setView([lat, lng], 18); // Zoom level 18 for user location
       // Jika ada marker sebelumnya, hapus marker tersebut
 
-      const address = await fetchAddressFromCoordinates(lat, lng);
       if (baseLocationMarker) {
         baseLocationMarker.remove(); // Menghapus marker yang ada
       }
 
       // Tambahkan marker baru di lokasi baru
-      baseLocationMarker = L.marker([lat, lng]).addTo(map).bindPopup("Lokasi baru anda : " + address + ", Lat: " + lat + ", Long: " + lng + "").openPopup();
+      baseLocationMarker = new L.marker([lat, lng], { icon: markerLocation }).addTo(map).bindPopup("Lat: " + lat + ", Long: " + lng + "").openPopup();
     };
 
     // Kontrol pencarian dengan geocoder
@@ -103,20 +94,12 @@
         currentMarker.remove(); // Menghapus marker yang ada
       }
 
-      // Mendapatkan alamat secara asinkron
-      fetchAddressFromCoordinates(lat, lng)
-        .then(address => {
-          // Menambahkan marker baru setelah alamat berhasil diambil
-          currentMarker = L.marker([lat, lng]).addTo(map);
-          currentMarker.bindPopup(`Alamat: ${address}, Lat: ${lat}, Long: ${lng}`).openPopup();
+      // Menambahkan marker baru setelah alamat berhasil diambil
+      currentMarker = L.marker([lat, lng], { icon: markerSelected }).addTo(map);
+      currentMarker.bindPopup(`Lat: ${lat}, Long: ${lng}`).openPopup();
 
-          // Mengirim koordinat ke aplikasi Native (React Native)
-          window.ReactNativeWebView.postMessage(JSON.stringify([lat, lng]));
-        })
-        .catch(error => {
-          // Jika ada error saat fetch alamat
-          console.error("Terjadi kesalahan: ", error);
-        });
+      // Mengirim koordinat ke aplikasi Native (React Native)
+      window.ReactNativeWebView.postMessage(JSON.stringify([lat, lng]));
     });
 
 

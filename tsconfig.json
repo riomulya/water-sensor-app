@@ -17,5 +17,5 @@
     "app/(tabs)/_layout.jsx",
     "nativewind-env.d.ts",
     "expo-env.d.ts"
-  ]
+, "components/mqtt/MqttConnection.tsx"  ]
 }

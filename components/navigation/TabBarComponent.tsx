@@ -40,7 +40,7 @@ const TabBarComponent = ({ state, navigation, descriptors }: Props) => {
     const handleAnimate = (index: number) => {
         'worklet';
         translateX.value = withTiming(index * TAB_WIDTH, {
-            duration: 500,
+            duration: 400,
         });
     };
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, Button } from 'react-native';
+import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, Button, RefreshControl } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 import { Marker } from 'react-native-maps'; // Import Marker
 import { BottomSheet, BottomSheetBackdrop, BottomSheetContent, BottomSheetDragIndicator, BottomSheetPortal, BottomSheetTrigger } from '@/components/ui/bottomsheet';
@@ -7,8 +7,7 @@ import Donut from '@/components/Donut';
 import RealTimeClock from '@/components/RealTimeClock';
 import { Fab, FabIcon, FabLabel } from '@/components/ui/fab';
 import Map from '@/components/map/Map';
-import * as Location from 'expo-location';
-import { get } from 'react-native/Libraries/TurboModule/TurboModuleRegistry';
+
 
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
 
@@ -76,7 +75,8 @@ const HomeScreen = () => {
 
     return (
         <>
-            <SafeAreaView style={styles.container}>
+            <SafeAreaView style={styles.container}
+            >
                 <Map
                     onInitialized={(zoomToGeoJSON) =>
                         (zoomToGeoJSONFuncRef.current = zoomToGeoJSON)
@@ -101,7 +101,7 @@ const HomeScreen = () => {
                     zIndex: 0,           // Memastikan FAB berada di atas elemen lain
                 }}
             >
-                <AntDesign name="home" size={35} color="#ea5757" />
+                <AntDesign name="team" size={35} color="#ea5757" />
             </Fab>
             <BottomSheet>
                 <Fab
