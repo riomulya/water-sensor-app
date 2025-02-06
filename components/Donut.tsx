@@ -1,23 +1,16 @@
 import * as React from 'react';
 import {
-    Easing,
     TextInput,
-    Animated,
     View,
     StyleSheet,
 } from 'react-native';
 import Svg, { G, Circle } from 'react-native-svg';
 
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
-
 interface DonutProps {
     percentage?: number;
     radius?: number;
     strokeWidth?: number;
-    duration?: number;
     color?: string;
-    delay?: number;
     textColor?: string;
     max?: number;
     suffix?: string;
@@ -27,52 +20,31 @@ const Donut: React.FC<DonutProps> = ({
     percentage = 75,
     radius = 60,
     strokeWidth = 10,
-    duration = 1000,
     color = "tomato",
-    delay = 0,
     textColor,
     max = 100,
     suffix = '',  // Default tidak ada satuan
 }) => {
-    const animated = React.useRef(new Animated.Value(0)).current;
     const circleRef = React.useRef<Circle>(null);
     const inputRef = React.useRef<TextInput>(null);
     const circumference = 2 * Math.PI * radius;
     const halfCircle = radius + strokeWidth;
 
-    const animation = (toValue: number) => {
-        return Animated.timing(animated, {
-            delay,
-            toValue,
-            duration,
-            useNativeDriver: true,
-            easing: Easing.out(Easing.ease),
-        }).start(() => {
-            animation(toValue === 0 ? percentage : 0);
-        });
-    };
-
     React.useEffect(() => {
-        animation(percentage);
-        animated.addListener((v) => {
-            const maxPerc = (100 * v.value) / max;
-            const strokeDashoffset = circumference - (circumference * maxPerc) / 100;
-            if (inputRef.current) {
-                // Tambahkan format angka dengan prefix dan suffix
-                inputRef.current.setNativeProps({
-                    text: `${Math.round(v.value)}${suffix}`,
-                });
-            }
-            if (circleRef.current) {
-                circleRef.current.setNativeProps({
-                    strokeDashoffset,
-                });
-            }
-        });
+        const maxPerc = (100 * percentage) / max;
+        const strokeDashoffset = circumference - (circumference * maxPerc) / 100;
 
-        return () => {
-            animated.removeAllListeners();
-        };
+        if (inputRef.current) {
+            inputRef.current.setNativeProps({
+                text: `${Math.round(percentage)}${suffix}`,
+            });
+        }
+
+        if (circleRef.current) {
+            circleRef.current.setNativeProps({
+                strokeDashoffset,
+            });
+        }
     }, [max, percentage]);
 
     return (
@@ -108,7 +80,7 @@ const Donut: React.FC<DonutProps> = ({
                     />
                 </G>
             </Svg>
-            <AnimatedTextInput
+            <TextInput
                 ref={inputRef}
                 underlineColorAndroid="transparent"
                 editable={false}

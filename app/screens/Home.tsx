@@ -12,29 +12,35 @@ import { io, Socket } from 'socket.io-client'; // Import Socket.IO client
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
 
 const data = [{
-    percentage: 8,
-    color: 'tomato',
-    max: 10
+    title: 'accel_x',
+    color: 'orange',
+    max: 100,
+    suffix: " ms2"
 }, {
-    percentage: 8,
+    title: 'accel_y',
     color: 'tomato',
-    max: 10
+    max: 100,
+    suffix: " ms2"
 }, {
-    percentage: 8,
-    color: 'tomato',
-    max: 10
+    title: 'accel_z',
+    color: 'red',
+    max: 100,
+    suffix: " ms2"
 }, {
-    percentage: 8,
-    color: 'tomato',
-    max: 10
+    title: 'ph',
+    color: 'blue',
+    max: 14,
+    suffix: " pH"
 }, {
-    percentage: 8,
-    color: 'tomato',
-    max: 10
+    title: 'turbidity',
+    color: 'lime',
+    max: 100,
+    suffix: " NTU"
 }, {
-    percentage: 8,
-    color: 'tomato',
-    max: 10
+    title: 'temperature',
+    color: 'cyan',
+    max: 100,
+    suffix: " °C"
 },]
 
 
@@ -42,6 +48,14 @@ const HomeScreen = () => {
     const [destination, setDestination] = useState<{ latitude: number, longitude: number } | null>(null); // Untuk marker destinasi
     const [address, setAddress] = useState<string | null>(null); // Untuk menyimpan alamat lengkap
     const [mqttData, setMqttData] = useState<any>(null);
+    const [sensorData, setSensorData] = useState<{ [key: string]: number }>({
+        accel_x: 0,
+        accel_y: 0,
+        accel_z: 0,
+        ph: 7,
+        turbidity: 0,
+        temperature: 0,
+    });
     const socketRef = useRef<Socket | null>(null);
 
     useEffect(() => {
@@ -58,6 +72,19 @@ const HomeScreen = () => {
 
             socketRef.current?.on('mqttData', (data: any) => {
                 console.log('📩 Data MQTT diterima:', data);
+                if (data?.message) {
+                    setSensorData({
+                        accel_x: data.message.accel_x || 0,
+                        accel_y: data.message.accel_y || 0,
+                        accel_z: data.message.accel_z || 0,
+                        ph: data.message.ph || 7,
+                        turbidity: data.message.turbidity || 0,
+                        temperature: data.message.temperature || 0,
+                    });
+                }
+                // console.log({ sensorData });
+                // console.log(data.message);
+                // console.log(data.message.accel_x);
                 setMqttData({ ...data });
             });
 
@@ -174,16 +201,17 @@ const HomeScreen = () => {
                                         alignItems: 'center'
                                     }}>
                                         <Donut
-                                            percentage={p.percentage}
+                                            percentage={sensorData[p.title]}
                                             color={p.color}
-                                            delay={500 + 100 * i}
+                                            // delay={500 + 100 * i}
                                             max={p.max}
-                                            suffix='pH'
+                                            suffix={p.suffix}
                                         />
+                                        {/* <Text>{sensorData[p.title]} {p.suffix}</Text> */}
                                     </View>
                                 );
                             })}
-                            <Text>Data MQTT: {JSON.stringify(mqttData)}</Text>
+                            {/* <Text>Data MQTT: {JSON.stringify(mqttData)}</Text> */}
 
                         </View>
                     </BottomSheetContent>

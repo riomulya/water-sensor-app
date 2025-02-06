@@ -5,8 +5,8 @@ import { Heading } from '@/components/ui/heading';
 import { Progress, ProgressFilledTrack } from '@/components/ui/progress';
 import { VStack } from '@/components/ui/vstack';
 import { Text } from '@/components/ui/text';
-import MQTTConnection from '@/components/mqtt/MqttConnection';
-import { MqttxOptions } from '../../constants/Mqttx';
+// import MQTTConnection from '@/components/mqtt/MqttConnection';
+// import { MqttxOptions } from '../../constants/Mqttx';
 // import init from 'react_native_mqtt';
 
 const data = [
@@ -21,7 +21,7 @@ const data = [
 const Settings = () => {
     const [mqttConnected, setMqttConnected] = useState(false);
     const [mqttMessage, setMqttMessage] = useState('default');
-    const mqttConnect = new MQTTConnection();
+    // const mqttConnect = new MQTTConnection();
 
     // useEffect(() => {
     //     // Menghubungkan ke broker MQTT
