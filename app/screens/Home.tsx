@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, Button, RefreshControl } from 'react-native';
+import { StyleSheet, View, Alert, Text, TextInput, FlatList, TouchableOpacity, SafeAreaView, Button, RefreshControl } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 import { Marker } from 'react-native-maps'; // Import Marker
 import { BottomSheet, BottomSheetBackdrop, BottomSheetContent, BottomSheetDragIndicator, BottomSheetPortal, BottomSheetTrigger } from '@/components/ui/bottomsheet';
@@ -7,7 +7,7 @@ import Donut from '@/components/Donut';
 import RealTimeClock from '@/components/RealTimeClock';
 import { Fab, FabIcon, FabLabel } from '@/components/ui/fab';
 import Map from '@/components/map/Map';
-
+import { io, Socket } from 'socket.io-client'; // Import Socket.IO client
 
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
 
@@ -41,6 +41,38 @@ const data = [{
 const HomeScreen = () => {
     const [destination, setDestination] = useState<{ latitude: number, longitude: number } | null>(null); // Untuk marker destinasi
     const [address, setAddress] = useState<string | null>(null); // Untuk menyimpan alamat lengkap
+    const [mqttData, setMqttData] = useState<any>(null);
+    const socketRef = useRef<Socket | null>(null);
+
+    useEffect(() => {
+        if (!socketRef.current) {
+            socketRef.current = io("http://192.168.1.22:3000/", {
+                transports: ['websocket'], // Paksa WebSocket agar lebih cepat
+                reconnectionAttempts: 5, // Coba konek ulang 5x jika gagal
+                timeout: 10000, // Timeout 10 detik
+            });
+
+            socketRef.current.on('connect', () => {
+                console.log('✅ Connected to server');
+            });
+
+            socketRef.current?.on('mqttData', (data: any) => {
+                console.log('📩 Data MQTT diterima:', data);
+                setMqttData({ ...data });
+            });
+
+            socketRef.current.on('disconnect', () => {
+                console.log('❌ Disconnected from server');
+            });
+        }
+
+        return () => {
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
+        };
+    }, []);
 
     // Fungsi untuk melakukan reverse geocoding (mengambil alamat dari lat dan lon)
     const fetchAddressFromCoordinates = async (latitude: number, longitude: number) => {
@@ -151,6 +183,8 @@ const HomeScreen = () => {
                                     </View>
                                 );
                             })}
+                            <Text>Data MQTT: {JSON.stringify(mqttData)}</Text>
+
                         </View>
                     </BottomSheetContent>
                 </BottomSheetPortal>

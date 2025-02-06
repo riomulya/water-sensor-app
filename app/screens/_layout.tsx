@@ -5,8 +5,6 @@ import HomeScreen from './Home';
 import AnalysisScreen from './Analysis';
 import FeedsScreen from './Feeds';
 import SettingsScreen from './Settings';
-
-
 import TabBar from '@/components/navigation/TabBar';
 
 type RootStackParamList = {
