@@ -3,6 +3,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useWindowDimensions, Alert } from 'react-native';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import * as Location from 'expo-location';
+import { Asset } from 'expo-asset';
+
+const markerBaseLocation = Asset.fromModule(require('../../assets/images/markerBaseLocation.png')).uri;
+const markerSelected = Asset.fromModule(require('../../assets/images/waterSelected.png')).uri;
+
 
 type Props = {
     onInitialized: (zoomToGeoJSONFunc: () => void) => void;
@@ -65,7 +70,12 @@ const Map = (props: Props) => {
             fetch(assets[0].localUri || '')
                 .then((res) => res.text())
                 .then((html) => {
-                    setHtmlString(html);
+                    // Kirim path gambar ke HTML
+                    const modifiedHtml = html
+                        .replace('__MARKER_BASE__', markerBaseLocation)
+                        .replace('__MARKER_SELECTED__', markerSelected);
+
+                    setHtmlString(modifiedHtml);
                     onInitialized(zoomToGeoJSON);
                     onGetCurrentLocation(getCurrentLocationFunc);
                 });

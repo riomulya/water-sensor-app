@@ -1,45 +1,75 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
+import moment from 'moment';
 
 interface DataPoint {
     value: number;
+    dataPointText: string;
+    label: string;
 }
 
 const FeedsScreen: React.FC = () => {
-    const data: DataPoint[] = [
-        { value: 60 },
-        { value: 30 },
-        { value: 70 },
-        { value: 50 },
-        { value: 80 },
-        { value: 40 },
-        { value: 60 },
-        { value: 20 },
-        { value: 90 },
-    ];
+    const [phData, setPhData] = useState<DataPoint[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    const chartTitles: string[] = ['Accel X', 'Accel Y', 'Accel Z', "pH Sensor", "Temperature Sensor", "Turbidity Sensor"];
+    const downsampleData = (data: DataPoint[], interval: number) => {
+        return data.filter((_, index) => index % interval === 0); // Ambil data setiap interval
+    };
 
-    const renderChart = (title: string, data: DataPoint[]): JSX.Element => (
-        <View style={styles.chartContainer} key={title}>
-            <Text style={styles.title}>{title}</Text>
-            <LineChart
-                data={data}
-                thickness={2}
-                color={'purple'}
-                hideDataPoints={false}
-                dataPointsColor={'purple'}
-                hideYAxisText={false}
-                xAxisColor={'gray'}
-                yAxisColor={'gray'}
-            />
-        </View>
-    );
+    useEffect(() => {
+        fetch('http://192.168.1.22:3000/data_ph')
+            .then((response) => response.json())
+            .then((json) => {
+                if (json.success) {
+                    const formattedData: DataPoint[] = json.data.map((item: any) => ({
+                        value: item.nilai_ph,
+                        dataPointText: item.nilai_ph,
+                        label: moment(item.tanggal).format('HH:mm:ss')
+                    }));
+                    // Downsample data to reduce the number of points shown
+                    setPhData(downsampleData(formattedData.reverse(), 10)); // Menampilkan 1 data setiap 10 data
+                }
+            })
+            .catch((error) => console.error('Error fetching data:', error))
+            .finally(() => setLoading(false));
+    }, []);
+
 
     return (
         <ScrollView style={styles.container}>
-            {chartTitles.map((title) => renderChart(title, data))}
+            <View style={styles.chartContainer}>
+                <Text style={styles.title}>pH Sensor</Text>
+                {loading ? (
+                    <ActivityIndicator size="large" color="purple" />
+                ) : (
+                    <LineChart
+                        focusEnabled
+                        curved={true}
+                        isAnimated={true}
+                        data={phData}
+                        initialSpacing={20}
+                        spacing={100}
+                        thickness={5}
+                        color={'tomato'}
+                        hideDataPoints={false}
+                        dataPointsColor={'black'}
+                        dataPointLabelWidth={20}
+                        xAxisColor={'black'}
+                        yAxisColor={'black'}
+                        yAxisTextStyle={{ color: 'gray', fontSize: 15 }}
+                        maxValue={14}
+                        startFillColor={'rgb(255, 154, 154)'}
+                        endFillColor={'rgb(255, 154, 154)'}
+                        startOpacity={0.4}
+                        endOpacity={0.1}
+                        areaChart
+                        xAxisType='time'
+                    // xAxisTextStyle={{ color: 'gray', fontSize: 10, rotation: -45 }} // Miring biar muat
+                    // onDataPointClick={(data) => handleDataPointClick(phData[data.index])} // Klik titik untuk detail
+                    />
+                )}
+            </View>
         </ScrollView>
     );
 };
@@ -47,15 +77,15 @@ const FeedsScreen: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        padding: 10,
+        padding: 5,
         backgroundColor: '#f5f5f5',
     },
     chartContainer: {
         backgroundColor: '#fff',
         borderRadius: 10,
-        padding: 10,
+        padding: 5,
         marginBottom: 20,
-        elevation: 2, // untuk shadow di Android
+        elevation: 2,
     },
     title: {
         fontSize: 16,

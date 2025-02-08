@@ -35,12 +35,12 @@
   <script src="https://unpkg.com/leaflet-gesture-handling@0.6.0/dist/leaflet-gesture-handling.js"></script>
   <script>
     const markerLocation = L.icon({
-      iconUrl: require('./assets/images/markerBaseLocation.png'),
+      iconUrl: '__MARKER_BASE__', // ✅ Path gambar akan diganti oleh React Native
       iconSize: [40, 40],
     });
 
     const markerSelected = L.icon({
-      iconUrl: require('./assets/images/waterSelected.png'),
+      iconUrl: '__MARKER_SELECTED__', // ✅ Path gambar akan diganti oleh React Native
       iconSize: [40, 40],
     });
 
@@ -48,11 +48,18 @@
       gestureHandling: true // Enable gesture handling (for pinch-zoom and rotate)
     }).setView([-6.3580484, 106.6340785], 10);
 
+    map.attributionControl.setPrefix(false); // Hapus "Leaflet"
+    map.attributionControl.remove(); // Hapus watermark sepenuhnya
+
+    L.control.attribution({ position: 'bottomleft' })
+      .setPrefix('BRIN Water Sensors') // Ganti teks "Leaflet"
+      .addTo(map);
+
     let currentMarker = null;
     let baseLocationMarker = null;
 
     // Tambahkan tile layer OpenStreetMap
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?lang=id').addTo(map);
 
     // Function to update the map location from React Native
     const baseLocation = window.updateMapLocation = function (lat, lng) {
@@ -69,7 +76,13 @@
 
     // Kontrol pencarian dengan geocoder
     const searchControl = new L.Control.Geocoder({
-      geocoder: L.Control.Geocoder.nominatim()
+      geocoder: L.Control.Geocoder.nominatim(
+        {
+          geocodingQueryParams: {
+            'accept-language': 'id', // Paksa bahasa Indonesia
+          }
+        }
+      )
     }).addTo(map);
 
     // Tombol pencarian lokasi

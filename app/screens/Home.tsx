@@ -13,31 +13,37 @@ const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
 
 const data = [{
     title: 'accel_x',
+    name: 'Accel X',
     color: 'orange',
     max: 100,
     suffix: " ms2"
 }, {
     title: 'accel_y',
+    name: 'Accel Y',
     color: 'tomato',
     max: 100,
     suffix: " ms2"
 }, {
     title: 'accel_z',
+    name: 'Accel Z',
     color: 'red',
     max: 100,
     suffix: " ms2"
 }, {
     title: 'ph',
+    name: 'pH',
     color: 'blue',
     max: 14,
     suffix: " pH"
 }, {
     title: 'turbidity',
+    name: 'Turbidity',
     color: 'lime',
     max: 100,
     suffix: " NTU"
 }, {
     title: 'temperature',
+    name: 'Temperature',
     color: 'cyan',
     max: 100,
     suffix: " °C"
@@ -200,6 +206,7 @@ const HomeScreen = () => {
                                         marginBottom: 40,
                                         alignItems: 'center'
                                     }}>
+                                        <Text>{p.name}</Text>
                                         <Donut
                                             percentage={sensorData[p.title]}
                                             color={p.color}
