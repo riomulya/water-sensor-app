@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import moment from 'moment';
+import { Button, ButtonText } from '@/components/ui/button';
+import { VStack } from '@/components/ui/vstack';
+import { HStack } from '@/components/ui/hstack';
 
 interface DataPoint {
     value: number;
@@ -139,7 +142,7 @@ const FeedsScreen: React.FC = () => {
 
     useEffect(() => {
         fetchAllData();
-    }, []);  // Fetch data on initial load
+    }, [globalPage]);  // Fetch data on globalPage change
 
     // Handle pagination change for a specific chart
     const handlePageChange = async (chartIndex: number, direction: 'next' | 'prev' | 'first' | 'last') => {
@@ -180,22 +183,43 @@ const FeedsScreen: React.FC = () => {
     };
 
     // Handle global page change for all charts
-    const handleGlobalPageChange = async (direction: 'next' | 'prev') => {
+    // Handle global page change for all charts
+    const handleGlobalPageChange = async (direction: 'next' | 'prev' | 'first' | 'last') => {
         let newGlobalPage = globalPage;
-        if (direction === 'next') newGlobalPage++;
-        else if (direction === 'prev') newGlobalPage--;
 
-        // Update global page
-        if (newGlobalPage > 0) {
-            setGlobalPage(newGlobalPage);
+        switch (direction) {
+            case 'next':
+                newGlobalPage++;
+                break;
+            case 'prev':
+                newGlobalPage--;
+                break;
+            case 'first':
+                newGlobalPage = 1;
+                break;
+            case 'last':
+                newGlobalPage = chartData[0].totalPage; // Assuming all charts have the same total pages
+                break;
+        }
+
+        // Update global page only if it is valid (greater than 0 and less than or equal to totalPage)
+        if (newGlobalPage > 0 && newGlobalPage <= chartData[0].totalPage) {
+            setGlobalPage(newGlobalPage);  // Update the global page state
+
+            // Update the page for all charts to the new global page
             const updatedChartData = chartData.map((chart) => ({
                 ...chart,
-                page: newGlobalPage
+                page: newGlobalPage,  // Set each chart's page to the global page
             }));
-            setChartData(updatedChartData);
-            await fetchAllData();  // Fetch data for all charts at the new page
+
+            setChartData(updatedChartData);  // Update chart data with new pages for all charts
+
+            // Fetch new data for all charts at the updated global page
+            await fetchAllData();
         }
     };
+
+
 
     return (
         <ScrollView
@@ -235,35 +259,74 @@ const FeedsScreen: React.FC = () => {
 
                     {/* Pagination for individual chart */}
                     <View style={styles.pagination}>
-                        <TouchableOpacity onPress={() => handlePageChange(index, 'first')} disabled={chart.page <= 1}>
-                            <Text style={styles.paginationButton}>First</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => handlePageChange(index, 'prev')} disabled={chart.page <= 1}>
-                            <Text style={styles.paginationButton}>Prev</Text>
-                        </TouchableOpacity>
+                        <Button size="md" variant="solid" action="primary">
+                            <TouchableOpacity onPress={() => handlePageChange(index, 'first')} disabled={chart.page <= 1}>
+                                <ButtonText>First</ButtonText>
+                            </TouchableOpacity>
+                        </Button>
+
+                        <Button size="md" variant="solid" action="primary">
+                            <TouchableOpacity onPress={() => handlePageChange(index, 'prev')} disabled={chart.page <= 1}>
+                                <ButtonText>Prev</ButtonText>
+                            </TouchableOpacity>
+                        </Button>
+
                         <Text>{`Page ${chart.page} of ${chart.totalPage}`}</Text>
-                        <TouchableOpacity onPress={() => handlePageChange(index, 'next')} disabled={chart.page >= chart.totalPage}>
-                            <Text style={styles.paginationButton}>Next</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => handlePageChange(index, 'last')} disabled={chart.page >= chart.totalPage}>
-                            <Text style={styles.paginationButton}>Last</Text>
-                        </TouchableOpacity>
+                        <Button size="md" variant="solid" action="primary">
+                            <TouchableOpacity onPress={() => handlePageChange(index, 'next')} disabled={globalPage <= 1} >
+                                <ButtonText>Next</ButtonText>
+                            </TouchableOpacity>
+                        </Button>
+
+                        <Button size="md" variant="solid" action="primary">
+                            <TouchableOpacity onPress={() => handlePageChange(index, 'last')} disabled={globalPage >= chart.totalPage} >
+                                <ButtonText>Last</ButtonText>
+                            </TouchableOpacity>
+                        </Button>
+
                     </View>
-                </View>
-            ))}
+                </View >
+            ))
+            }
 
             {/* Global Pagination */}
+            {/* Global Pagination */}
             <View style={styles.globalPagination}>
-                <TouchableOpacity onPress={() => handleGlobalPageChange('prev')} disabled={globalPage <= 1}>
-                    <Text style={styles.paginationButton}>Prev All</Text>
-                </TouchableOpacity>
-                <Text>{`Global Page: ${globalPage}`}</Text>
-                <TouchableOpacity onPress={() => handleGlobalPageChange('next')}>
-                    <Text style={styles.paginationButton}>Next All</Text>
-                </TouchableOpacity>
+                <HStack space="md" reversed={false}>
+                    <VStack space="md" reversed={false}>
+                        <Button variant='outline' size='md'>
+                            <TouchableOpacity onPress={() => handleGlobalPageChange('first')} disabled={globalPage === 1}>
+                                <ButtonText>First All</ButtonText>
+                            </TouchableOpacity>
+                        </Button>
+
+                        <Button variant='outline' size='md'>
+                            <TouchableOpacity onPress={() => handleGlobalPageChange('prev')} disabled={globalPage === 1}>
+                                <ButtonText>Prev All</ButtonText>
+                            </TouchableOpacity>
+                        </Button>
+                    </VStack>
+
+                    <Text className='px-5 text-center'>{`Global Page: ${globalPage}`}</Text>
+
+                    <VStack space="md" reversed={false}>
+                        <Button variant='outline' size='md'>
+                            <TouchableOpacity onPress={() => handleGlobalPageChange('next')} disabled={globalPage === chartData[0].totalPage}>
+                                <ButtonText>Next All</ButtonText>
+                            </TouchableOpacity>
+                        </Button>
+
+                        <Button variant='outline' size='md'>
+                            <TouchableOpacity onPress={() => handleGlobalPageChange('last')} disabled={globalPage === chartData[0].totalPage}>
+                                <ButtonText>Last All</ButtonText>
+                            </TouchableOpacity>
+                        </Button>
+                    </VStack>
+                </HStack>
             </View>
+
             <View style={{ height: 100 }} />
-        </ScrollView>
+        </ScrollView >
     );
 };
 
@@ -299,7 +362,7 @@ const styles = StyleSheet.create({
     },
     paginationButton: {
         fontSize: 14,
-        color: '#007bff',
+        color: '#fff',
         paddingHorizontal: 10,
     },
 });
