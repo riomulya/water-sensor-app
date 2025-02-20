@@ -8,6 +8,7 @@ import RealTimeClock from '@/components/RealTimeClock';
 import { Fab, FabIcon, FabLabel } from '@/components/ui/fab';
 import Map from '@/components/map/Map';
 import { io, Socket } from 'socket.io-client'; // Import Socket.IO client
+import { port } from '@/constants/https';
 
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
 
@@ -66,7 +67,7 @@ const HomeScreen = () => {
 
     useEffect(() => {
         if (!socketRef.current) {
-            socketRef.current = io("http://192.168.1.22:3000/", {
+            socketRef.current = io(port, {
                 transports: ['websocket'], // Paksa WebSocket agar lebih cepat
                 reconnectionAttempts: 5, // Coba konek ulang 5x jika gagal
                 timeout: 10000, // Timeout 10 detik

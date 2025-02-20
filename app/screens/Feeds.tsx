@@ -5,6 +5,7 @@ import moment from 'moment';
 import { Button, ButtonText } from '@/components/ui/button';
 import { VStack } from '@/components/ui/vstack';
 import { HStack } from '@/components/ui/hstack';
+import { port } from '@/constants/https';
 
 interface DataPoint {
     value: number;
@@ -28,7 +29,7 @@ const chartConfigs: ChartData[] = [
     {
         title: 'pH Sensor',
         as: 'nilai_ph',
-        url: 'http://192.168.1.22:3000/data_ph',
+        url: `${port}data_ph`,
         color: 'tomato',
         maxValue: 14,
         data: [],
@@ -39,7 +40,7 @@ const chartConfigs: ChartData[] = [
     {
         title: 'Acceleration X',
         as: 'nilai_accel_x',
-        url: 'http://192.168.1.22:3000/data_accel_x',
+        url: `${port}data_accel_x`,
         color: 'blue',
         maxValue: 500,
         data: [],
@@ -50,7 +51,7 @@ const chartConfigs: ChartData[] = [
     {
         title: 'Acceleration Y',
         as: 'nilai_accel_y',
-        url: 'http://192.168.1.22:3000/data_accel_y',
+        url: `${port}data_accel_y`,
         color: 'green',
         maxValue: 500,
         data: [],
@@ -61,7 +62,7 @@ const chartConfigs: ChartData[] = [
     {
         title: 'Acceleration Z',
         as: 'nilai_accel_z',
-        url: 'http://192.168.1.22:3000/data_accel_z',
+        url: `${port}data_accel_z`,
         color: 'orange',
         maxValue: 500,
         data: [],
@@ -72,7 +73,7 @@ const chartConfigs: ChartData[] = [
     {
         title: 'Temperature',
         as: 'nilai_temperature',
-        url: 'http://192.168.1.22:3000/data_temperature',
+        url: `${port}data_temperature`,
         color: 'purple',
         maxValue: 100,
         data: [],
@@ -83,7 +84,7 @@ const chartConfigs: ChartData[] = [
     {
         title: 'Turbidity',
         as: 'nilai_turbidity',
-        url: 'http://192.168.1.22:3000/data_turbidity',
+        url: `${port}data_turbidity`,
         color: 'brown',
         maxValue: 3000,
         data: [],

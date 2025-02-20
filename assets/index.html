@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/3.0.0/leaflet-search.min.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-gesture-handling@0.6.0/dist/leaflet-gesture-handling.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Maps Sensors</title>
 
@@ -24,6 +26,22 @@
       bottom: 0;
       width: 100%
     }
+
+    .marker-cluster-custom {
+      background: rgba(26, 115, 232, 0.6);
+      border-radius: 50%;
+      text-align: center;
+      font-weight: bold;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .cluster-marker {
+      font-size: 14px;
+      font-family: Arial, sans-serif;
+    }
   </style>
 </head>
 
@@ -33,7 +51,10 @@
   <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/3.0.0/leaflet-search.min.js"></script>
   <script src="https://unpkg.com/leaflet-gesture-handling@0.6.0/dist/leaflet-gesture-handling.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script>
+    // const worker = new Worker('dataWorker.js');
+
     const markerLocation = L.icon({
       iconUrl: '__MARKER_BASE__', // ✅ Path gambar akan diganti oleh React Native
       iconSize: [40, 40],
@@ -44,9 +65,19 @@
       iconSize: [40, 40],
     });
 
+    const markerWaterWays = L.icon({
+      iconUrl: '__MARKER_WATER_WAYS__', // ✅ Path gambar akan diganti oleh React Native
+      iconSize: [40, 40],
+    });
+
     const map = L.map('map', {
-      gestureHandling: true // Enable gesture handling (for pinch-zoom and rotate)
-    }).setView([-6.3580484, 106.6340785], 10);
+      renderer: L.canvas(),
+      gestureHandling: true, // Enable gesture handling (for pinch-zoom and rotate)
+      maxBounds: [
+        [-11.5, 95.0],  // Batas bawah kiri Indonesia (latitude, longitude)
+        [6.5, 141.5]    // Batas atas kanan Indonesia
+      ],
+    }).setView([-6.3580484, 106.6340785], 100);
 
     map.attributionControl.setPrefix(false); // Hapus "Leaflet"
     map.attributionControl.remove(); // Hapus watermark sepenuhnya
@@ -61,6 +92,147 @@
     // Tambahkan tile layer OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?lang=id').addTo(map);
 
+    // Tambahkan marker cluster group
+    const markerClusterGroup = L.markerClusterGroup({
+        chunkedLoading: true,
+        chunkInterval: 200,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        maxClusterRadius: 40,
+        disableClusteringAtZoom: 18,
+        spiderLegPolylineOptions: {
+            weight: 1.5,
+            color: '#222',
+            opacity: 0.5
+        },
+        iconCreateFunction: function (cluster) {
+            return L.divIcon({
+                html: '<div class="cluster-marker">' + cluster.getChildCount() + '</div>',
+                className: 'marker-cluster-custom',
+                iconSize: L.point(40, 40, true)
+            });
+        }
+    });
+
+    // Mengambil data dari API
+    fetch('http://192.168.1.15:3000/data_combined')
+      .then(response => response.json())
+      .then(data => {
+        console.log("Data API:", data);
+        const geojsonData = {
+          "type": "FeatureCollection",
+          "features": data.data.map(item => {
+            // PERBAIKAN FORMAT KOORDINAT
+            const parseCoordinate = (str) => {
+              // Hilangkan titik tambahan dan konversi ke float
+              const parts = str.split('.');
+              return parseFloat(
+                parts[0] + '.' + parts.slice(1).join('')
+              );
+            };
+            
+            const lat = parseCoordinate(item.lat);
+            const lon = parseCoordinate(item.lon);
+
+            console.log('Fixed Coordinates:', lat, lon);
+
+            return {
+              "type": "Feature",
+              "geometry": {
+                "type": "Point",
+                "coordinates": [lon, lat]
+              },
+              "properties": {
+                "id_ph": item.id_ph,
+                "tanggal": item.tanggal,
+                "nilai_ph": item.nilai_ph,
+                "nilai_accel_x": item.nilai_accel_x,
+                "nilai_accel_y": item.nilai_accel_y,
+                "nilai_accel_z": item.nilai_accel_z,
+                "nilai_temperature": item.nilai_temperature,
+                "nilai_turbidity": item.nilai_turbidity
+              }
+            };
+          })
+        };
+
+        // Tambahkan ke cluster group daripada langsung ke map
+        const geoJsonLayer = L.geoJSON(geojsonData, {
+          pointToLayer: function (feature, latlng) {
+            const tanggal = new Date(feature.properties.tanggal);
+            const formattedDate = tanggal.toLocaleString('id-ID', {
+              timeZone: 'Asia/Jakarta',
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: 'numeric',
+              second: 'numeric'
+            });
+            return L.marker(latlng, { 
+              icon: markerWaterWays,
+              title: feature.properties.id_ph
+            }).bindPopup(`
+                <b>Tanggal:</b> ${formattedDate}<br>
+                <b>pH:</b> ${feature.properties.nilai_ph}<br>
+                <b>Accel X:</b> ${feature.properties.nilai_accel_x}<br>
+                <b>Accel Y:</b> ${feature.properties.nilai_accel_y}<br>
+                <b>Accel Z:</b> ${feature.properties.nilai_accel_z}<br>
+                <b>Temperature:</b> ${feature.properties.nilai_temperature}<br>
+                <b>Turbidity:</b> ${feature.properties.nilai_turbidity}
+            `);
+          }
+        });
+        
+        markerClusterGroup.addLayer(geoJsonLayer);
+        map.addLayer(markerClusterGroup);
+      })
+      .catch(error => {
+        console.error('Error fetching data:', error);
+      });
+
+    // worker.onmessage = function (event) {
+    //   const geojsonData = event.data;
+    //   L.geoJSON(geojsonData, {
+    //     pointToLayer: function (feature, latlng) {
+    //       const tanggal = new Date(feature.properties.tanggal);
+    //       const formattedDate = tanggal.toLocaleString('id-ID', {
+    //         timeZone: 'Asia/Jakarta', // Untuk Waktu Indonesia Barat (WIB)
+    //         weekday: 'long', // Hari dalam format panjang
+    //         year: 'numeric',
+    //         month: 'long',
+    //         day: 'numeric',
+    //         hour: 'numeric',
+    //         minute: 'numeric',
+    //         second: 'numeric'
+    //       });
+    //       return L.marker(latlng, { icon: markerWaterWays })
+    //         .bindPopup(`
+    //       <b>Tanggal:</b> ${formattedDate}<br>
+    //       <b>pH:</b> ${feature.properties.nilai_ph} <br>
+    //       <b>Accel X:</b> ${feature.properties.nilai_accel_x}<br>
+    //       <b>Accel Y:</b> ${feature.properties.nilai_accel_y}<br>
+    //       <b>Accel Z:</b> ${feature.properties.nilai_accel_z}<br>
+    //       <b>Temperature:</b> ${feature.properties.nilai_temperature}<br>
+    //       <b>Turbidity:</b> ${feature.properties.nilai_turbidity}<br>
+    //     `);
+    //     }
+    //   }).addTo(map);
+    // };
+
+    // // Fetch data dan kirim ke worker
+    // fetch('http://192.168.1.15:3000/data_combined')
+    //   .then(response => response.json())
+    //   .then(data => {
+    //     worker.postMessage(data.data); // Kirim data ke worker untuk diproses
+    //   })
+    //   .catch(error => {
+    //     console.error('Error fetching data:', error);
+    //   });
+
+
     // Function to update the map location from React Native
     const baseLocation = window.updateMapLocation = function (lat, lng) {
       map.setView([lat, lng], 18); // Zoom level 18 for user location
@@ -71,7 +243,7 @@
       }
 
       // Tambahkan marker baru di lokasi baru
-      baseLocationMarker = new L.marker([lat, lng], { icon: markerLocation }).addTo(map).bindPopup("Lat: " + lat + ", Long: " + lng + "").openPopup();
+      baseLocationMarker = new L.marker([lat, lng], { icon: markerLocation }).addTo(map).bindPopup("Lokasi terkini anda <br>Lat: " + lat + "<br>Long: " + lng + "").openPopup();
     };
 
     // Kontrol pencarian dengan geocoder
@@ -132,6 +304,49 @@
         [-6.0, 107.0]
       ]);
     };
+
+    // Tambahkan worker
+    const worker = new Worker('dataWorker.js');
+    
+    worker.onmessage = function (e) {
+        const geojsonData = e.data;
+        const geoJsonLayer = L.geoJSON(geojsonData, {
+            pointToLayer: function (feature, latlng) {
+                const tanggal = new Date(feature.properties.tanggal);
+                const formattedDate = tanggal.toLocaleString('id-ID', {
+                    timeZone: 'Asia/Jakarta',
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: 'numeric',
+                    second: 'numeric'
+                });
+                return L.marker(latlng, {
+                    icon: markerWaterWays,
+                    title: feature.properties.id_ph
+                }).bindPopup(`
+                    <b>Tanggal:</b> ${formattedDate}<br>
+                    <b>pH:</b> ${feature.properties.nilai_ph}<br>
+                    <b>Accel X:</b> ${feature.properties.nilai_accel_x}<br>
+                    <b>Accel Y:</b> ${feature.properties.nilai_accel_y}<br>
+                    <b>Accel Z:</b> ${feature.properties.nilai_accel_z}<br>
+                    <b>Temperature:</b> ${feature.properties.nilai_temperature}<br>
+                    <b>Turbidity:</b> ${feature.properties.nilai_turbidity}
+                `);
+            }
+        });
+        
+        markerClusterGroup.addLayer(geoJsonLayer);
+        map.addLayer(markerClusterGroup);
+    };
+
+    // Fetch data dan kirim ke worker
+    fetch('http://192.168.1.15:3000/data_combined')
+      .then(response => response.json())
+      .then(data => worker.postMessage(data.data))
+      .catch(error => console.error('Error:', error));
   </script>
 </body>
 
