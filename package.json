@@ -89,11 +89,13 @@
     "react-native-uuid": "^2.0.3",
     "react-native-web": "~0.19.10",
     "react-native-webview": "13.8.6",
-    "socket.io-client": "^4.8.1"
+    "socket.io-client": "^4.8.1",
+    "use-debounce": "^10.0.4"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@types/jest": "^29.5.12",
+    "@types/lodash": "^4.17.15",
     "@types/paho-mqtt": "^1.0.10",
     "@types/react": "~18.2.45",
     "@types/react-test-renderer": "^18.0.7",

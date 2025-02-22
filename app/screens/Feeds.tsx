@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, memo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import moment from 'moment';
@@ -6,11 +6,13 @@ import { Button, ButtonText } from '@/components/ui/button';
 import { VStack } from '@/components/ui/vstack';
 import { HStack } from '@/components/ui/hstack';
 import { port } from '@/constants/https';
+import { useDebouncedCallback } from 'use-debounce';
 
 interface DataPoint {
     value: number;
     dataPointText: string;
-    label: string;
+    label: string
+    
 }
 
 interface ChartData {
@@ -94,6 +96,16 @@ const chartConfigs: ChartData[] = [
     },
 ];
 
+// Optimize DataPoint creation with memoization
+const createDataPoint = (item: any, as: string): DataPoint => ({
+    value: item[as],
+    dataPointText: item[as].toString(),
+    label: moment(item.tanggal).format('HH:mm:ss')
+});
+
+// Memoized chart component to prevent unnecessary re-renders
+const MemoizedLineChart = memo(LineChart);
+
 const FeedsScreen: React.FC = () => {
     const [chartData, setChartData] = useState<ChartData[]>(chartConfigs);
     const [globalPage, setGlobalPage] = useState(1);  // Global page to sync all charts
@@ -106,11 +118,9 @@ const FeedsScreen: React.FC = () => {
         const response = await fetch(`${url}?page=${page}&limit=${limit}`);
         const json = await response.json();
         if (json.success) {
-            const formattedData: DataPoint[] = json.data.slice(-limit).map((item: any) => ({
-                value: item[as],
-                dataPointText: item[as].toString(),
-                label: moment(item.tanggal).format('HH:mm:ss')
-            }));
+            const formattedData: DataPoint[] = json.data.slice(-limit).map((item: any) => 
+                createDataPoint(item, as)
+            );
             return { formattedData, totalPage: json.totalPage };
         }
         return { formattedData: [], totalPage: 1 };
@@ -119,19 +129,16 @@ const FeedsScreen: React.FC = () => {
     // Fetch data for all charts
     const fetchAllData = async () => {
         try {
+            // First set all charts to loading
+            setChartData(prev => prev.map(chart => ({ ...chart, loading: true })));
+            
             const updatedChartData = await Promise.all(
                 chartData.map(async (chart) => {
-                    setChartData((prevData) =>
-                        prevData.map((prevChart) =>
-                            prevChart.title === chart.title
-                                ? { ...prevChart, loading: true }
-                                : prevChart
-                        )
-                    );
                     const { formattedData, totalPage } = await fetchData(chart.url, chart.as, chart.page);
                     return { ...chart, data: formattedData, loading: false, totalPage };
                 })
             );
+            
             setChartData(updatedChartData);
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -146,7 +153,7 @@ const FeedsScreen: React.FC = () => {
     }, [globalPage]);  // Fetch data on globalPage change
 
     // Handle pagination change for a specific chart
-    const handlePageChange = async (chartIndex: number, direction: 'next' | 'prev' | 'first' | 'last') => {
+    const handlePageChange = useCallback(async (chartIndex: number, direction: 'next' | 'prev' | 'first' | 'last') => {
         const updatedChartData = [...chartData];
         const chart = updatedChartData[chartIndex];
         let newPage = chart.page;
@@ -172,18 +179,17 @@ const FeedsScreen: React.FC = () => {
         const { formattedData } = await fetchData(chart.url, chart.as, newPage);
         updatedChartData[chartIndex].data = formattedData;
         setChartData(updatedChartData);  // Update chart data for specific chart
-    };
+    }, [chartData]);
 
     // Refresh all data and reset pages
-    const refreshData = async () => {
+    const refreshData = useDebouncedCallback(async () => {
         setIsRefreshing(true);
         const resetPagesChartData = chartData.map((chart) => ({ ...chart, page: 1 }));
         setChartData(resetPagesChartData);
         await fetchAllData();
         setIsRefreshing(false);
-    };
+    }, 500);  // 500ms debounce
 
-    // Handle global page change for all charts
     // Handle global page change for all charts
     const handleGlobalPageChange = async (direction: 'next' | 'prev' | 'first' | 'last') => {
         let newGlobalPage = globalPage;
@@ -199,12 +205,13 @@ const FeedsScreen: React.FC = () => {
                 newGlobalPage = 1;
                 break;
             case 'last':
-                newGlobalPage = chartData[0].totalPage; // Assuming all charts have the same total pages
+                newGlobalPage = Math.min(...chartData.map(chart => chart.totalPage));  // Get the minimum total page
                 break;
         }
 
         // Update global page only if it is valid (greater than 0 and less than or equal to totalPage)
-        if (newGlobalPage > 0 && newGlobalPage <= chartData[0].totalPage) {
+        const minTotalPage = Math.min(...chartData.map(chart => chart.totalPage));  // Get the minimum total page
+        if (newGlobalPage > 0 && newGlobalPage <= minTotalPage) {  // Use minTotalPage instead of chartData[0].totalPage
             setGlobalPage(newGlobalPage);  // Update the global page state
 
             // Update the page for all charts to the new global page
@@ -220,7 +227,25 @@ const FeedsScreen: React.FC = () => {
         }
     };
 
+    // Optimize pagination buttons with proper memoization:
+    const PaginationButton = memo(({ onPress, disabled, text }: { 
+        onPress: () => void, 
+        disabled: boolean, 
+        text: string 
+    }) => (
+        <Button size="md" variant="solid" action="primary">
+            <TouchableOpacity onPress={onPress} disabled={disabled}>
+                <ButtonText>{text}</ButtonText>
+            </TouchableOpacity>
+        </Button>
+    ));
 
+    // Add loading skeleton
+    const ChartSkeleton = () => (
+        <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#888" />
+        </View>
+    );
 
     return (
         <ScrollView
@@ -231,12 +256,12 @@ const FeedsScreen: React.FC = () => {
                 <View style={styles.chartContainer} key={index}>
                     <Text style={styles.title}>{chart.title}</Text>
                     {chart.loading ? (
-                        <ActivityIndicator size="large" color={chart.color} />
+                        <ChartSkeleton />
                     ) : (
-                        <LineChart
-                            key={index}
-                            focusEnabled
-                            isAnimated={true}
+                        <MemoizedLineChart
+                            key={`${index}-${chart.page}`}  // Add page to key to force proper re-render
+                            focusEnabled={false}  // Disable focus animation for performance
+                            isAnimated={false}  // Disable animations for large datasets
                             data={chart.data}
                             initialSpacing={20}
                             spacing={100}
@@ -259,31 +284,31 @@ const FeedsScreen: React.FC = () => {
                     )}
 
                     {/* Pagination for individual chart */}
-                    <View style={styles.pagination}>
-                        <Button size="md" variant="solid" action="primary">
-                            <TouchableOpacity onPress={() => handlePageChange(index, 'first')} disabled={chart.page <= 1}>
-                                <ButtonText>First</ButtonText>
-                            </TouchableOpacity>
-                        </Button>
+                    <View style={styles.pagination}>                        
+                        <PaginationButton
+                            onPress={() => handlePageChange(index, 'first')}
+                            disabled={chart.page <= 1}
+                            text="First"
+                        />
 
-                        <Button size="md" variant="solid" action="primary">
-                            <TouchableOpacity onPress={() => handlePageChange(index, 'prev')} disabled={chart.page <= 1}>
-                                <ButtonText>Prev</ButtonText>
-                            </TouchableOpacity>
-                        </Button>
+                        <PaginationButton
+                            onPress={() => handlePageChange(index, 'prev')}
+                            disabled={chart.page <= 1}
+                            text="Prev"
+                        />
 
                         <Text>{`Page ${chart.page} of ${chart.totalPage}`}</Text>
-                        <Button size="md" variant="solid" action="primary">
-                            <TouchableOpacity onPress={() => handlePageChange(index, 'next')} disabled={globalPage <= 1} >
-                                <ButtonText>Next</ButtonText>
-                            </TouchableOpacity>
-                        </Button>
+                        <PaginationButton
+                            onPress={() => handlePageChange(index, 'next')}
+                            disabled={globalPage >= chart.totalPage}
+                            text="Next"
+                        />
 
-                        <Button size="md" variant="solid" action="primary">
-                            <TouchableOpacity onPress={() => handlePageChange(index, 'last')} disabled={globalPage >= chart.totalPage} >
-                                <ButtonText>Last</ButtonText>
-                            </TouchableOpacity>
-                        </Button>
+                        <PaginationButton
+                            onPress={() => handlePageChange(index, 'last')}
+                            disabled={globalPage >= chart.totalPage}
+                            text="Last"
+                        />
 
                     </View>
                 </View >
@@ -291,19 +316,18 @@ const FeedsScreen: React.FC = () => {
             }
 
             {/* Global Pagination */}
-            {/* Global Pagination */}
             <View style={styles.globalPagination}>
                 <HStack space="md" reversed={false}>
                     <VStack space="md" reversed={false}>
                         <Button variant='outline' size='md'>
-                            <TouchableOpacity onPress={() => handleGlobalPageChange('first')} disabled={globalPage === 1}>
-                                <ButtonText>First All</ButtonText>
+                            <TouchableOpacity onPress={() => handleGlobalPageChange('prev')} disabled={globalPage === 1}>
+                                <ButtonText>Prev All</ButtonText>
                             </TouchableOpacity>
                         </Button>
 
                         <Button variant='outline' size='md'>
-                            <TouchableOpacity onPress={() => handleGlobalPageChange('prev')} disabled={globalPage === 1}>
-                                <ButtonText>Prev All</ButtonText>
+                            <TouchableOpacity onPress={() => handleGlobalPageChange('first')} disabled={globalPage === 1}>
+                                <ButtonText>First All</ButtonText>
                             </TouchableOpacity>
                         </Button>
                     </VStack>
@@ -343,6 +367,7 @@ const styles = StyleSheet.create({
         padding: 5,
         marginBottom: 20,
         elevation: 2,
+        overflow: 'hidden',  // Add this for better rendering performance
     },
     title: {
         fontSize: 16,
@@ -361,10 +386,9 @@ const styles = StyleSheet.create({
         marginTop: 20,
         marginBottom: 20,
     },
-    paginationButton: {
-        fontSize: 14,
-        color: '#fff',
-        paddingHorizontal: 10,
+    loadingContainer: {
+        height: 200,  // Fixed height for loading state
+        justifyContent: 'center',
     },
 });
 

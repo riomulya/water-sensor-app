@@ -10,19 +10,20 @@ const CustomAppBar = () => {
             end={{ x: 1, y: .1 }}   
             style={{ ...styles.appBar, ...styles.shadow }}
         >
-            <View style={styles.logoContainer} >
+            {/* <View style={styles.logoContainer} >
                 <Image 
                     source={require('../assets/images/logo.png')}
                     style={styles.logoImage}
                 />
-            </View>
+            </View> */}
         </LinearGradient >
     );
 };
 
 const styles = StyleSheet.create({
     appBar: {
-        height: 80, // Tinggi AppBar
+        height: 0, // Tinggi AppBar
+        opacity: 0,
         paddingTop: 40, // Untuk mengatur posisi di bawah status bar
         paddingHorizontal: 16, // Padding kiri dan kanan
         flexDirection: 'row', // Mengatur logo dan teks berjajar horizontal
