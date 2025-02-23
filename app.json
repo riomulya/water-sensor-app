@@ -27,7 +27,8 @@
       "package": "com.watersensor.app",
       "googleMaps": {
         "apiKey": "AIzaSyBMQJvTCDIMs-cbrPb7Q0zrlBvUr1CsGrE"
-      }
+      },
+      "newArchEnabled": true
     },
     "web": {
       "bundler": "metro",

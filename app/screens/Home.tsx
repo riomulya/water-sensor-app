@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, Alert, Text, TextInput, FlatList, TouchableOpacity, SafeAreaView, Button, RefreshControl } from 'react-native';
+import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, RefreshControl, ActivityIndicator } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 import { Marker } from 'react-native-maps'; // Import Marker
 import { BottomSheet, BottomSheetBackdrop, BottomSheetContent, BottomSheetDragIndicator, BottomSheetPortal, BottomSheetTrigger } from '@/components/ui/bottomsheet';
@@ -9,6 +9,30 @@ import { Fab, FabIcon, FabLabel } from '@/components/ui/fab';
 import Map from '@/components/map/Map';
 import { io, Socket } from 'socket.io-client'; // Import Socket.IO client
 import { port } from '@/constants/https';
+import { useFocusEffect } from '@react-navigation/native';
+import { BackHandler } from 'react-native';
+import { Button, ButtonText } from "@/components/ui/button"
+import { Center } from "@/components/ui/center"
+import { Heading } from "@/components/ui/heading"
+import {
+  Modal,
+  ModalBackdrop,
+  ModalContent,
+  ModalCloseButton,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+} from "@/components/ui/modal";
+import { Text } from "@/components/ui/text"
+import { Icon, CloseIcon } from "@/components/ui/icon"
+import { 
+  AlertDialog, 
+  AlertDialogContent, 
+  AlertDialogHeader, 
+  AlertDialogFooter, 
+  AlertDialogBody, 
+  AlertDialogBackdrop 
+} from "@/components/ui/alert-dialog";
 
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
 
@@ -64,6 +88,14 @@ const HomeScreen = () => {
         temperature: 0,
     });
     const socketRef = useRef<Socket | null>(null);
+    const [showExitModal, setShowExitModal] = useState(false);
+    const [isFetchingAddress, setIsFetchingAddress] = useState(false);
+    const [showAddressDialog, setShowAddressDialog] = useState(false);
+    const [dialogContent, setDialogContent] = useState({
+        address: '',
+        latitude: 0,
+        longitude: 0
+    });
 
     useEffect(() => {
         if (!socketRef.current) {
@@ -109,40 +141,91 @@ const HomeScreen = () => {
     }, []);
 
     // Fungsi untuk melakukan reverse geocoding (mengambil alamat dari lat dan lon)
-    const fetchAddressFromCoordinates = async (latitude: number, longitude: number) => {
+    const fetchAddressFromCoordinates = async (latitude: number, longitude: number): Promise<string | null> => {
         try {
             const response = await fetch(
-                `${NOMINATIM_REVERSE_URL}lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`
+                `${NOMINATIM_REVERSE_URL}lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
+                {
+                    headers: {
+                        'User-Agent': 'WaterSensorApp/1.0 (your-contact-email@example.com)' // Diperlukan oleh Nominatim
+                    }
+                }
             );
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
             const data = await response.json();
-            if (data && data.display_name) {
-                setAddress(data.display_name);  // Ambil alamat dari "display_name"
+            
+            // Periksa error dari API Nominatim
+            if (data.error) {
+                setAddress(data.error);
+                return null;
+            }
+
+            if (data?.display_name) {
+                const newAddress = data.display_name;
+                setAddress(newAddress);
+                return newAddress;
             } else {
                 setAddress("Alamat tidak ditemukan");
+                return null;
             }
         } catch (error) {
-            setAddress("Gagal memuat alamat");
+            console.error('Gagal fetch alamat:', error);
+            setAddress("Gagal memuat alamat. Coba lagi beberapa saat.");
+            return null;
         }
     };
 
     // Event handler untuk klik di peta
-    const handleMapPress = (coordinates: [number, number]) => {
+    const handleMapPress = async (coordinates: [number, number]) => {
         const latitude = coordinates[0];
         const longitude = coordinates[1];
         setDestination({ latitude, longitude });
-        fetchAddressFromCoordinates(latitude, longitude);
-
-        Alert.alert("Destinasi Dipilih", `Alamat: ${address}, Lat: ${latitude}, Long: ${longitude}`);
+        
+        setIsFetchingAddress(true);
+        const fetchedAddress = await fetchAddressFromCoordinates(latitude, longitude);
+        setIsFetchingAddress(false);
+        
+        // Set konten dialog
+        setDialogContent({
+            address: fetchedAddress || address || 'Alamat tidak diketahui',
+            latitude,
+            longitude
+        });
+        setShowAddressDialog(true);
     };
 
     const zoomToGeoJSONFuncRef = useRef<() => void>();
 
     const getCurrentLocationFuncRef = useRef<() => void>();
 
+    useFocusEffect(
+        React.useCallback(() => {
+            const onBackPress = () => {
+                setShowExitModal(true);
+                return true;
+            };
+
+            BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+            return () => {
+                BackHandler.removeEventListener('hardwareBackPress', onBackPress);
+            };
+        }, [])
+    );
+
     return (
         <>
-            <SafeAreaView style={styles.container}
-            >
+            <SafeAreaView style={styles.container}>
+                {isFetchingAddress && (
+                    <View style={styles.loadingOverlay}>
+                        <ActivityIndicator size="large" color="#ea5757" />
+                        <Text style={styles.loadingText}>Mengambil alamat...</Text>
+                    </View>
+                )}
                 <Map
                     onInitialized={(zoomToGeoJSON) =>
                         (zoomToGeoJSONFuncRef.current = zoomToGeoJSON)
@@ -161,6 +244,7 @@ const HomeScreen = () => {
                 onPress={() => getCurrentLocationFuncRef.current?.()}
                 placement='bottom left'
                 style={{
+                    backgroundColor: 'white',
                     position: 'absolute', // FAB menjadi elemen absolut di layar
                     bottom: 120,           // Jarak dari bagian bawah layar
                     left: 25,            // Jarak dari sisi kiri layar
@@ -176,6 +260,7 @@ const HomeScreen = () => {
                     isDisabled={false}
                     isPressed={true}
                     style={{
+                        backgroundColor: 'white',
                         position: 'absolute', // FAB menjadi elemen absolut di layar
                         bottom: 120,           // Jarak dari bagian bawah layar
                         right: 25,            // Jarak dari sisi kanan layar
@@ -215,16 +300,89 @@ const HomeScreen = () => {
                                             max={p.max}
                                             suffix={p.suffix}
                                         />
-                                        {/* <Text>{sensorData[p.title]} {p.suffix}</Text> */}
                                     </View>
                                 );
                             })}
-                            {/* <Text>Data MQTT: {JSON.stringify(mqttData)}</Text> */}
-
                         </View>
                     </BottomSheetContent>
                 </BottomSheetPortal>
             </BottomSheet >
+            <Modal
+                isOpen={showExitModal}
+                onClose={() => setShowExitModal(false)}
+                size="md"
+            >
+                <ModalBackdrop />
+                <ModalContent>
+                    <ModalHeader>
+                        <Heading size="md" className="text-typography-950">
+                            ⚠️ Yakin Mau Keluar?
+                        </Heading>
+                        <ModalCloseButton onPress={() => setShowExitModal(false)}>
+                            <Icon
+                                as={CloseIcon}
+                                size="md"
+                                className="stroke-background-400 group-[:hover]/modal-close-button:stroke-background-700"
+                            />
+                        </ModalCloseButton>
+                    </ModalHeader>
+                    <ModalBody>
+                        <Text size="sm" className="text-typography-500">
+                            Aplikasi pemantauan kualitas air akan ditutup. Data real-time sensor sungai tidak akan terupdate jika aplikasi ditutup.
+                        </Text>
+                    </ModalBody>
+                    <ModalFooter>
+                        <Button
+                            variant="outline"
+                            action="secondary"
+                            onPress={() => setShowExitModal(false)}
+                        >
+                            <ButtonText>Lanjutkan Pantau</ButtonText>
+                        </Button>
+                        <Button
+                            onPress={() => BackHandler.exitApp()}
+                        >
+                            <ButtonText style={{ color: 'white' }}>Ya, Keluar</ButtonText>
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+            <AlertDialog
+                isOpen={showAddressDialog}
+                onClose={() => setShowAddressDialog(false)}
+                size="md"
+            >
+                <AlertDialogBackdrop />
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <Heading size="md" className="text-typography-950 font-semibold">
+                            📍 Destinasi Dipilih
+                        </Heading>
+                    </AlertDialogHeader>
+                    <AlertDialogBody className="mt-3 mb-4">
+                        <Text size="sm" className="mb-2">
+                            <Text className="font-bold">Alamat: </Text>
+                            {dialogContent.address}
+                        </Text>
+                        <Text size="sm">
+                            <Text className="font-bold">Latitude: </Text>
+                            {dialogContent.latitude.toFixed(6)}
+                        </Text>
+                        <Text size="sm">
+                            <Text className="font-bold">Longitude: </Text>
+                            {dialogContent.longitude.toFixed(6)}
+                        </Text>
+                    </AlertDialogBody>
+                    <AlertDialogFooter>
+                        <Button
+                            onPress={() => setShowAddressDialog(false)}
+                            size="sm"
+                        >
+                            <ButtonText>Tutup</ButtonText>
+                        </Button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 };
@@ -283,4 +441,20 @@ const styles = StyleSheet.create({
         borderBottomColor: '#ccc',
         borderBottomWidth: 1,
     },
+    loadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(255,255,255,0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 999
+    },
+    loadingText: {
+        marginTop: 10,
+        color: '#333',
+        fontSize: 16
+    }
 });

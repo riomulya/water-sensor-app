@@ -70,6 +70,11 @@
       iconSize: [40, 40],
     });
 
+    const waterMarkerLocation = L.icon({
+      iconUrl: '__MARKER_WATER_LOCATION__', // ✅ Path gambar akan diganti oleh React Native
+      iconSize: [40, 40],
+    });
+
     const map = L.map('map', {
       renderer: L.canvas(),
       gestureHandling: true, // Enable gesture handling (for pinch-zoom and rotate)
@@ -77,7 +82,7 @@
         [-11.5, 95.0],  // Batas bawah kiri Indonesia (latitude, longitude)
         [6.5, 141.5]    // Batas atas kanan Indonesia
       ],
-    }).setView([-6.3580484, 106.6340785], 100);
+    }).setView([-6.354952, 106.659897], 15);
 
     map.attributionControl.setPrefix(false); // Hapus "Leaflet"
     map.attributionControl.remove(); // Hapus watermark sepenuhnya
@@ -114,6 +119,62 @@
             });
         }
     });
+
+    // Pindahkan fungsi parseCoordinate ke scope global
+    const parseCoordinate = (str) => {
+      const parts = str.split('.');
+      return parseFloat(parts[0] + '.' + parts.slice(1).join(''));
+    };
+
+    // Fetch data lokasi sungai dalam format GeoJSON
+    fetch('http://192.168.1.15:3000/data_location')
+      .then(response => response.json())
+      .then(locations => {
+        const locationGeoJSON = {
+          "type": "FeatureCollection",
+          "features": locations.map(location => ({
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                parseCoordinate(location.lon),
+                parseCoordinate(location.lat)
+              ]
+            },
+            "properties": {
+              "nama_sungai": location.nama_sungai,
+              "alamat": location.alamat,
+              "tanggal": location.tanggal
+            }
+          }))
+        };
+
+        // Buat layer GeoJSON dengan marker khusus
+        L.geoJSON(locationGeoJSON, {
+          pointToLayer: function(feature, latlng) {
+            return L.marker(latlng, {
+              icon: waterMarkerLocation,
+              title: feature.properties.nama_sungai
+            }).bindPopup(`
+              <b>Nama :</b> ${feature.properties.nama_sungai}<br>
+              <b>Alamat :</b> ${feature.properties.alamat}<br>
+              <b>Tanggal :</b> ${new Date(feature.properties.tanggal).toLocaleString('id-ID', {
+                timeZone: 'Asia/Jakarta',
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: 'numeric',
+                second: 'numeric'
+              })}
+            `);
+          }
+        }).addTo(map);
+      })
+      .catch(error => {
+        console.error('Error fetching locations:', error);
+      });
 
     // Mengambil data dari API
     fetch('http://192.168.1.15:3000/data_combined')

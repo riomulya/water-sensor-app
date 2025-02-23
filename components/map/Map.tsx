@@ -8,7 +8,7 @@ import { Asset } from 'expo-asset';
 const markerBaseLocation = Asset.fromModule(require('../../assets/images/markerBaseLocation.png')).uri;
 const markerSelected = Asset.fromModule(require('../../assets/images/waterSelected.png')).uri;
 const markerWaterWays = Asset.fromModule(require('../../assets/images/waterways.png')).uri;
-
+const waterMarkerLocation = Asset.fromModule(require('../../assets/images/waterMarkerLocation.png')).uri;
 
 type Props = {
     onInitialized: (zoomToGeoJSONFunc: () => void) => void;
@@ -75,7 +75,8 @@ const Map = (props: Props) => {
                     const modifiedHtml = html
                         .replace('__MARKER_BASE__', markerBaseLocation)
                         .replace('__MARKER_SELECTED__', markerSelected)
-                        .replace('__MARKER_WATER_WAYS__', markerWaterWays);
+                        .replace('__MARKER_WATER_WAYS__', markerWaterWays)
+                        .replace('__MARKER_WATER_LOCATION__',waterMarkerLocation);
 
                     setHtmlString(modifiedHtml);
                     onInitialized(zoomToGeoJSON);

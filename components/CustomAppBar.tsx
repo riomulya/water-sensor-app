@@ -10,12 +10,12 @@ const CustomAppBar = () => {
             end={{ x: 1, y: .1 }}   
             style={{ ...styles.appBar, ...styles.shadow }}
         >
-            {/* <View style={styles.logoContainer} >
+            <View style={styles.logoContainer} >
                 <Image 
                     source={require('../assets/images/logo.png')}
                     style={styles.logoImage}
                 />
-            </View> */}
+            </View>
         </LinearGradient >
     );
 };
