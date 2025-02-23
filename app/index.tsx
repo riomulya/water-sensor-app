@@ -8,7 +8,6 @@ import "../global.css";
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
 
-
 export default function Index() {
   return (
     <LinearGradient

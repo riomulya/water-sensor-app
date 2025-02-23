@@ -37,7 +37,7 @@
       align-items: center;
       justify-content: center;
     }
-    
+
     .cluster-marker {
       font-size: 14px;
       font-family: Arial, sans-serif;
@@ -99,25 +99,25 @@
 
     // Tambahkan marker cluster group
     const markerClusterGroup = L.markerClusterGroup({
-        chunkedLoading: true,
-        chunkInterval: 200,
-        spiderfyOnMaxZoom: true,
-        showCoverageOnHover: false,
-        zoomToBoundsOnClick: true,
-        maxClusterRadius: 40,
-        disableClusteringAtZoom: 18,
-        spiderLegPolylineOptions: {
-            weight: 1.5,
-            color: '#222',
-            opacity: 0.5
-        },
-        iconCreateFunction: function (cluster) {
-            return L.divIcon({
-                html: '<div class="cluster-marker">' + cluster.getChildCount() + '</div>',
-                className: 'marker-cluster-custom',
-                iconSize: L.point(40, 40, true)
-            });
-        }
+      chunkedLoading: true,
+      chunkInterval: 200,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      maxClusterRadius: 40,
+      disableClusteringAtZoom: 18,
+      spiderLegPolylineOptions: {
+        weight: 1.5,
+        color: '#222',
+        opacity: 0.5
+      },
+      iconCreateFunction: function (cluster) {
+        return L.divIcon({
+          html: '<div class="cluster-marker">' + cluster.getChildCount() + '</div>',
+          className: 'marker-cluster-custom',
+          iconSize: L.point(40, 40, true)
+        });
+      }
     });
 
     // Pindahkan fungsi parseCoordinate ke scope global
@@ -126,39 +126,57 @@
       return parseFloat(parts[0] + '.' + parts.slice(1).join(''));
     };
 
-    // Fetch data lokasi sungai dalam format GeoJSON
-    fetch('http://192.168.1.15:3000/data_location')
-      .then(response => response.json())
-      .then(locations => {
-        const locationGeoJSON = {
-          "type": "FeatureCollection",
-          "features": locations.map(location => ({
-            "type": "Feature",
-            "geometry": {
-              "type": "Point",
-              "coordinates": [
-                parseCoordinate(location.lon),
-                parseCoordinate(location.lat)
-              ]
-            },
-            "properties": {
-              "nama_sungai": location.nama_sungai,
-              "alamat": location.alamat,
-              "tanggal": location.tanggal
-            }
-          }))
-        };
+    // Variabel untuk menyimpan layer yang akan diupdate
+    let locationLayer = null;
+    let isFirstLoad = true;
 
-        // Buat layer GeoJSON dengan marker khusus
-        L.geoJSON(locationGeoJSON, {
-          pointToLayer: function(feature, latlng) {
-            return L.marker(latlng, {
-              icon: waterMarkerLocation,
-              title: feature.properties.nama_sungai
-            }).bindPopup(`
-              <b>Nama :</b> ${feature.properties.nama_sungai}<br>
-              <b>Alamat :</b> ${feature.properties.alamat}<br>
-              <b>Tanggal :</b> ${new Date(feature.properties.tanggal).toLocaleString('id-ID', {
+    // Fungsi untuk update data sensor
+    const updateSensorData = () => {
+      fetch('http://192.168.1.15:3000/data_combined')
+        .then(response => response.json())
+        .then(data => worker.postMessage(data.data))
+        .catch(error => console.error('Error:', error));
+    };
+
+    // Fungsi untuk update data lokasi
+    const updateLocationData = () => {
+      fetch('http://192.168.1.15:3000/data_lokasi')
+        .then(response => response.json())
+        .then(locations => {
+          // Hapus layer sebelumnya jika ada
+          if (locationLayer) {
+            map.removeLayer(locationLayer);
+          }
+
+          const locationGeoJSON = {
+            "type": "FeatureCollection",
+            "features": locations.map(location => ({
+              "type": "Feature",
+              "geometry": {
+                "type": "Point",
+                "coordinates": [
+                  parseCoordinate(location.lon),
+                  parseCoordinate(location.lat)
+                ]
+              },
+              "properties": {
+                "nama_sungai": location.nama_sungai,
+                "alamat": location.alamat,
+                "tanggal": location.tanggal
+              }
+            }))
+          };
+
+          // Simpan layer baru ke variabel
+          locationLayer = L.geoJSON(locationGeoJSON, {
+            pointToLayer: function (feature, latlng) {
+              return L.marker(latlng, {
+                icon: waterMarkerLocation,
+                title: feature.properties.nama_sungai
+              }).bindPopup(`
+                <b>Nama :</b> ${feature.properties.nama_sungai}<br>
+                <b>Alamat :</b> ${feature.properties.alamat}<br>
+                <b>Tanggal :</b> ${new Date(feature.properties.tanggal).toLocaleString('id-ID', {
                 timeZone: 'Asia/Jakarta',
                 weekday: 'long',
                 year: 'numeric',
@@ -168,13 +186,23 @@
                 minute: 'numeric',
                 second: 'numeric'
               })}
-            `);
-          }
-        }).addTo(map);
-      })
-      .catch(error => {
-        console.error('Error fetching locations:', error);
-      });
+              `);
+            }
+          }).addTo(map);
+        })
+        .catch(console.error);
+    };
+
+    // Interval untuk update data (10 detik)
+    const INTERVAL = 10000;
+    setInterval(() => {
+      updateSensorData();
+      updateLocationData();
+    }, INTERVAL);
+
+    // Jalankan pertama kali saat load
+    updateSensorData();
+    updateLocationData();
 
     // Mengambil data dari API
     fetch('http://192.168.1.15:3000/data_combined')
@@ -192,7 +220,7 @@
                 parts[0] + '.' + parts.slice(1).join('')
               );
             };
-            
+
             const lat = parseCoordinate(item.lat);
             const lon = parseCoordinate(item.lon);
 
@@ -232,7 +260,7 @@
               minute: 'numeric',
               second: 'numeric'
             });
-            return L.marker(latlng, { 
+            return L.marker(latlng, {
               icon: markerWaterWays,
               title: feature.properties.id_ph
             }).bindPopup(`
@@ -246,53 +274,13 @@
             `);
           }
         });
-        
+
         markerClusterGroup.addLayer(geoJsonLayer);
         map.addLayer(markerClusterGroup);
       })
       .catch(error => {
         console.error('Error fetching data:', error);
       });
-
-    // worker.onmessage = function (event) {
-    //   const geojsonData = event.data;
-    //   L.geoJSON(geojsonData, {
-    //     pointToLayer: function (feature, latlng) {
-    //       const tanggal = new Date(feature.properties.tanggal);
-    //       const formattedDate = tanggal.toLocaleString('id-ID', {
-    //         timeZone: 'Asia/Jakarta', // Untuk Waktu Indonesia Barat (WIB)
-    //         weekday: 'long', // Hari dalam format panjang
-    //         year: 'numeric',
-    //         month: 'long',
-    //         day: 'numeric',
-    //         hour: 'numeric',
-    //         minute: 'numeric',
-    //         second: 'numeric'
-    //       });
-    //       return L.marker(latlng, { icon: markerWaterWays })
-    //         .bindPopup(`
-    //       <b>Tanggal:</b> ${formattedDate}<br>
-    //       <b>pH:</b> ${feature.properties.nilai_ph} <br>
-    //       <b>Accel X:</b> ${feature.properties.nilai_accel_x}<br>
-    //       <b>Accel Y:</b> ${feature.properties.nilai_accel_y}<br>
-    //       <b>Accel Z:</b> ${feature.properties.nilai_accel_z}<br>
-    //       <b>Temperature:</b> ${feature.properties.nilai_temperature}<br>
-    //       <b>Turbidity:</b> ${feature.properties.nilai_turbidity}<br>
-    //     `);
-    //     }
-    //   }).addTo(map);
-    // };
-
-    // // Fetch data dan kirim ke worker
-    // fetch('http://192.168.1.15:3000/data_combined')
-    //   .then(response => response.json())
-    //   .then(data => {
-    //     worker.postMessage(data.data); // Kirim data ke worker untuk diproses
-    //   })
-    //   .catch(error => {
-    //     console.error('Error fetching data:', error);
-    //   });
-
 
     // Function to update the map location from React Native
     const baseLocation = window.updateMapLocation = function (lat, lng) {
@@ -368,26 +356,27 @@
 
     // Tambahkan worker
     const worker = new Worker('dataWorker.js');
-    
+
     worker.onmessage = function (e) {
-        const geojsonData = e.data;
-        const geoJsonLayer = L.geoJSON(geojsonData, {
-            pointToLayer: function (feature, latlng) {
-                const tanggal = new Date(feature.properties.tanggal);
-                const formattedDate = tanggal.toLocaleString('id-ID', {
-                    timeZone: 'Asia/Jakarta',
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: 'numeric',
-                    second: 'numeric'
-                });
-                return L.marker(latlng, {
-                    icon: markerWaterWays,
-                    title: feature.properties.id_ph
-                }).bindPopup(`
+      const geojsonData = e.data;
+      markerClusterGroup.clearLayers();  // Bersihkan marker sebelumnya
+      const geoJsonLayer = L.geoJSON(geojsonData, {
+        pointToLayer: function (feature, latlng) {
+          const tanggal = new Date(feature.properties.tanggal);
+          const formattedDate = tanggal.toLocaleString('id-ID', {
+            timeZone: 'Asia/Jakarta',
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric'
+          });
+          return L.marker(latlng, {
+            icon: markerWaterWays,
+            title: feature.properties.id_ph
+          }).bindPopup(`
                     <b>Tanggal:</b> ${formattedDate}<br>
                     <b>pH:</b> ${feature.properties.nilai_ph}<br>
                     <b>Accel X:</b> ${feature.properties.nilai_accel_x}<br>
@@ -396,11 +385,11 @@
                     <b>Temperature:</b> ${feature.properties.nilai_temperature}<br>
                     <b>Turbidity:</b> ${feature.properties.nilai_turbidity}
                 `);
-            }
-        });
-        
-        markerClusterGroup.addLayer(geoJsonLayer);
-        map.addLayer(markerClusterGroup);
+        }
+      });
+
+      markerClusterGroup.addLayer(geoJsonLayer);
+      map.addLayer(markerClusterGroup);
     };
 
     // Fetch data dan kirim ke worker

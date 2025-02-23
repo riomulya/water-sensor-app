@@ -15,23 +15,23 @@ import { Button, ButtonText } from "@/components/ui/button"
 import { Center } from "@/components/ui/center"
 import { Heading } from "@/components/ui/heading"
 import {
-  Modal,
-  ModalBackdrop,
-  ModalContent,
-  ModalCloseButton,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
+    Modal,
+    ModalBackdrop,
+    ModalContent,
+    ModalCloseButton,
+    ModalHeader,
+    ModalBody,
+    ModalFooter,
 } from "@/components/ui/modal";
 import { Text } from "@/components/ui/text"
 import { Icon, CloseIcon } from "@/components/ui/icon"
-import { 
-  AlertDialog, 
-  AlertDialogContent, 
-  AlertDialogHeader, 
-  AlertDialogFooter, 
-  AlertDialogBody, 
-  AlertDialogBackdrop 
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogFooter,
+    AlertDialogBody,
+    AlertDialogBackdrop
 } from "@/components/ui/alert-dialog";
 
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
@@ -74,6 +74,14 @@ const data = [{
     suffix: " °C"
 },]
 
+// Update interface
+interface SavedLocation {
+    id_lokasi: number;
+    nama_sungai: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+}
 
 const HomeScreen = () => {
     const [destination, setDestination] = useState<{ latitude: number, longitude: number } | null>(null); // Untuk marker destinasi
@@ -92,10 +100,16 @@ const HomeScreen = () => {
     const [isFetchingAddress, setIsFetchingAddress] = useState(false);
     const [showAddressDialog, setShowAddressDialog] = useState(false);
     const [dialogContent, setDialogContent] = useState({
+        nama_sungai: '',
         address: '',
         latitude: 0,
         longitude: 0
     });
+    const [savedLocation, setSavedLocation] = useState<SavedLocation | null>(null); // Change to single location
+    const [showSavedLocationsDialog, setShowSavedLocationsDialog] = useState(false);
+
+    // Tambah ref untuk input
+    const riverNameInputRef = useRef<TextInput>(null);
 
     useEffect(() => {
         if (!socketRef.current) {
@@ -147,17 +161,17 @@ const HomeScreen = () => {
                 `${NOMINATIM_REVERSE_URL}lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
                 {
                     headers: {
-                        'User-Agent': 'WaterSensorApp/1.0 (your-contact-email@example.com)' // Diperlukan oleh Nominatim
+                        'User-Agent': 'WaterSensorApp/1.0 (your-contact-email@example.com)'
                     }
                 }
             );
-            
+
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
-            
+
             // Periksa error dari API Nominatim
             if (data.error) {
                 setAddress(data.error);
@@ -184,18 +198,24 @@ const HomeScreen = () => {
         const latitude = coordinates[0];
         const longitude = coordinates[1];
         setDestination({ latitude, longitude });
-        
+
         setIsFetchingAddress(true);
         const fetchedAddress = await fetchAddressFromCoordinates(latitude, longitude);
         setIsFetchingAddress(false);
-        
+
         // Set konten dialog
         setDialogContent({
+            nama_sungai: '',
             address: fetchedAddress || address || 'Alamat tidak diketahui',
             latitude,
             longitude
         });
         setShowAddressDialog(true);
+
+        // Set timeout untuk auto focus
+        setTimeout(() => {
+            riverNameInputRef.current?.focus();
+        }, 100);
     };
 
     const zoomToGeoJSONFuncRef = useRef<() => void>();
@@ -216,6 +236,68 @@ const HomeScreen = () => {
             };
         }, [])
     );
+
+    // Fungsi generate ID
+    const generateLocationId = () => {
+        return Math.floor(1000000 + Math.random() * 9000000); // 7-digit random number
+    };
+
+    // Update handleSaveLocation
+    const handleSaveLocation = async () => {
+        try {
+            const postData = {
+                id_lokasi: generateLocationId(),
+                nama_sungai: dialogContent.nama_sungai,
+                alamat: dialogContent.address,
+                lat: Number(dialogContent.latitude),
+                lon: Number(dialogContent.longitude),
+                tanggal: new Date().toISOString()
+            };
+
+            const response = await fetch(`${port}data_lokasi`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(postData),
+            });
+
+            console.log(postData)
+            setShowAddressDialog(false);
+            console.log(showAddressDialog)
+
+            const responseData = await response.json();
+            console.log(responseData)
+            if (!response.ok) {
+                throw new Error(responseData.error || 'Gagal menyimpan lokasi');
+            }
+
+            // Pastikan semua state update dilakukan sekaligus
+            setSavedLocation({
+                id_lokasi: postData.id_lokasi,
+                nama_sungai: postData.nama_sungai,
+                address: postData.alamat,
+                latitude: postData.lat,
+                longitude: postData.lon
+            });
+
+            // Tambahkan timeout kecil untuk memastikan update state
+            setShowAddressDialog(false);
+
+            console.log(showAddressDialog)
+        } catch (error) {
+            console.error('Error:', error);
+            Alert.alert(
+                'Error',
+                (error as Error).message || 'Terjadi kesalahan saat menyimpan lokasi'
+            );
+        }
+    };
+
+    // Update delete handler
+    const handleDeleteLocation = () => {
+        setSavedLocation(null);
+    };
 
     return (
         <>
@@ -307,6 +389,23 @@ const HomeScreen = () => {
                     </BottomSheetContent>
                 </BottomSheetPortal>
             </BottomSheet >
+            <Fab
+                size="sm"
+                isHovered={false}
+                isDisabled={false}
+                isPressed={true}
+                onPress={() => setShowSavedLocationsDialog(true)}
+                placement='bottom left'
+                style={{
+                    backgroundColor: 'white',
+                    position: 'absolute',
+                    bottom: 200,
+                    left: 25,
+                    zIndex: 0,
+                }}
+            >
+                <AntDesign name="enviromento" size={35} color="#ea5757" />
+            </Fab>
             <Modal
                 isOpen={showExitModal}
                 onClose={() => setShowExitModal(false)}
@@ -356,26 +455,95 @@ const HomeScreen = () => {
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <Heading size="md" className="text-typography-950 font-semibold">
-                            📍 Destinasi Dipilih
+                            📍 Pilih Destinasi Monitoring
                         </Heading>
                     </AlertDialogHeader>
                     <AlertDialogBody className="mt-3 mb-4">
-                        <Text size="sm" className="mb-2">
-                            <Text className="font-bold">Alamat: </Text>
-                            {dialogContent.address}
-                        </Text>
-                        <Text size="sm">
-                            <Text className="font-bold">Latitude: </Text>
-                            {dialogContent.latitude.toFixed(6)}
-                        </Text>
-                        <Text size="sm">
-                            <Text className="font-bold">Longitude: </Text>
-                            {dialogContent.longitude.toFixed(6)}
-                        </Text>
+                        <TextInput
+                            ref={riverNameInputRef}
+                            style={styles.input}
+                            placeholder="Nama Sungai/Kali *"
+                            value={dialogContent.nama_sungai}
+                            onChangeText={(text) => setDialogContent(prev => ({
+                                ...prev,
+                                nama_sungai: text
+                            }))}
+                            autoFocus
+                            onLayout={() => riverNameInputRef.current?.focus()}
+                        />
+                        <TextInput
+                            style={[styles.input, { height: 80, paddingVertical: 10, marginTop: 10 }]}
+                            value={dialogContent.address}
+                            onChangeText={(text) => setDialogContent(prev => ({ ...prev, address: text }))}
+                            placeholder="Alamat lengkap (dapat diedit manual)"
+                            multiline={true}
+                            numberOfLines={4}
+                            textAlignVertical="top"
+                        />
+                        <View style={styles.coordinateContainer}>
+                            <Text style={styles.coordinateText}>
+                                Latitude: {dialogContent.latitude.toFixed(6)}
+                            </Text>
+                            <Text style={styles.coordinateText}>
+                                Longitude: {dialogContent.longitude.toFixed(6)}
+                            </Text>
+                        </View>
                     </AlertDialogBody>
                     <AlertDialogFooter>
                         <Button
+                            variant="outline"
                             onPress={() => setShowAddressDialog(false)}
+                            size="sm"
+                        >
+                            <ButtonText>Tutup</ButtonText>
+                        </Button>
+                        <Button
+                            onPress={handleSaveLocation}
+                            size="sm"
+                        >
+                            <ButtonText>Simpan Lokasi</ButtonText>
+                        </Button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog
+                isOpen={showSavedLocationsDialog}
+                onClose={() => setShowSavedLocationsDialog(false)}
+                size="lg"
+            >
+                <AlertDialogBackdrop />
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <Heading size="md" className="text-typography-950 font-semibold">
+                            📍 Lokasi Monitoring Aktif
+                        </Heading>
+                    </AlertDialogHeader>
+                    <AlertDialogBody className="mt-3 mb-4">
+                        {!savedLocation ? (
+                            <Text size="sm">Belum ada lokasi monitoring terpasang</Text>
+                        ) : (
+                            <View style={styles.savedLocationItem}>
+                                <View style={styles.locationInfo}>
+                                    <Text size="sm" className="font-bold mb-1">
+                                        {savedLocation.address}
+                                    </Text>
+                                    <Text size="xs">
+                                        {savedLocation.latitude.toFixed(6)}, {savedLocation.longitude.toFixed(6)}
+                                    </Text>
+                                </View>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onPress={handleDeleteLocation}
+                                >
+                                    <ButtonText>Hapus</ButtonText>
+                                </Button>
+                            </View>
+                        )}
+                    </AlertDialogBody>
+                    <AlertDialogFooter>
+                        <Button
+                            onPress={() => setShowSavedLocationsDialog(false)}
                             size="sm"
                         >
                             <ButtonText>Tutup</ButtonText>
@@ -456,5 +624,36 @@ const styles = StyleSheet.create({
         marginTop: 10,
         color: '#333',
         fontSize: 16
-    }
+    },
+    savedLocationItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: '#f8f9fa',
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#dee2e6',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    locationInfo: {
+        flex: 1,
+        marginRight: 12,
+    },
+    coordinateContainer: {
+        backgroundColor: '#e9ecef',
+        borderRadius: 6,
+        padding: 8,
+        marginTop: 10,
+    },
+    coordinateText: {
+        fontSize: 12,
+        color: '#6c757d',
+        textAlign: 'center',
+    },
 });
