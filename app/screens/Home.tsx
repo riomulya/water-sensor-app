@@ -109,6 +109,7 @@ const HomeScreen = () => {
     });
     const [savedLocation, setSavedLocation] = useState<SavedLocation | null>(null); // Change to single location
     const [showSavedLocationsDialog, setShowSavedLocationsDialog] = useState(false);
+    const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
     // Tambah ref untuk input
     const riverNameInputRef = useRef<TextInput>(null);
@@ -316,6 +317,8 @@ const HomeScreen = () => {
         setSavedLocation(null);
     };
 
+    const webViewRef = useRef<any>(null);
+
     return (
         <>
             <SafeAreaView style={styles.container}>
@@ -323,6 +326,12 @@ const HomeScreen = () => {
                     <View style={styles.loadingOverlay}>
                         <ActivityIndicator size="large" color="#ea5757" />
                         <Text style={styles.loadingText}>Mengambil alamat...</Text>
+                    </View>
+                )}
+                {isFetchingLocation && (
+                    <View style={styles.loadingIndicator}>
+                        <ActivityIndicator size="large" color="#3388ff" />
+                        <Text style={{ marginTop: 10, color: '#333' }}>Mendapatkan lokasi...</Text>
                     </View>
                 )}
                 <Map
@@ -686,5 +695,17 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#6c757d',
         textAlign: 'center',
+    },
+    // Di StyleSheet:
+    loadingIndicator: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.8)',
+        zIndex: 9999
     },
 });

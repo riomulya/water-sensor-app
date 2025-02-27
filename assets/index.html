@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-gesture-handling@0.6.0/dist/leaflet-gesture-handling.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Maps Sensors</title>
 
@@ -46,6 +47,19 @@
       font-size: 14px;
       font-family: Arial, sans-serif;
     }
+
+    .leaflet-routing-container {
+      background: white;
+      padding: 10px;
+      border-radius: 5px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .leaflet-routing-alt {
+      display: none;
+      /* Sembunyikan alternatif rute */
+    }
   </style>
 </head>
 
@@ -56,6 +70,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/3.0.0/leaflet-search.min.js"></script>
   <script src="https://unpkg.com/leaflet-gesture-handling@0.6.0/dist/leaflet-gesture-handling.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
   <script>
     // const worker = new Worker('dataWorker.js');
     const markerLocation = L.icon({
@@ -96,6 +111,7 @@
 
     let currentMarker = null;
     let baseLocationMarker = null;
+    let locationAccuracyCircle = null;
 
     // Tambahkan tile layer OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?lang=id').addTo(map);
@@ -136,6 +152,10 @@
     // Variabel global untuk menyimpan data
     let currentSensorData = [];
     let currentLocationData = [];
+
+    // Variabel global untuk routing
+    let routingControl = null;
+    let navigationActive = false;
 
     // Fungsi update dari React Native
     window.updateSensorData = function (data) {
@@ -206,10 +226,17 @@
         }))
       }, {
         pointToLayer: function (feature, latlng) {
-          return L.marker(latlng, {
+          const marker = L.marker(latlng, {
             icon: waterMarkerLocation,
             title: feature.properties.nama_sungai
           }).bindPopup(createLocationPopup(feature.properties));
+
+          // Tambahkan event click untuk navigasi
+          marker.on('click', function () {
+            showNavigationRoute(feature.properties.lat, feature.properties.lon);
+          });
+
+          return marker;
         }
       });
     }
@@ -259,15 +286,37 @@
 
     // Function to update the map location from React Native
     const baseLocation = window.updateMapLocation = function (lat, lng) {
-      map.setView([lat, lng], 18); // Zoom level 18 for user location
-      // Jika ada marker sebelumnya, hapus marker tersebut
-
+      // Jika ada marker sebelumnya, update posisi
       if (baseLocationMarker) {
-        baseLocationMarker.remove(); // Menghapus marker yang ada
-      }
+        baseLocationMarker.setLatLng([lat, lng]);
+        baseLocationMarker.getPopup().setContent("Lokasi terkini anda <br>Lat: " + lat + "<br>Long: " + lng);
 
-      // Tambahkan marker baru di lokasi baru
-      baseLocationMarker = new L.marker([lat, lng], { icon: markerLocation }).addTo(map).bindPopup("Lokasi terkini anda <br>Lat: " + lat + "<br>Long: " + lng + "").openPopup();
+        // Update radius circle
+        if (locationAccuracyCircle) {
+          locationAccuracyCircle.setLatLng([lat, lng]);
+        }
+
+        if (baseLocationMarker.isPopupOpen()) {
+          baseLocationMarker.openPopup();
+        }
+      } else {
+        // Tambahkan marker baru jika belum ada
+        baseLocationMarker = L.marker([lat, lng], {
+          icon: markerLocation,
+          bubblingMouseEvents: false,
+          autoPanOnFocus: false
+        }).addTo(map)
+          .bindPopup("Lokasi terkini anda <br>Lat: " + lat + "<br>Long: " + lng)
+          .openPopup();
+
+        // Tambahkan radius circle
+        locationAccuracyCircle = L.circle([lat, lng], {
+          color: '#3388ff',
+          fillColor: '#3388ff',
+          fillOpacity: 0.2,
+          radius: 50 // Radius dalam meter
+        }).addTo(map);
+      }
     };
 
     // Kontrol pencarian dengan geocoder
@@ -328,6 +377,112 @@
         [-6.0, 107.0]
       ]);
     };
+
+    // Fungsi untuk menampilkan rute navigasi
+    function showNavigationRoute(destinationLat, destLng) {
+      if (!baseLocationMarker) {
+        alert('Lokasi Anda saat ini tidak diketahui');
+        return;
+      }
+
+      // Hapus rute sebelumnya jika ada
+      if (routingControl) {
+        map.removeControl(routingControl);
+        routingControl = null;
+      }
+
+      const startLatLng = baseLocationMarker.getLatLng();
+      const destLatLng = L.latLng(destinationLat, destLng);
+
+      routingControl = L.Routing.control({
+        waypoints: [
+          L.latLng(startLatLng.lat, startLatLng.lng),
+          destLatLng
+        ],
+        routeWhileDragging: true,
+        showAlternatives: false,
+        addWaypoints: false,
+        draggableWaypoints: false,
+        fitSelectedRoutes: 'smart',
+        lineOptions: {
+          styles: [{ color: '#3388ff', opacity: 0.7, weight: 5 }]
+        },
+        createMarker: function () { return null; }, // Nonaktifkan marker default
+        formatter: new L.Routing.Formatter({
+          language: 'id', // Bahasa Indonesia
+          units: 'metric'
+        })
+      }).addTo(map);
+
+      // Zoom ke rute
+      map.fitBounds(routingControl.getRoute().getBounds(), { padding: [50, 50] });
+
+      // Kirim data rute ke React Native
+      routingControl.on('routesfound', function (e) {
+        const routes = e.routes;
+        const summary = routes[0].summary;
+        const instructions = routes[0].instructions;
+        
+        // Format instruksi navigasi
+        const formattedInstructions = instructions.map(instruction => ({
+          distance: instruction.distance,
+          time: instruction.time,
+          text: instruction.text,
+          direction: instruction.type
+        }));
+
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'navigationData',
+          data: {
+            totalDistance: summary.totalDistance,
+            totalTime: summary.totalTime,
+            instructions: formattedInstructions
+          }
+        }));
+      });
+
+      navigationActive = true;
+      updateNavigationControls();
+    }
+
+    // Make clearNavigationRoute available globally
+    window.clearNavigationRoute = function () {
+      if (routingControl) {
+        map.removeControl(routingControl);
+        routingControl = null;
+      }
+      if (map._navigationButton) {
+        map.removeControl(map._navigationButton);
+        map._navigationButton = null;
+      }
+      navigationActive = false;
+    };
+
+    // Update original clearNavigationRoute function
+    function clearNavigationRoute() {
+      window.clearNavigationRoute();
+    }
+
+    // Tambahkan kontrol navigasi
+    function updateNavigationControls() {
+      if (!navigationActive) return;
+
+      L.Control.navigationButton = L.Control.extend({
+        onAdd: function (map) {
+          const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+          const button = L.DomUtil.create('a', '', container);
+          button.innerHTML = '❌ Hentikan Navigasi';
+          button.style.cssText = 'width:auto; padding:0 10px; cursor:pointer;';
+
+          L.DomEvent.on(button, 'click', clearNavigationRoute);
+          return container;
+        }
+      });
+
+      if (!map._navigationButton) {
+        map._navigationButton = new L.Control.navigationButton({ position: 'topleft' }).addTo(map);
+      }
+    }
   </script>
 </body>
 

@@ -38,23 +38,33 @@ const Map = (props: Props) => {
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('Permission Denied', 'Location permission is required.');
+                Alert.alert('Izin Ditolak', 'Izin lokasi diperlukan untuk fitur ini');
                 return;
             }
 
-            const userLocation = await Location.getCurrentPositionAsync({});
-            const { latitude, longitude } = userLocation.coords;
+            const location = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.BestForNavigation,
+            });
+
+            const { latitude, longitude } = location.coords;
             setLocation([latitude, longitude]);
-            // Send the location to WebView to center the map
+
             if (webViewRef.current) {
-                webViewRef.current.injectJavaScript(`
-          if (window.updateMapLocation) {
-            window.updateMapLocation(${latitude}, ${longitude});
-          }
-        `);
+                await webViewRef.current.injectJavaScript(`
+                    if (window.updateMapLocation) {
+                        window.updateMapLocation(${latitude}, ${longitude});
+                        map.setView([${latitude}, ${longitude}], map.getZoom(), {
+                            animate: true,
+                            duration: 0.5
+                        });
+                    }
+                    true; // Penting untuk return value
+                `);
             }
+
         } catch (error) {
-            Alert.alert('Error', 'Could not get location');
+            console.error('Error getting location:', error);
+            throw error;
         }
     };
 
@@ -101,6 +111,7 @@ const Map = (props: Props) => {
             newSocket.on('new-location', fetchLocationData);
             newSocket.on('update-location', fetchLocationData);
             newSocket.on('delete-location', fetchLocationData);
+            newSocket.on('sensor-data-changed', fetchSensorData);
             setSocket(newSocket);
         };
 
@@ -116,8 +127,28 @@ const Map = (props: Props) => {
     }, []);
 
     const messageHandler = (e: WebViewMessageEvent) => {
-        const coords = JSON.parse(e.nativeEvent.data) as [number, number];
-        onMapPress(coords);
+        const data = JSON.parse(e.nativeEvent.data);
+
+        if (data.type === 'navigationData') {
+            // Handle navigation instructions
+            console.log('Navigation Data:', data.data);
+            Alert.alert(
+                'Navigasi Dimulai',
+                `Jarak: ${(data.data.totalDistance / 1000).toFixed(1)} km\n` +
+                `Perkiraan Waktu: ${Math.round(data.data.totalTime / 60)} menit`
+            );
+        } else if (data.type === 'clearNavigation') {
+            // Handle clear navigation
+            webViewRef.current?.injectJavaScript(`
+                if (window.clearNavigationRoute) {
+                    clearNavigationRoute();
+                }
+            `);
+        } else {
+            // Existing map press handler
+            const coords = data as [number, number];
+            onMapPress(coords);
+        }
     };
 
     // Fetch data sensor
