@@ -4,14 +4,14 @@
     "slug": "water-sensor-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/LogoSplash.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
       "**/*"
     ],
     "splash": {
-      "image": "./assets/images/splash.png",
+      "image": "./assets/images/LogoSplash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -21,14 +21,10 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/LogoSplash.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.watersensor.app",
-      "googleMaps": {
-        "apiKey": "AIzaSyBMQJvTCDIMs-cbrPb7Q0zrlBvUr1CsGrE"
-      },
-      "newArchEnabled": true
+      "package": "com.watersensor.app"
     },
     "web": {
       "bundler": "metro",

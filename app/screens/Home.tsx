@@ -33,6 +33,8 @@ import {
     AlertDialogBody,
     AlertDialogBackdrop
 } from "@/components/ui/alert-dialog";
+import { useToast } from "@/components/ui/toast";
+import { Toast, ToastTitle, ToastDescription } from "@/components/ui/toast";
 
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
 
@@ -111,16 +113,28 @@ const HomeScreen = () => {
     // Tambah ref untuk input
     const riverNameInputRef = useRef<TextInput>(null);
 
+    // Add toast hook after state declarations
+    const toast = useToast();
+
     useEffect(() => {
         if (!socketRef.current) {
             socketRef.current = io(port, {
-                transports: ['websocket'], // Paksa WebSocket agar lebih cepat
-                reconnectionAttempts: 5, // Coba konek ulang 5x jika gagal
-                timeout: 10000, // Timeout 10 detik
+                transports: ['websocket'],
+                reconnectionAttempts: 5,
+                timeout: 10000,
             });
 
             socketRef.current.on('connect', () => {
-                console.log('✅ Connected to server');
+                toast.show({
+                    placement: 'top',
+                    duration: 3000,
+                    render: ({ id }) => (
+                        <Toast nativeID={"toast-" + id} action="success" variant="solid">
+                            <ToastTitle>Connected</ToastTitle>
+                            <ToastDescription>Successfully connected to server</ToastDescription>
+                        </Toast>
+                    ),
+                });
             });
 
             socketRef.current?.on('mqttData', (data: any) => {
@@ -142,7 +156,16 @@ const HomeScreen = () => {
             });
 
             socketRef.current.on('disconnect', () => {
-                console.log('❌ Disconnected from server');
+                toast.show({
+                    placement: 'top',
+                    duration: 3000,
+                    render: ({ id }) => (
+                        <Toast nativeID={"toast-" + id} action="error" variant="solid">
+                            <ToastTitle>Disconnected</ToastTitle>
+                            <ToastDescription>Lost connection to server</ToastDescription>
+                        </Toast>
+                    ),
+                });
             });
         }
 
@@ -242,7 +265,6 @@ const HomeScreen = () => {
         return Math.floor(1000000 + Math.random() * 9000000); // 7-digit random number
     };
 
-    // Update handleSaveLocation
     const handleSaveLocation = async () => {
         try {
             const postData = {
@@ -262,17 +284,13 @@ const HomeScreen = () => {
                 body: JSON.stringify(postData),
             });
 
-            console.log(postData)
-            setShowAddressDialog(false);
-            console.log(showAddressDialog)
-
-            const responseData = await response.json();
-            console.log(responseData)
             if (!response.ok) {
-                throw new Error(responseData.error || 'Gagal menyimpan lokasi');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Gagal menyimpan lokasi');
             }
 
-            // Pastikan semua state update dilakukan sekaligus
+            const responseData = await response.json();
+
             setSavedLocation({
                 id_lokasi: postData.id_lokasi,
                 nama_sungai: postData.nama_sungai,
@@ -281,10 +299,9 @@ const HomeScreen = () => {
                 longitude: postData.lon
             });
 
-            // Tambahkan timeout kecil untuk memastikan update state
+            // Pastikan ini dipanggil
             setShowAddressDialog(false);
 
-            console.log(showAddressDialog)
         } catch (error) {
             console.error('Error:', error);
             Alert.alert(
@@ -318,6 +335,23 @@ const HomeScreen = () => {
                     }
                 />
             </SafeAreaView>
+            <Fab
+                size="sm"
+                isHovered={false}
+                isDisabled={false}
+                isPressed={true}
+                onPress={() => setShowSavedLocationsDialog(true)}
+                placement='bottom left'
+                style={{
+                    backgroundColor: 'white',
+                    position: 'absolute',
+                    bottom: 200,
+                    left: 25,
+                    zIndex: 0,
+                }}
+            >
+                <AntDesign name="enviromento" size={35} color="#ea5757" />
+            </Fab>
             <Fab
                 size="sm"
                 isHovered={false}
@@ -389,23 +423,6 @@ const HomeScreen = () => {
                     </BottomSheetContent>
                 </BottomSheetPortal>
             </BottomSheet >
-            <Fab
-                size="sm"
-                isHovered={false}
-                isDisabled={false}
-                isPressed={true}
-                onPress={() => setShowSavedLocationsDialog(true)}
-                placement='bottom left'
-                style={{
-                    backgroundColor: 'white',
-                    position: 'absolute',
-                    bottom: 200,
-                    left: 25,
-                    zIndex: 0,
-                }}
-            >
-                <AntDesign name="enviromento" size={35} color="#ea5757" />
-            </Fab>
             <Modal
                 isOpen={showExitModal}
                 onClose={() => setShowExitModal(false)}
@@ -446,19 +463,26 @@ const HomeScreen = () => {
                     </ModalFooter>
                 </ModalContent>
             </Modal>
-            <AlertDialog
+            <Modal
                 isOpen={showAddressDialog}
                 onClose={() => setShowAddressDialog(false)}
                 size="md"
             >
-                <AlertDialogBackdrop />
-                <AlertDialogContent>
-                    <AlertDialogHeader>
+                <ModalBackdrop />
+                <ModalContent>
+                    <ModalHeader>
                         <Heading size="md" className="text-typography-950 font-semibold">
                             📍 Pilih Destinasi Monitoring
                         </Heading>
-                    </AlertDialogHeader>
-                    <AlertDialogBody className="mt-3 mb-4">
+                        <ModalCloseButton onPress={() => setShowAddressDialog(false)}>
+                            <Icon
+                                as={CloseIcon}
+                                size="md"
+                                className="stroke-background-400 group-[:hover]/modal-close-button:stroke-background-700"
+                            />
+                        </ModalCloseButton>
+                    </ModalHeader>
+                    <ModalBody className="mt-3 mb-4">
                         <TextInput
                             ref={riverNameInputRef}
                             style={styles.input}
@@ -488,8 +512,8 @@ const HomeScreen = () => {
                                 Longitude: {dialogContent.longitude.toFixed(6)}
                             </Text>
                         </View>
-                    </AlertDialogBody>
-                    <AlertDialogFooter>
+                    </ModalBody>
+                    <ModalFooter>
                         <Button
                             variant="outline"
                             onPress={() => setShowAddressDialog(false)}
@@ -503,22 +527,29 @@ const HomeScreen = () => {
                         >
                             <ButtonText>Simpan Lokasi</ButtonText>
                         </Button>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-            <AlertDialog
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+            <Modal
                 isOpen={showSavedLocationsDialog}
                 onClose={() => setShowSavedLocationsDialog(false)}
                 size="lg"
             >
-                <AlertDialogBackdrop />
-                <AlertDialogContent>
-                    <AlertDialogHeader>
+                <ModalBackdrop />
+                <ModalContent>
+                    <ModalHeader>
                         <Heading size="md" className="text-typography-950 font-semibold">
                             📍 Lokasi Monitoring Aktif
                         </Heading>
-                    </AlertDialogHeader>
-                    <AlertDialogBody className="mt-3 mb-4">
+                        <ModalCloseButton onPress={() => setShowSavedLocationsDialog(false)}>
+                            <Icon
+                                as={CloseIcon}
+                                size="md"
+                                className="stroke-background-400 group-[:hover]/modal-close-button:stroke-background-700"
+                            />
+                        </ModalCloseButton>
+                    </ModalHeader>
+                    <ModalBody className="mt-3 mb-4">
                         {!savedLocation ? (
                             <Text size="sm">Belum ada lokasi monitoring terpasang</Text>
                         ) : (
@@ -540,17 +571,17 @@ const HomeScreen = () => {
                                 </Button>
                             </View>
                         )}
-                    </AlertDialogBody>
-                    <AlertDialogFooter>
+                    </ModalBody>
+                    <ModalFooter>
                         <Button
                             onPress={() => setShowSavedLocationsDialog(false)}
                             size="sm"
                         >
                             <ButtonText>Tutup</ButtonText>
                         </Button>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
         </>
     );
 };

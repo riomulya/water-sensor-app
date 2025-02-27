@@ -76,7 +76,7 @@ export default function Index() {
 
       {/* Button */}
 
-      <Pressable onPress={() => { router.push('./screens/Home'); }}>
+      <Pressable onPress={() => { router.replace('./screens/Home'); }}>
         <MotiView
           from={{ scale: 0 }}
           animate={{ scale: 1 }}

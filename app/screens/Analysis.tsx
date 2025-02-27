@@ -16,6 +16,8 @@ import {
     AlertDialogBackdrop
 } from "@/components/ui/alert-dialog";
 import { Button as CustomButton, ButtonText } from "@/components/ui/button";
+import { useRouter } from 'expo-router';
+import { port } from '@/constants/https';
 
 interface ApiLocation {
     id_lokasi: number;
@@ -35,29 +37,25 @@ interface FormattedLocation {
 }
 
 const AnalysisScreen = () => {
+    const router = useRouter();
     const [data, setData] = useState<FormattedLocation[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
-    const [showAlertDialog, setShowAlertDialog] = useState(false);
-    const [selectedData, setSelectedData] = useState<ApiLocation | null>(null);
 
     const filteredData = data.filter(item =>
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.location.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const handleCardPress = async (id: number) => {
-        try {
-            const response = await fetch(`http://192.168.1.15:3000/data_lokasi/${id}`);
-            const result: ApiLocation = await response.json();
-            setSelectedData(result);
-            setShowAlertDialog(true);
-        } catch (error) {
-            console.error('Error fetching location details:', error);
-        }
+    const handleCardPress = (id: number) => {
+        console.log('Navigating to DetailLocationScreen with id:', id);
+        router.push({
+            pathname: "/detail/DetailLocationScreen",
+            params: { id: id.toString() }
+        });
     };
 
     useEffect(() => {
-        fetch('http://192.168.1.15:3000/data_lokasi')
+        fetch(`${port}data_lokasi`)
             .then(response => response.json())
             .then((apiData: ApiLocation[]) => {
                 const formattedData: FormattedLocation[] = apiData.map(item => ({
@@ -129,50 +127,6 @@ const AnalysisScreen = () => {
                     </Card>
                 ))}
             </ScrollView>
-
-            <AlertDialog
-                isOpen={showAlertDialog}
-                onClose={() => setShowAlertDialog(false)}
-                size="md"
-            >
-                <AlertDialogBackdrop />
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <Heading className="text-typography-950 font-semibold" size="md">
-                            {selectedData?.nama_sungai}
-                        </Heading>
-                    </AlertDialogHeader>
-                    <AlertDialogBody className="mt-3 mb-4">
-                        <Text size="sm">
-                            Alamat: {selectedData?.alamat}
-                        </Text>
-                        <Text size="sm" className="mt-2">
-                            Tanggal: {selectedData && new Date(selectedData.tanggal).toLocaleDateString('en-ID', {
-                                weekday: 'long',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                            })}
-                        </Text>
-                        <Text size="sm" className="mt-2">
-                            Latitude: {selectedData?.lat}
-                        </Text>
-                        <Text size="sm" className="mt-2">
-                            Longitude: {selectedData?.lon}
-                        </Text>
-                    </AlertDialogBody>
-                    <AlertDialogFooter className="">
-                        <CustomButton
-                            variant="outline"
-                            action="secondary"
-                            onPress={() => setShowAlertDialog(false)}
-                            size="sm"
-                        >
-                            <ButtonText>Tutup</ButtonText>
-                        </CustomButton>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
 
             <View style={{ height: 70 }}></View>
         </View >

@@ -4,14 +4,44 @@ import { GluestackUIProvider } from '@/components/ui/gluestack-ui-provider';
 import React, { useEffect, useState } from "react";
 import CustomAppBar from "@/components/CustomAppBar";
 import { StatusBar } from "react-native";
+import DetailScreen from './detail/DetailLocationScreen';
+// import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
+// const Stack = createNativeStackNavigator();
 
 export default function RootLayout() {
   return (
     <GluestackUIProvider mode="light">
       <StatusBar backgroundColor="pink" />
-      <Stack >
-        <Stack.Screen name="screens" options={{ header: CustomAppBar,headerShown:false }} />
-        <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack
+        screenOptions={{
+          headerShown: false // Nonaktifkan header global
+        }}
+      >
+        <Stack.Screen
+          name="index"
+          options={{ headerShown: false }}
+        />
+        {/* <Stack.Screen
+          name="screens/Home"
+          options={{ headerShown: false }}
+        /> */}
+        {/* <Stack.Screen
+          name="screens/Analysis"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="DetailLocationScreen"
+          options={{
+            title: 'Detail Lokasi',
+            presentation: 'modal', // Opsional untuk tampilan modal
+            headerShown: false
+          }}
+        />
+        <Stack.Screen
+          name="detail"
+          options={{ title: 'Detail Lokasi', headerShown: true }}
+        /> */}
       </Stack>
     </GluestackUIProvider>
   );
