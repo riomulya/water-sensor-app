@@ -2,8 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@/utils": ["./utils"]
     }
   },
   "include": [
@@ -16,6 +18,7 @@
     "components/navigation/TabBarIcon.tsx",
     "app/(tabs)/_layout.jsx",
     "nativewind-env.d.ts",
-    "expo-env.d.ts"
-, "components/mqtt/MqttConnection.tsx"  ]
+    "expo-env.d.ts",
+    "components/mqtt/MqttConnection.tsx"
+  ]
 }

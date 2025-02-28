@@ -6,11 +6,14 @@ import * as Location from 'expo-location';
 import { Asset } from 'expo-asset';
 import { port } from '@/constants/https';
 import io from 'socket.io-client';
+import * as Localization from 'expo-localization';
+import 'moment/locale/id';
 
 const markerBaseLocation = Asset.fromModule(require('../../assets/images/markerBaseLocation.png')).uri;
 const markerSelected = Asset.fromModule(require('../../assets/images/waterSelected.png')).uri;
 const markerWaterWays = Asset.fromModule(require('../../assets/images/waterways.png')).uri;
 const waterMarkerLocation = Asset.fromModule(require('../../assets/images/waterMarkerLocation.png')).uri;
+const IOTDeviceMarker = Asset.fromModule(require('../../assets/images/target.png')).uri;
 
 type Props = {
     onInitialized: (zoomToGeoJSONFunc: () => void) => void;
@@ -53,12 +56,13 @@ const Map = (props: Props) => {
                 await webViewRef.current.injectJavaScript(`
                     if (window.updateMapLocation) {
                         window.updateMapLocation(${latitude}, ${longitude});
-                        map.setView([${latitude}, ${longitude}], map.getZoom(), {
+                        map.setView([${latitude}, ${longitude}], 18, {
                             animate: true,
                             duration: 0.5
                         });
                     }
-                    true; // Penting untuk return value
+                    document.documentElement.lang = '${Localization.locale}';
+                    true;
                 `);
             }
 
@@ -89,7 +93,10 @@ const Map = (props: Props) => {
                     .replace('__MARKER_SELECTED__', markerSelected)
                     .replace('__MARKER_WATER_WAYS__', markerWaterWays)
                     .replace('__MARKER_WATER_LOCATION__', waterMarkerLocation)
-                    .replace('__API_PORT__', port);
+                    .replace('__MARKER_IOT_DEVICE__', IOTDeviceMarker)
+                    .replace('__API_PORT__', port)
+                    .replace('lang="id"', `lang="${Localization.locale}"`)
+                    .replace(/moment.locale\('.*'\)/g, `moment.locale('${Localization.locale}')`);
 
                 setHtmlString(modifiedHtml);
 
@@ -108,6 +115,50 @@ const Map = (props: Props) => {
     useEffect(() => {
         const initializeSocket = () => {
             const newSocket = io(port);
+
+            // Update listener untuk data MQTT
+            newSocket.on('mqttData', (data: any) => {
+                const formattedData = {
+                    id: Date.now(), // ID unik untuk marker
+                    lat: parseFloat(data.message.latitude),
+                    lon: parseFloat(data.message.longitude),
+                    nilai_accel_x: data.message.accel_x,
+                    nilai_accel_y: data.message.accel_y,
+                    nilai_accel_z: data.message.accel_z,
+                    nilai_ph: data.message.ph,
+                    nilai_temperature: data.message.temperature,
+                    nilai_turbidity: data.message.turbidity,
+                    tanggal: data.timestamp
+                };
+
+                webViewRef.current?.injectJavaScript(`
+                    // Update atau tambahkan marker baru
+                    if(window.iotMarker) {
+                        window.iotMarker.setLatLng([${formattedData.lat}, ${formattedData.lon}]);
+                    } else {
+                        window.iotMarker = L.marker([${formattedData.lat}, ${formattedData.lon}], {
+                            icon: IOTDeviceMarker,
+                            zIndexOffset: 1000
+                        }).addTo(map);
+                    }
+                    
+                    // Update popup
+                    window.iotMarker.bindPopup(\`
+                        <b>Status Perangkat IOT</b><br>
+                        Lokasi Terakhir: ${new Date().toLocaleString()}<br>
+                        Accel X: ${formattedData.nilai_accel_x}<br>
+                        Accel Y: ${formattedData.nilai_accel_y}<br>
+                        Accel Z: ${formattedData.nilai_accel_z}<br>
+                        pH: ${formattedData.nilai_ph}<br>
+                        Suhu: ${formattedData.nilai_temperature}°C<br>
+                        Kekeruhan: ${formattedData.nilai_turbidity} NTU
+                    \`);
+                    
+                    // Auto-pan ke marker
+                    map.panTo([${formattedData.lat}, ${formattedData.lon}]);
+                `);
+            });
+
             newSocket.on('new-location', fetchLocationData);
             newSocket.on('update-location', fetchLocationData);
             newSocket.on('delete-location', fetchLocationData);

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, RefreshControl, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, RefreshControl, ActivityIndicator, Platform } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 import { Marker } from 'react-native-maps'; // Import Marker
 import { BottomSheet, BottomSheetBackdrop, BottomSheetContent, BottomSheetDragIndicator, BottomSheetPortal, BottomSheetTrigger } from '@/components/ui/bottomsheet';
@@ -35,6 +35,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/toast";
 import { Toast, ToastTitle, ToastDescription } from "@/components/ui/toast";
+import * as Notifications from 'expo-notifications';
+import * as TaskManager from 'expo-task-manager';
+import { calculateDistance } from '@/utils/geoUtils'; // Fungsi hitung jarak
+import { SchedulableTriggerInputTypes } from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+    }),
+});
 
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
 
@@ -110,12 +122,41 @@ const HomeScreen = () => {
     const [savedLocation, setSavedLocation] = useState<SavedLocation | null>(null); // Change to single location
     const [showSavedLocationsDialog, setShowSavedLocationsDialog] = useState(false);
     const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+    const [location, setLocation] = useState<[number, number] | null>(null);
+    const [channels, setChannels] = useState<Notifications.NotificationChannel[]>([]);
+    const [notification, setNotification] = useState<Notifications.Notification | undefined>(
+        undefined
+    );
+    const notificationListener = useRef<Notifications.EventSubscription>();
+    const responseListener = useRef<Notifications.EventSubscription>();
+
+    useEffect(() => {
+        // registerForPushNotificationsAsync().then(token => token && setExpoPushToken(token));
+
+        if (Platform.OS === 'android') {
+            Notifications.getNotificationChannelsAsync().then(value => setChannels(value ?? []));
+        }
+        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+            setNotification(notification);
+        });
+
+        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+            console.log(response);
+        }); return () => {
+            notificationListener.current &&
+                Notifications.removeNotificationSubscription(notificationListener.current);
+            responseListener.current &&
+                Notifications.removeNotificationSubscription(responseListener.current);
+        };
+    }, []);
 
     // Tambah ref untuk input
     const riverNameInputRef = useRef<TextInput>(null);
 
     // Add toast hook after state declarations
     const toast = useToast();
+
+    const GEOFENCE_TASK = 'geofence-monitoring';
 
     useEffect(() => {
         if (!socketRef.current) {
@@ -177,6 +218,61 @@ const HomeScreen = () => {
             }
         };
     }, []);
+
+    useEffect(() => {
+        const setupNotifications = async () => {
+            const { status } = await Notifications.requestPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Izin notifikasi diperlukan untuk mendapatkan peringatan perangkat');
+            }
+        };
+        setupNotifications();
+    }, []);
+
+    useEffect(() => {
+        if (!mqttData || !location) return;
+
+        const checkDistance = async () => {
+            try {
+                const deviceLat = parseFloat(mqttData.message.latitude);
+                const deviceLon = parseFloat(mqttData.message.longitude);
+                const userLat = location[0];
+                const userLon = location[1];
+
+                const distance = calculateDistance(
+                    userLat, userLon,
+                    deviceLat, deviceLon
+                );
+
+                if (distance >= 1 && distance <= 10) {
+                    await Notifications.scheduleNotificationAsync({
+                        content: {
+                            title: "🚨 Perangkat IOT Dekat!",
+                            body: `Perangkat berada dalam jarak ${distance.toFixed(1)} meter`,
+                            sound: true,
+                            data: {
+                                lat: deviceLat,
+                                lon: deviceLon
+                            },
+                            // android: {
+                            //     channelId: 'alerts',
+                            //     priority: Notifications.AndroidNotificationPriority.HIGH,
+                            //     vibrationPattern: [0, 250, 250, 250],
+                            // }
+                        },
+                        trigger: {
+                            type: SchedulableTriggerInputTypes.TIME_INTERVAL,
+                            seconds: 2,
+                        },
+                    });
+                }
+            } catch (error) {
+                console.error('Error checking distance:', error);
+            }
+        };
+
+        checkDistance();
+    }, [mqttData, location]); // Trigger saat ada update data MQTT atau lokasi user
 
     // Fungsi untuk melakukan reverse geocoding (mengambil alamat dari lat dan lon)
     const fetchAddressFromCoordinates = async (latitude: number, longitude: number): Promise<string | null> => {

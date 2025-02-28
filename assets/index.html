@@ -54,11 +54,16 @@
       border-radius: 5px;
       max-height: 200px;
       overflow-y: auto;
+      font-family: Arial, sans-serif;
     }
 
     .leaflet-routing-alt {
       display: none;
-      /* Sembunyikan alternatif rute */
+    }
+
+    .leaflet-routing-error {
+      color: red;
+      padding: 10px;
     }
   </style>
 </head>
@@ -91,6 +96,13 @@
     const waterMarkerLocation = L.icon({
       iconUrl: '__MARKER_WATER_LOCATION__', // ✅ Path gambar akan diganti oleh React Native
       iconSize: [40, 40],
+    });
+
+    const IOTDeviceMarker = L.icon({
+      iconUrl: '__MARKER_IOT_DEVICE__', // Pastikan path gambar benar
+      iconSize: [40, 40],
+      iconAnchor: [20, 40],
+      popupAnchor: [0, -40]
     });
 
     const map = L.map('map', {
@@ -157,6 +169,90 @@
     let routingControl = null;
     let navigationActive = false;
 
+    // Hapus bagian terjemahan sebelumnya dan ganti dengan ini
+    const indonesianTranslations = {
+      directions: {
+        N: "Utara",
+        NE: "Timur Laut",
+        E: "Timur",
+        SE: "Tenggara",
+        S: "Selatan",
+        SW: "Barat Daya",
+        W: "Barat",
+        NW: "Barat Laut",
+        SlightRight: "Belok sedikit ke kanan",
+        Right: "Belok kanan",
+        SharpRight: "Belok tajam ke kanan",
+        SlightLeft: "Belok sedikit ke kiri",
+        Left: "Belok kiri",
+        SharpLeft: "Belok tajam ke kiri",
+        Continue: "Terus lurus",
+        WaypointReached: "Tiba di titik",
+        Roundabout: "Putari bundaran",
+        Fork: "Ambil cabang",
+        UTurn: "Putar balik"
+      },
+      instructions: {
+        start: "Mulai perjalanan",
+        end: "Tiba di tujuan",
+        leaveAt: "Keluar di {exit}",
+        turnAround: "Putar balik",
+        turnLeft: "Belok kiri",
+        turnRight: "Belok kanan",
+        slightLeft: "Belok sedikit ke kiri",
+        slightRight: "Belok sedikit ke kanan",
+        sharpLeft: "Belok tajam ke kiri",
+        sharpRight: "Belok tajam ke kanan",
+        continueFor: "Lanjutkan {distance}",
+        continue: "Terus lurus",
+        onto: "ke {road}"
+      }
+    };
+
+    // Perbaikan terjemahan dengan extend formatter
+    L.Routing.Formatter.include({
+      _translations: {
+        id: {
+          directions: {
+            N: "Utara",
+            NE: "Timur Laut",
+            E: "Timur",
+            SE: "Tenggara",
+            S: "Selatan",
+            SW: "Barat Daya",
+            W: "Barat",
+            NW: "Barat Laut",
+            SlightRight: "Belok sedikit ke kanan",
+            Right: "Belok kanan",
+            SharpRight: "Belok tajam ke kanan",
+            SlightLeft: "Belok sedikit ke kiri",
+            Left: "Belok kiri",
+            SharpLeft: "Belok tajam ke kiri",
+            Continue: "Terus lurus",
+            WaypointReached: "Tiba di titik",
+            Roundabout: "Putari bundaran",
+            Fork: "Ambil cabang",
+            UTurn: "Putar balik"
+          },
+          instructions: {
+            start: "Mulai perjalanan",
+            end: "Tiba di tujuan",
+            leaveAt: "Keluar di {exit}",
+            turnAround: "Putar balik",
+            turnLeft: "Belok kiri",
+            turnRight: "Belok kanan",
+            slightLeft: "Belok sedikit ke kiri",
+            slightRight: "Belok sedikit ke kanan",
+            sharpLeft: "Belok tajam ke kiri",
+            sharpRight: "Belok tajam ke kanan",
+            continueFor: "Lanjutkan {distance}",
+            continue: "Terus lurus",
+            onto: "ke {road}"
+          }
+        }
+      }
+    });
+
     // Fungsi update dari React Native
     window.updateSensorData = function (data) {
       console.log('Received sensor data in HTML:', data);
@@ -204,9 +300,13 @@
         }))
       }, {
         pointToLayer: function (feature, latlng) {
+          // Cek apakah data berasal dari IOT realtime
+          const isIOTDevice = feature.properties.hasOwnProperty('id');
+
           return L.marker(latlng, {
-            icon: markerWaterWays,
-            title: feature.properties.id_ph
+            icon: isIOTDevice ? IOTDeviceMarker : markerWaterWays,
+            title: isIOTDevice ? 'Perangkat IOT' : `Sensor ${feature.properties.id_ph}`,
+            zIndexOffset: isIOTDevice ? 1000 : 0
           }).bindPopup(createSensorPopup(feature.properties));
         }
       });
@@ -281,6 +381,22 @@
         <b>Nama Sungai :</b> ${properties.nama_sungai}<br>
         <b>Alamat :</b> ${properties.alamat}<br>
         <b>Tanggal :</b> ${new Date(properties.tanggal).toLocaleDateString('id-ID', options)}
+        <div style="margin-top: 10px; text-align: center;">
+          <button 
+            onclick="showNavigationRoute(${properties.lat}, ${properties.lon})"
+            style="
+              background: #3388ff;
+              color: white;
+              border: none;
+              padding: 8px 16px;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 14px;
+            "
+          >
+            🧭 Mulai Navigasi
+          </button>
+        </div>
       `;
     }
 
@@ -380,69 +496,86 @@
 
     // Fungsi untuk menampilkan rute navigasi
     function showNavigationRoute(destinationLat, destLng) {
-      if (!baseLocationMarker) {
-        alert('Lokasi Anda saat ini tidak diketahui');
-        return;
+      try {
+        if (!map) {
+          console.error('Peta belum diinisialisasi');
+          return;
+        }
+
+        if (!baseLocationMarker) {
+          alert('Aktifkan GPS terlebih dahulu untuk mendapatkan lokasi Anda');
+          return;
+        }
+
+        // Perbaikan: Gunakan nama variable yang berbeda dari parameter
+        const parsedDestLat = Number(destinationLat);
+        const parsedDestLng = Number(destLng);
+
+        // Hapus rute sebelumnya jika ada
+        if (routingControl) {
+          map.removeControl(routingControl);
+          routingControl = null;
+        }
+
+        const startLatLng = baseLocationMarker.getLatLng();
+        const destLatLng = L.latLng(parsedDestLat, parsedDestLng); // Gunakan variable yang sudah diparse
+
+        console.log('Destination:', parsedDestLat, parsedDestLng);
+        console.log('Current Location:', startLatLng);
+
+        routingControl = L.Routing.control({
+          waypoints: [
+            L.latLng(startLatLng.lat, startLatLng.lng),
+            destLatLng
+          ],
+          routeWhileDragging: true,
+          showAlternatives: false,
+          addWaypoints: false,
+          draggableWaypoints: false,
+          fitSelectedRoutes: 'smart',
+          lineOptions: {
+            styles: [{ color: '#3388ff', opacity: 0.7, weight: 5 }]
+          },
+          createMarker: function () { return null; },
+          formatter: new L.Routing.Formatter({
+            language: 'id',
+            units: 'metric'
+          })
+        }).addTo(map);
+
+        // Zoom ke rute
+        map.fitBounds(routingControl.getRoute().getBounds(), { padding: [50, 50] });
+
+        // Kirim data rute ke React Native
+        routingControl.on('routesfound', function (e) {
+          const routes = e.routes;
+          const summary = routes[0].summary;
+          const instructions = routes[0].instructions;
+
+          // Format instruksi navigasi
+          const formattedInstructions = instructions.map(instruction => ({
+            distance: instruction.distance,
+            time: instruction.time,
+            text: instruction.text,
+            direction: instruction.type
+          }));
+
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'navigationData',
+            data: {
+              totalDistance: summary.totalDistance,
+              totalTime: summary.totalTime,
+              instructions: formattedInstructions
+            }
+          }));
+        });
+
+        navigationActive = true;
+        updateNavigationControls();
+      } catch (error) {
+        console.error('Error dalam navigasi:', error);
+        alert('Gagal membuat rute: ' + error.message);
       }
-
-      // Hapus rute sebelumnya jika ada
-      if (routingControl) {
-        map.removeControl(routingControl);
-        routingControl = null;
-      }
-
-      const startLatLng = baseLocationMarker.getLatLng();
-      const destLatLng = L.latLng(destinationLat, destLng);
-
-      routingControl = L.Routing.control({
-        waypoints: [
-          L.latLng(startLatLng.lat, startLatLng.lng),
-          destLatLng
-        ],
-        routeWhileDragging: true,
-        showAlternatives: false,
-        addWaypoints: false,
-        draggableWaypoints: false,
-        fitSelectedRoutes: 'smart',
-        lineOptions: {
-          styles: [{ color: '#3388ff', opacity: 0.7, weight: 5 }]
-        },
-        createMarker: function () { return null; }, // Nonaktifkan marker default
-        formatter: new L.Routing.Formatter({
-          language: 'id', // Bahasa Indonesia
-          units: 'metric'
-        })
-      }).addTo(map);
-
-      // Zoom ke rute
-      map.fitBounds(routingControl.getRoute().getBounds(), { padding: [50, 50] });
-
-      // Kirim data rute ke React Native
-      routingControl.on('routesfound', function (e) {
-        const routes = e.routes;
-        const summary = routes[0].summary;
-        const instructions = routes[0].instructions;
-        
-        // Format instruksi navigasi
-        const formattedInstructions = instructions.map(instruction => ({
-          distance: instruction.distance,
-          time: instruction.time,
-          text: instruction.text,
-          direction: instruction.type
-        }));
-
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'navigationData',
-          data: {
-            totalDistance: summary.totalDistance,
-            totalTime: summary.totalTime,
-            instructions: formattedInstructions
-          }
-        }));
-      });
-
-      navigationActive = true;
-      updateNavigationControls();
     }
 
     // Make clearNavigationRoute available globally

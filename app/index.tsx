@@ -3,98 +3,117 @@ import { Text, Image, Dimensions, StyleSheet, Pressable, } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView, MotiText } from 'moti';
 import { Link, router } from 'expo-router';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as Notifications from 'expo-notifications';
 import "../global.css";
 
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
 
-export default function Index() {
+export default function App() {
+  // Setup notifikasi di root component
+  React.useEffect(() => {
+    const setupNotifications = async () => {
+      // Request permissions
+      const { status } = await Notifications.requestPermissionsAsync();
+
+      // Android channel setup
+      await Notifications.setNotificationChannelAsync('alerts', {
+        name: 'Alerts',
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
+      });
+    };
+
+    setupNotifications();
+  }, []);
+
   return (
-    <LinearGradient
-      colors={['#ffffff', '#ffcccc']}
-      style={styles.container}
-    >
-      {/* Logo Section */}
-      <MotiView
-        from={{ translateY: -50, opacity: 0 }}
-        animate={{ translateY: 0, opacity: 1 }}
-        transition={{
-          type: 'spring',
-          duration: 1000,
-        }}
-        style={styles.logoContainer}
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <LinearGradient
+        colors={['#ffffff', '#ffcccc']}
+        style={styles.container}
       >
-        <Image
-          source={require('../assets/images/full-logo.png')} // Update path to your Vector.png file
-          style={styles.logo}
-        />
-      </MotiView>
-
-      {/* Text Section */}
-      <MotiText
-        from={{ translateY: 30, opacity: 0 }}
-        animate={{ translateY: 0, opacity: 1 }}
-        transition={{
-          delay: 50,
-          type: 'timing',
-          duration: 800,
-        }}
-        style={styles.headerText}
-      >
-        SELAMAT DATANG DI
-      </MotiText>
-
-      <MotiText
-        from={{ translateY: 30, opacity: 0 }}
-        animate={{ translateY: 0, opacity: 1 }}
-        transition={{
-          delay: 70,
-          type: 'timing',
-          duration: 800,
-        }}
-        style={styles.subHeaderText}
-      >
-        PENGUKURAN DAN PREDIKSI KADAR AIR SUNGAI
-      </MotiText>
-
-      {/* Illustration Section */}
-      <MotiView
-        from={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{
-          delay: 90,
-          type: 'timing',
-          duration: 700,
-        }}
-        style={styles.imageContainer}
-      >
-        <Image
-          source={require('../assets/images/Group 229.png')} // Update path to your Group 229.png file
-          style={styles.illustration}
-        />
-      </MotiView>
-
-      {/* Button */}
-
-      <Pressable onPress={() => { router.replace('./screens/Home'); }}>
+        {/* Logo Section */}
         <MotiView
-          from={{ scale: 0 }}
-          animate={{ scale: 1 }}
+          from={{ translateY: -50, opacity: 0 }}
+          animate={{ translateY: 0, opacity: 1 }}
           transition={{
-            type: 'timing',
-            duration: 900,
-            delay: 120,
+            type: 'spring',
+            duration: 1000,
           }}
-          style={styles.button}
+          style={styles.logoContainer}
         >
-          <Text
-            style={styles.buttonText}
-          >
-            Lanjutkan
-          </Text>
+          <Image
+            source={require('../assets/images/full-logo.png')} // Update path to your Vector.png file
+            style={styles.logo}
+          />
         </MotiView>
-      </Pressable>
-    </LinearGradient >
+
+        {/* Text Section */}
+        <MotiText
+          from={{ translateY: 30, opacity: 0 }}
+          animate={{ translateY: 0, opacity: 1 }}
+          transition={{
+            delay: 50,
+            type: 'timing',
+            duration: 800,
+          }}
+          style={styles.headerText}
+        >
+          SELAMAT DATANG DI
+        </MotiText>
+
+        <MotiText
+          from={{ translateY: 30, opacity: 0 }}
+          animate={{ translateY: 0, opacity: 1 }}
+          transition={{
+            delay: 70,
+            type: 'timing',
+            duration: 800,
+          }}
+          style={styles.subHeaderText}
+        >
+          PENGUKURAN DAN PREDIKSI KADAR AIR SUNGAI
+        </MotiText>
+
+        {/* Illustration Section */}
+        <MotiView
+          from={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{
+            delay: 90,
+            type: 'timing',
+            duration: 700,
+          }}
+          style={styles.imageContainer}
+        >
+          <Image
+            source={require('../assets/images/Group 229.png')} // Update path to your Group 229.png file
+            style={styles.illustration}
+          />
+        </MotiView>
+
+        {/* Button */}
+        <Pressable onPress={() => { router.replace('./screens/Home'); }}>
+          <MotiView
+            from={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{
+              type: 'timing',
+              duration: 900,
+              delay: 120,
+            }}
+            style={styles.button}
+          >
+            <Text style={styles.buttonText}>
+              Lanjutkan
+            </Text>
+          </MotiView>
+        </Pressable>
+      </LinearGradient>
+    </GestureHandlerRootView>
   );
 }
 
