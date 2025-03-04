@@ -107,7 +107,7 @@ const AnalysisScreen = () => {
                                 </Heading>
                                 <Text
                                     size="sm"
-                                    className='color-gray-400'
+                                    // className='color-gray-400'
                                     style={{ flexWrap: 'wrap' }}
                                 >
                                     {item.location}

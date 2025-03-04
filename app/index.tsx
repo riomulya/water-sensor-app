@@ -29,6 +29,8 @@ export default function App() {
     setupNotifications();
   }, []);
 
+
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <LinearGradient

@@ -93,8 +93,8 @@ interface SavedLocation {
     id_lokasi: number;
     nama_sungai: string;
     address: string;
-    latitude: number;
-    longitude: number;
+    latitude: any;
+    longitude: any;
 }
 
 const HomeScreen = () => {
@@ -195,6 +195,10 @@ const HomeScreen = () => {
                 // console.log(data.message);
                 // console.log(data.message.accel_x);
                 setMqttData({ ...data });
+                if (!data.isStart) {
+                    setDestination(null);
+                    setAddress(null);
+                }
             });
 
             socketRef.current.on('disconnect', () => {
@@ -209,6 +213,15 @@ const HomeScreen = () => {
                     ),
                 });
             });
+
+            // Tambahkan event listener untuk mengirim lokasi yang tersimpan
+            if (savedLocation) {
+                socketRef.current.emit('updateLocation', {
+                    id_lokasi: savedLocation.id_lokasi,
+                    latitude: savedLocation.latitude,
+                    longitude: savedLocation.longitude
+                });
+            }
         }
 
         return () => {
@@ -217,7 +230,7 @@ const HomeScreen = () => {
                 socketRef.current = null;
             }
         };
-    }, []);
+    }, [savedLocation]); // Tambahkan savedLocation ke dependency array
 
     useEffect(() => {
         const setupNotifications = async () => {
@@ -399,10 +412,23 @@ const HomeScreen = () => {
             // Pastikan ini dipanggil
             setShowAddressDialog(false);
 
+            // Setelah menyimpan, kirim lokasi ke server
+            if (socketRef.current) {
+                socketRef.current.emit('updateLocation', {
+                    id_lokasi: postData.id_lokasi,
+                    latitude: postData.lat.toString(),
+                    longitude: postData.lon.toString()
+                });
+
+                // Tambahkan listener untuk konfirmasi
+                socketRef.current.on('locationUpdated', (confirmation) => {
+                    console.log('Location update confirmed:', confirmation);
+                });
+            }
         } catch (error) {
             console.error('Error:', error);
             Alert.alert(
-                'Error',
+                'Error Lokasi',
                 (error as Error).message || 'Terjadi kesalahan saat menyimpan lokasi'
             );
         }
@@ -410,7 +436,35 @@ const HomeScreen = () => {
 
     // Update delete handler
     const handleDeleteLocation = () => {
+        // try {
+        //     const response = await fetch(`${port}data_lokasi/${savedLocation?.id_lokasi}`, {
+        //         method: 'DELETE'
+        //     });
+
+        // if (response.ok) {
+        // Kirim event clear location ke server
+        if (socketRef.current) {
+            socketRef.current.emit('clearLocation');
+        }
+
         setSavedLocation(null);
+        toast.show({
+            placement: 'top',
+            render: () => (
+                <Toast>
+                    <ToastTitle>Lokasi berhasil dihapus</ToastTitle>
+                </Toast>
+            )
+        });
+        // }
+        // } catch (error) {
+        //     console.error('Error:', error);
+        //     Alert.alert(
+        //         'Error Lokasi',
+        //         (error as Error).message || 'Terjadi kesalahan saat menghapus lokasi'
+        //     );
+        // }
+        setShowSavedLocationsDialog(false);
     };
 
     const webViewRef = useRef<any>(null);
