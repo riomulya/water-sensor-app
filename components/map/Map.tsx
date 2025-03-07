@@ -84,38 +84,16 @@ const Map = (props: Props) => {
         getCurrentLocation();
     };
 
-    // Tambahkan fungsi konversi ke base64
-    const convertImageToBase64 = async (asset: Asset) => {
-        const response = await fetch(asset.uri!);
-        const blob = await response.blob();
-        return new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    };
-
     useEffect(() => {
         const initialize = async () => {
             if (assets) {
                 const html = await (await fetch(assets[0].localUri || '')).text();
-
-                // Konversi semua gambar ke base64
-                const [baseMarker, selectedMarker, waterMarker, locationMarker, iotMarker] = await Promise.all([
-                    convertImageToBase64(Asset.fromModule(require('../../assets/images/markerBaseLocation.png'))),
-                    convertImageToBase64(Asset.fromModule(require('../../assets/images/waterSelected.png'))),
-                    convertImageToBase64(Asset.fromModule(require('../../assets/images/waterways.png'))),
-                    convertImageToBase64(Asset.fromModule(require('../../assets/images/waterMarkerLocation.png'))),
-                    convertImageToBase64(Asset.fromModule(require('../../assets/images/target.png'))),
-                ]);
-
                 const modifiedHtml = html
-                    .replace('__MARKER_BASE__', baseMarker)
-                    .replace('__MARKER_SELECTED__', selectedMarker)
-                    .replace('__MARKER_WATER_WAYS__', waterMarker)
-                    .replace('__MARKER_WATER_LOCATION__', locationMarker)
-                    .replace('__MARKER_IOT_DEVICE__', iotMarker)
+                    .replace('__MARKER_BASE__', markerBaseLocation)
+                    .replace('__MARKER_SELECTED__', markerSelected)
+                    .replace('__MARKER_WATER_WAYS__', markerWaterWays)
+                    .replace('__MARKER_WATER_LOCATION__', waterMarkerLocation)
+                    .replace('__MARKER_IOT_DEVICE__', IOTDeviceMarker)
                     .replace('__API_PORT__', port)
                     .replace(/lang=".*?"/, 'lang="en"') // Force HTML ke English
                     .replace(/moment.locale\('.*?'\)/g, 'moment.locale("en")');
@@ -303,10 +281,6 @@ const Map = (props: Props) => {
             scalesPageToFit={false}
             containerStyle={{ flex: 1 }}
             onMessage={messageHandler}
-            domStorageEnabled
-            allowFileAccess
-            allowUniversalAccessFromFileURLs
-            allowFileAccessFromFi
         />
     );
 };
