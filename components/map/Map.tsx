@@ -9,10 +9,10 @@ import io from 'socket.io-client';
 import * as Localization from 'expo-localization';
 import 'moment/locale/id';
 
-const markerBaseLocation = Asset.fromModule(require('../../assets/images/markerBaseLocation.png')).uri;
-const markerSelected = Asset.fromModule(require('../../assets/images/waterSelected.png')).uri;
+const markerBaseLocation = Asset.fromModule(require('../../assets/images/marker_base_location.png')).uri;
+const markerSelected = Asset.fromModule(require('../../assets/images/water_selected.png')).uri;
 const markerWaterWays = Asset.fromModule(require('../../assets/images/waterways.png')).uri;
-const waterMarkerLocation = Asset.fromModule(require('../../assets/images/waterMarkerLocation.png')).uri;
+const waterMarkerLocation = Asset.fromModule(require('../../assets/images/water_marker_location.png')).uri;
 const IOTDeviceMarker = Asset.fromModule(require('../../assets/images/target.png')).uri;
 
 type Props = {
