@@ -8,16 +8,12 @@ import { port } from '@/constants/https';
 import io from 'socket.io-client';
 import * as Localization from 'expo-localization';
 import 'moment/locale/id';
-import * as FileSystem from 'expo-file-system';
 
-const loadBase64Image = async (module: any) => {
-    const asset = Asset.fromModule(module);
-    await asset.downloadAsync();
-    const base64 = await FileSystem.readAsStringAsync(asset.localUri!, {
-        encoding: FileSystem.EncodingType.Base64,
-    });
-    return `data:image/png;base64,${base64}`;
-};
+const markerBaseLocation = Asset.fromModule(require('../../assets/images/markerBaseLocation.png')).uri;
+const markerSelected = Asset.fromModule(require('../../assets/images/waterSelected.png')).uri;
+const markerWaterWays = Asset.fromModule(require('../../assets/images/waterways.png')).uri;
+const waterMarkerLocation = Asset.fromModule(require('../../assets/images/waterMarkerLocation.png')).uri;
+const IOTDeviceMarker = Asset.fromModule(require('../../assets/images/target.png')).uri;
 
 type Props = {
     onInitialized: (zoomToGeoJSONFunc: () => void) => void;
@@ -91,30 +87,16 @@ const Map = (props: Props) => {
     useEffect(() => {
         const initialize = async () => {
             if (assets) {
-                // Load semua gambar sebagai base64
-                const [
-                    baseMarker,
-                    selectedMarker,
-                    waterWaysMarker,
-                    waterLocationMarker,
-                    iotMarker
-                ] = await Promise.all([
-                    loadBase64Image(require('../../assets/images/markerBaseLocation.png')),
-                    loadBase64Image(require('../../assets/images/waterSelected.png')),
-                    loadBase64Image(require('../../assets/images/waterways.png')),
-                    loadBase64Image(require('../../assets/images/waterMarkerLocation.png')),
-                    loadBase64Image(require('../../assets/images/target.png'))
-                ]);
-
                 const html = await (await fetch(assets[0].localUri || '')).text();
                 const modifiedHtml = html
-                    .replace('__MARKER_BASE__', baseMarker)
-                    .replace('__MARKER_SELECTED__', selectedMarker)
-                    .replace('__MARKER_WATER_WAYS__', waterWaysMarker)
-                    .replace('__MARKER_WATER_LOCATION__', waterLocationMarker)
-                    .replace('__MARKER_IOT_DEVICE__', iotMarker)
-                    .replace('__API_PORT__', `${port}`) // Ganti dengan URL production
-                    .replace(/lang=".*?"/, 'lang="id"');
+                    .replace('__MARKER_BASE__', markerBaseLocation)
+                    .replace('__MARKER_SELECTED__', markerSelected)
+                    .replace('__MARKER_WATER_WAYS__', markerWaterWays)
+                    .replace('__MARKER_WATER_LOCATION__', waterMarkerLocation)
+                    .replace('__MARKER_IOT_DEVICE__', IOTDeviceMarker)
+                    .replace('__API_PORT__', port)
+                    .replace(/lang=".*?"/, 'lang="en"') // Force HTML ke English
+                    .replace(/moment.locale\('.*?'\)/g, 'moment.locale("en")');
 
                 setHtmlString(modifiedHtml);
 

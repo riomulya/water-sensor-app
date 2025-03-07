@@ -8,7 +8,15 @@
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
-      "**/*"
+      "**/*",
+      "./assets/images/markerBaseLocation.png",
+      "./assets/images/waterSelected.png",
+      "./assets/images/waterways.png",
+      "./assets/images/waterMarkerLocation.png",
+      "./assets/images/target.png",
+      "**/*.html",
+      "**/*.png",
+      "**/*.ttf"
     ],
     "splash": {
       "image": "./assets/images/LogoSplash.png",
