@@ -218,6 +218,8 @@ const HomeScreen = () => {
             if (savedLocation) {
                 socketRef.current.emit('updateLocation', {
                     id_lokasi: savedLocation.id_lokasi,
+                    nama_sungai: savedLocation.nama_sungai,
+                    alamat: savedLocation.address,
                     latitude: savedLocation.latitude,
                     longitude: savedLocation.longitude
                 });
@@ -416,6 +418,8 @@ const HomeScreen = () => {
             if (socketRef.current) {
                 socketRef.current.emit('updateLocation', {
                     id_lokasi: postData.id_lokasi,
+                    nama_sungai: postData.nama_sungai,
+                    alamat: postData.alamat,
                     latitude: postData.lat.toString(),
                     longitude: postData.lon.toString()
                 });
@@ -468,6 +472,37 @@ const HomeScreen = () => {
     };
 
     const webViewRef = useRef<any>(null);
+
+    useEffect(() => {
+        // Fetch initial saved location
+        const fetchInitialLocation = async () => {
+            try {
+                const response = await fetch(`${port}getcurrentdata`);
+                const result = await response.json();
+
+                if (result.success && result.data.id_lokasi) {
+                    // Fetch address from coordinates
+                    const address = await fetchAddressFromCoordinates(
+                        result.data.latitude,
+                        result.data.longitude
+                    );
+
+                    setSavedLocation({
+                        id_lokasi: result.data.id_lokasi,
+                        nama_sungai: result.data['nama_sungai'], // Nama sungai tidak tersedia di response, bisa diisi manual
+                        address: address || 'Alamat tidak diketahui',
+                        latitude: result.data.latitude,
+                        longitude: result.data.longitude
+                    });
+                }
+            } catch (error) {
+                console.error('Gagal memuat lokasi awal:', error);
+                setSavedLocation(null);
+            }
+        };
+
+        fetchInitialLocation();
+    }, []); // Empty dependency array untuk eksekusi sekali saat mount
 
     return (
         <>
@@ -714,10 +749,13 @@ const HomeScreen = () => {
                         ) : (
                             <View style={styles.savedLocationItem}>
                                 <View style={styles.locationInfo}>
-                                    <Text size="sm" className="font-bold mb-1">
+                                    <Text size="md" className="font-bold mb-1 text-typography-950">
+                                        {savedLocation.nama_sungai || "Nama Sungai Belum Diisi"}
+                                    </Text>
+                                    <Text size="sm" className="mb-2 text-typography-700">
                                         {savedLocation.address}
                                     </Text>
-                                    <Text size="xs">
+                                    <Text size="xs" className="text-typography-500">
                                         {savedLocation.latitude.toFixed(6)}, {savedLocation.longitude.toFixed(6)}
                                     </Text>
                                 </View>

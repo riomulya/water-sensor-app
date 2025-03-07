@@ -95,8 +95,8 @@ const Map = (props: Props) => {
                     .replace('__MARKER_WATER_LOCATION__', waterMarkerLocation)
                     .replace('__MARKER_IOT_DEVICE__', IOTDeviceMarker)
                     .replace('__API_PORT__', port)
-                    .replace('lang="id"', `lang="${Localization.locale}"`)
-                    .replace(/moment.locale\('.*'\)/g, `moment.locale('${Localization.locale}')`);
+                    .replace(/lang=".*?"/, 'lang="en"') // Force HTML ke English
+                    .replace(/moment.locale\('.*?'\)/g, 'moment.locale("en")');
 
                 setHtmlString(modifiedHtml);
 
@@ -206,9 +206,9 @@ const Map = (props: Props) => {
     const fetchSensorData = async () => {
         try {
             const response = await fetch(`${port}data_combined`);
-            console.log('Response status:', response.status);
+            // console.log('Response status:', response.status);
             const data = await response.json();
-            console.log('Received sensor data:', data);
+            // console.log('Received sensor data:', data);
 
             // Pastikan struktur data sesuai
             const formattedData = data.data.map((item: any) => ({
@@ -237,14 +237,22 @@ const Map = (props: Props) => {
         try {
             const response = await fetch(`${port}data_lokasi`);
             const data = await response.json();
-            setLocationData(data);
-            console.log({ data })
-            if (webViewRef.current) {
-                webViewRef.current.injectJavaScript(`
-                  window.updateLocationData(${JSON.stringify(data)});
-                  map.invalidateSize();
-                `);
-            }
+
+            // Format data sesuai kebutuhan WebView
+            const formattedData = data.map((item: any) => ({
+                lat: item.lat.toString(),
+                lon: item.lon.toString(),
+                nama_sungai: item.nama_sungai,
+                alamat: item.alamat,
+                tanggal: item.tanggal
+            }));
+
+            setLocationData(formattedData);
+
+            webViewRef.current?.injectJavaScript(`
+                window.updateLocationData(${JSON.stringify(formattedData)});
+                map.invalidateSize();
+            `);
         } catch (error) {
             console.error('Error fetching location data:', error);
         }

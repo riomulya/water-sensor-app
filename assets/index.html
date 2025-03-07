@@ -52,18 +52,63 @@
       background: white;
       padding: 10px;
       border-radius: 5px;
-      max-height: 200px;
-      overflow-y: auto;
-      font-family: Arial, sans-serif;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
     }
 
     .leaflet-routing-alt {
-      display: none;
+      display: block !important;
+      max-height: 200px;
+      overflow-y: auto;
     }
 
     .leaflet-routing-error {
       color: red;
       padding: 10px;
+    }
+
+    .animate-route {
+      stroke-dasharray: 10;
+      animation: dash 60s linear infinite;
+    }
+
+    @keyframes dash {
+      from {
+        stroke-dashoffset: 1000;
+      }
+
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+
+    .leaflet-top.leaflet-left .navigation-close-button {
+      z-index: 1001;
+      /* Lebih tinggi dari kontrol map */
+      background: #dc3545;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-weight: bold;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      margin: 10px 0 0 10px;
+    }
+
+    .leaflet-top.leaflet-left .navigation-close-button a {
+      color: white !important;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .leaflet-control-container .leaflet-top.leaflet-left {
+      pointer-events: none;
+      /* Non-aktifkan event di area kontrol */
+    }
+
+    .leaflet-control-container .leaflet-top.leaflet-left>* {
+      pointer-events: auto;
+      /* Aktifkan hanya untuk child elements */
     }
   </style>
 </head>
@@ -169,6 +214,8 @@
     let routingControl = null;
     let navigationActive = false;
 
+    let savedLocationMarker = null;
+
     // Hapus bagian terjemahan sebelumnya dan ganti dengan ini
     const indonesianTranslations = {
       directions: {
@@ -250,6 +297,41 @@
             onto: "ke {road}"
           }
         }
+      },
+
+      // Tambahkan method translate untuk bahasa Indonesia
+      translate: function (key, values) {
+        const lang = this._translations[this._language] || this._translations.en;
+        let str = lang[key] || this._translations.en[key];
+
+        if (values) {
+          for (const k in values) {
+            str = str.replace(new RegExp(`{${k}}`, 'g'), values[k]);
+          }
+        }
+        return str;
+      }
+    });
+
+    // Tambahkan fallback ke bahasa Inggris
+    L.Routing.Formatter.include({
+      _translations: {
+        en: L.Routing.Formatter.prototype._translations.en,
+        id: {
+          // ... terjemahan Indonesia yang sudah ada ...
+        }
+      },
+      translate: function (key, values) {
+        const locale = navigator.language.split('-')[0] || 'en';
+        const lang = this._translations[locale] || this._translations.en;
+        let str = lang[key] || this._translations.en[key];
+
+        if (values) {
+          for (const k in values) {
+            str = str.replace(new RegExp(`{${k}}`, 'g'), values[k]);
+          }
+        }
+        return str;
       }
     });
 
@@ -261,6 +343,7 @@
     };
 
     window.updateLocationData = function (data) {
+      console.log('Received location data:', data);
       currentLocationData = data;
       updateMapLayers();
     };
@@ -320,7 +403,10 @@
           "type": "Feature",
           "geometry": {
             "type": "Point",
-            "coordinates": [location.lon, location.lat]
+            "coordinates": [
+              parseFloat(location.lon),
+              parseFloat(location.lat)
+            ]
           },
           "properties": location
         }))
@@ -328,12 +414,14 @@
         pointToLayer: function (feature, latlng) {
           const marker = L.marker(latlng, {
             icon: waterMarkerLocation,
-            title: feature.properties.nama_sungai
+            title: feature.properties.nama_sungai,
+            zIndexOffset: 500
           }).bindPopup(createLocationPopup(feature.properties));
 
-          // Tambahkan event click untuk navigasi
-          marker.on('click', function () {
-            showNavigationRoute(feature.properties.lat, feature.properties.lon);
+          // Tambahkan animasi
+          marker.on('add', function () {
+            this.openPopup();
+            setTimeout(() => this.closePopup(), 2000);
           });
 
           return marker;
@@ -529,45 +617,64 @@
             destLatLng
           ],
           routeWhileDragging: true,
-          showAlternatives: false,
-          addWaypoints: false,
-          draggableWaypoints: false,
-          fitSelectedRoutes: 'smart',
-          lineOptions: {
-            styles: [{ color: '#3388ff', opacity: 0.7, weight: 5 }]
-          },
-          createMarker: function () { return null; },
           formatter: new L.Routing.Formatter({
-            language: 'id',
+            language: 'en',
             units: 'metric'
-          })
+          }),
+          lineOptions: {
+            styles: [{ // Style untuk garis rute
+              color: '#1a73e8', // Warna biru
+              opacity: 0.8,
+              weight: 6
+            }],
+            extendToWaypoints: true,
+            missingRouteTolerance: 10
+          },
+          show: true,
+          addWaypoints: false,
+          routeLine: function (route) {
+            return L.polyline(route.coordinates, {
+              color: '#1a73e8', // Warna biru
+              weight: 6,
+              opacity: 0.8,
+              className: 'animate-route' // Untuk animasi
+            });
+          },
+          createMarker: function (i, waypoint, n) { // Marker penunjuk arah
+            return L.marker(waypoint.latLng, {
+              icon: L.icon({
+                iconUrl: i === 0 ?
+                  '__MARKER_BASE__' : // Marker start
+                  '__MARKER_SELECTED__', // Marker end
+                iconSize: [40, 40]
+              }),
+              zIndexOffset: 1000
+            });
+          }
         }).addTo(map);
 
-        // Zoom ke rute
-        map.fitBounds(routingControl.getRoute().getBounds(), { padding: [50, 50] });
-
-        // Kirim data rute ke React Native
+        // Pindahkan zoom ke dalam event routesfound
         routingControl.on('routesfound', function (e) {
           const routes = e.routes;
           const summary = routes[0].summary;
-          const instructions = routes[0].instructions;
 
-          // Format instruksi navigasi
-          const formattedInstructions = instructions.map(instruction => ({
-            distance: instruction.distance,
-            time: instruction.time,
-            text: instruction.text,
-            direction: instruction.type
-          }));
+          // Zoom ke rute setelah data tersedia
+          map.fitBounds(routes[0].coordinates, { padding: [50, 50] });
 
+          // Kirim data ke React Native
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: 'navigationData',
             data: {
               totalDistance: summary.totalDistance,
-              totalTime: summary.totalTime,
-              instructions: formattedInstructions
+              totalTime: summary.totalTime
             }
           }));
+        });
+
+        // Tambahkan error handling
+        routingControl.on('routingerror', function (e) {
+          console.error('Routing error:', e.error);
+          alert('Gagal membuat rute: ' + e.error.message);
         });
 
         navigationActive = true;
@@ -602,12 +709,21 @@
 
       L.Control.navigationButton = L.Control.extend({
         onAdd: function (map) {
-          const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+          const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control navigation-close-button');
           const button = L.DomUtil.create('a', '', container);
-          button.innerHTML = '❌ Hentikan Navigasi';
-          button.style.cssText = 'width:auto; padding:0 10px; cursor:pointer;';
+          button.innerHTML = '❌';
 
-          L.DomEvent.on(button, 'click', clearNavigationRoute);
+          // Stop event propagation
+          L.DomEvent.disableClickPropagation(container);
+          L.DomEvent.disableScrollPropagation(container);
+
+          L.DomEvent.on(button, 'click', function (e) {
+            e.stopPropagation(); // Tambahkan ini
+            window.clearNavigationRoute();
+            map.removeControl(map._navigationButton);
+            map._navigationButton = null;
+          });
+
           return container;
         }
       });
@@ -616,6 +732,40 @@
         map._navigationButton = new L.Control.navigationButton({ position: 'topleft' }).addTo(map);
       }
     }
+
+    // Hapus semua terjemahan custom dan gunakan default
+    L.Routing.Formatter.include({
+      translate: function (key, values) {
+        return L.Routing.Formatter.prototype.translate.call(this, key, values);
+      }
+    });
+
+    function createSavedLocation(location) {
+      // Hapus marker lama jika ada
+      if (savedLocationMarker) {
+        map.removeLayer(savedLocationMarker);
+      }
+
+      // Buat marker baru
+      savedLocationMarker = L.marker([location.lat, location.lon], {
+        icon: waterMarkerLocation,
+        title: location.nama_sungai,
+        zIndexOffset: 1000
+      }).bindPopup(`
+        <div class="saved-location-popup">
+          <h4>${location.nama_sungai}</h4>
+          <p>${location.alamat}</p>
+          <small>Terakhir update: ${new Date(location.tanggal).toLocaleString()}</small>
+        </div>
+      `);
+
+      savedLocationMarker.addTo(map);
+    }
+
+    // Handle update dari React Native
+    window.updateSavedLocation = function (location) {
+      createSavedLocation(location);
+    };
   </script>
 </body>
 
