@@ -24,7 +24,7 @@ type Props = {
 const Map = (props: Props) => {
     const { onInitialized, onMapPress, onGetCurrentLocation } = props;
 
-    const [assets] = useAssets([require('../../assets/index.html')]);
+    const [assets] = useAssets([require('../../assets/index.html'), markerBaseLocation, markerSelected, markerWaterWays, waterMarkerLocation, IOTDeviceMarker]);
     const [htmlString, setHtmlString] = useState<string>();
 
     const dimensions = useWindowDimensions();

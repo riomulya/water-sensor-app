@@ -16,7 +16,9 @@
       "./assets/images/target.png",
       "**/*.html",
       "**/*.png",
-      "**/*.ttf"
+      "**/*.ttf",
+      "**/*.js",
+      "**/*.css"
     ],
     "splash": {
       "image": "./assets/images/LogoSplash.png",
