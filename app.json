@@ -52,6 +52,18 @@
         {
           "locationWhenInUsePermission": "Show current location on map."
         }
+      ],
+      [
+        "expo-asset",
+        {
+          "assets": [
+            "./assets/images/markerBaseLocation.png",
+            "./assets/images/waterSelected.png",
+            "./assets/images/waterways.png",
+            "./assets/images/waterMarkerLocation.png",
+            "./assets/images/target.png"
+          ]
+        }
       ]
     ],
     "experiments": {
