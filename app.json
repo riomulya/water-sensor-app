@@ -61,8 +61,7 @@
             "./assets/images/water_selected.png",
             "./assets/images/waterways.png",
             "./assets/images/water_marker_location.png",
-            "./assets/images/target.png",
-            "./assets/images/*.png"
+            "./assets/images/target.png"
           ]
         }
       ]

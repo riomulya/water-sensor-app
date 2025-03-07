@@ -281,6 +281,12 @@ const Map = (props: Props) => {
             scalesPageToFit={false}
             containerStyle={{ flex: 1 }}
             onMessage={messageHandler}
+            allowFileAccess={true}
+            allowUniversalAccessFromFileURLs={true}
+            allowFileAccessFromFileURLs={true}
+            allowsInlineMediaPlayback={true}
+            originWhitelist={['*']}
+            mixedContentMode="always"
         />
     );
 };
