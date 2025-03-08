@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, RefreshControl, ActivityIndicator, Platform } from 'react-native';
+import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, RefreshControl, ActivityIndicator, Platform, LogBox, ScrollView } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 import { Marker } from 'react-native-maps'; // Import Marker
-import { BottomSheet, BottomSheetBackdrop, BottomSheetContent, BottomSheetDragIndicator, BottomSheetPortal, BottomSheetTrigger } from '@/components/ui/bottomsheet';
+import { BottomSheet, BottomSheetBackdrop, BottomSheetContent, BottomSheetDragIndicator, BottomSheetPortal, BottomSheetScrollView, BottomSheetTrigger } from '@/components/ui/bottomsheet';
 import Donut from '@/components/Donut';
 import RealTimeClock from '@/components/RealTimeClock';
 import { Fab, FabIcon, FabLabel } from '@/components/ui/fab';
@@ -39,6 +39,8 @@ import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { calculateDistance } from '@/utils/geoUtils'; // Fungsi hitung jarak
 import { SchedulableTriggerInputTypes } from 'expo-notifications';
+import Speedometer from 'react-native-speedometer-chart';
+import { HStack } from '@/components/ui/hstack';
 
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -97,6 +99,121 @@ interface SavedLocation {
     longitude: any;
 }
 
+interface SensorConfig {
+    id: string;
+    name: string;
+    min: number;
+    max: number;
+    unit: string;
+    thresholds: {
+        value: number;
+        label: string;
+        color: string;
+    }[];
+}
+
+const sensorConfigs: SensorConfig[] = [
+    // Sensor Accelerometer
+    {
+        id: 'accel_x',
+        name: 'Accelerometer X',
+        min: -20,
+        max: 20,
+        unit: 'm/s²',
+        thresholds: [
+            { value: -10, label: 'Kiri', color: '#FF6B6B' },
+            { value: -5, label: 'Miring Kiri', color: '#FFD93D' },
+            { value: 5, label: 'Stabil', color: '#6BCB77' },
+            { value: 10, label: 'Miring Kanan', color: '#FFD93D' },
+            { value: 20, label: 'Kanan', color: '#FF6B6B' }
+        ]
+    },
+    {
+        id: 'accel_y',
+        name: 'Accelerometer Y',
+        min: -20,
+        max: 20,
+        unit: 'm/s²',
+        thresholds: [
+            { value: -10, label: 'Bawah', color: '#FF6B6B' },
+            { value: -5, label: 'Turun', color: '#FFD93D' },
+            { value: 5, label: 'Stabil', color: '#6BCB77' },
+            { value: 10, label: 'Naik', color: '#FFD93D' },
+            { value: 20, label: 'Atas', color: '#FF6B6B' }
+        ]
+    },
+    {
+        id: 'accel_z',
+        name: 'Accelerometer Z',
+        min: -20,
+        max: 20,
+        unit: 'm/s²',
+        thresholds: [
+            { value: -10, label: 'Belakang', color: '#FF6B6B' },
+            { value: -5, label: 'Miring Belakang', color: '#FFD93D' },
+            { value: 5, label: 'Stabil', color: '#6BCB77' },
+            { value: 10, label: 'Miring Depan', color: '#FFD93D' },
+            { value: 20, label: 'Depan', color: '#FF6B6B' }
+        ]
+    },
+    // Sensor PH
+    {
+        id: 'ph',
+        name: 'Tingkat pH',
+        min: 0,
+        max: 14,
+        unit: 'pH',
+        thresholds: [
+            { value: 0, label: 'Asam Ekstrim', color: '#FF0000' },
+            { value: 4, label: 'Asam', color: '#FF4444' },
+            { value: 6.5, label: 'Normal', color: '#44FF44' },
+            { value: 8.5, label: 'Basa', color: '#FF4444' },
+            { value: 14, label: 'Basa Ekstrim', color: '#FF0000' }
+        ]
+    },
+    // Sensor Kekeruhan
+    {
+        id: 'turbidity',
+        name: 'Tingkat Kekeruhan',
+        min: 0,
+        max: 100,
+        unit: 'NTU',
+        thresholds: [
+            { value: 0, label: 'Jernih', color: '#87CEEB' },
+            { value: 25, label: 'Sedikit Keruh', color: '#4682B4' },
+            { value: 50, label: 'Keruh', color: '#2F4F4F' }
+        ]
+    },
+    // Sensor Suhu
+    {
+        id: 'temperature',
+        name: 'Suhu Air',
+        min: 0,
+        max: 100,
+        unit: '°C',
+        thresholds: [
+            { value: 0, label: 'Beku', color: '#2196F3' },
+            { value: 15, label: 'Dingin', color: '#4CAF50' },
+            { value: 30, label: 'Normal', color: '#FF9800' },
+            { value: 50, label: 'Panas', color: '#F44336' }
+        ]
+    },
+    // Sensor Kecepatan
+    {
+        id: 'speed',
+        name: 'Kecepatan Air',
+        min: 0,
+        max: 5,
+        unit: 'm/s',
+        thresholds: [
+            { value: 0, label: 'Diam', color: '#4CAF50' },
+            { value: 0.5, label: 'Tenang', color: '#4CAF50' },
+            { value: 1.5, label: 'Sedang', color: '#FF9800' },
+            { value: 3, label: 'Cepat', color: '#F44336' }
+        ]
+    }
+];
+
 const HomeScreen = () => {
     const [destination, setDestination] = useState<{ latitude: number, longitude: number } | null>(null); // Untuk marker destinasi
     const [address, setAddress] = useState<string | null>(null); // Untuk menyimpan alamat lengkap
@@ -108,6 +225,7 @@ const HomeScreen = () => {
         ph: 7,
         turbidity: 0,
         temperature: 0,
+        speed: 0,
     });
     const socketRef = useRef<Socket | null>(null);
     const [showExitModal, setShowExitModal] = useState(false);
@@ -189,6 +307,7 @@ const HomeScreen = () => {
                         ph: data.message.ph || 7,
                         turbidity: data.message.turbidity || 0,
                         temperature: data.message.temperature || 0,
+                        speed: data.message.speed || 0,
                     });
                 }
                 // console.log({ sensorData });
@@ -504,6 +623,40 @@ const HomeScreen = () => {
         fetchInitialLocation();
     }, []); // Empty dependency array untuk eksekusi sekali saat mount
 
+    const renderSpeedometer = ({ item }: { item: SensorConfig }) => {
+        // Tambahkan default value 0 jika data tidak ada
+        const currentValue = sensorData[item.id as keyof typeof sensorData] ?? 0;
+
+        // Pastikan nilai dalam range min-max
+        const clampedValue = Math.max(item.min, Math.min(item.max, currentValue));
+
+        const activeThreshold = item.thresholds.findLast(t => clampedValue >= t.value) || item.thresholds[0];
+
+        return (
+            <View style={styles.speedometerContainer}>
+                <Text style={styles.sensorTitle}>{item.name}</Text>
+                <Speedometer
+                    value={clampedValue}
+                    totalValue={item.max}
+                    size={140}
+                    outerColor="#f1f5f9"
+                    internalColor={activeThreshold.color}
+                    showText={true}
+                    showLabels={false}
+                    showPercent={false}
+                    text={`${clampedValue.toFixed(2)}`}
+                    textStyle={[styles.speedometerText, { marginTop: -10 }]}
+                    labelStyle={styles.speedometerLabel}
+                // style={{ marginVertical: 8 }}
+                />
+                <Text style={styles.speedometerLabel}>{item.unit}</Text>
+                <Text style={styles.statusText}>
+                    {activeThreshold.label}
+                </Text>
+            </View>
+        );
+    };
+
     return (
         <>
             <SafeAreaView style={styles.container}>
@@ -587,34 +740,25 @@ const HomeScreen = () => {
                     backdropComponent={BottomSheetBackdrop}
                     handleComponent={BottomSheetDragIndicator}
                 >
-                    <RealTimeClock />
-                    <BottomSheetContent>
-                        <View style={{
-                            flexDirection: 'row',
-                            justifyContent: 'space-evenly',
-                            flexWrap: 'wrap',
-                        }}>
-                            {data.map((p, i) => {
-                                // Mengatur ukuran setiap Donut agar sesuai dengan layout 2 kolom x 3 baris
-                                return (
-                                    <View key={i} style={{
-                                        width: '50%',
-                                        marginBottom: 40,
-                                        alignItems: 'center'
-                                    }}>
-                                        <Text>{p.name}</Text>
-                                        <Donut
-                                            percentage={sensorData[p.title]}
-                                            color={p.color}
-                                            // delay={500 + 100 * i}
-                                            max={p.max}
-                                            suffix={p.suffix}
-                                        />
-                                    </View>
-                                );
-                            })}
-                        </View>
-                    </BottomSheetContent>
+                    <SafeAreaView style={{ flex: 1 }}>
+                        <BottomSheetScrollView nestedScrollEnabled>
+                            {/* <RealTimeClock /> */}
+
+                            <FlatList
+                                scrollEnabled={false}
+                                // nestedScrollEnabled={true}
+                                data={sensorConfigs}
+                                renderItem={renderSpeedometer}
+                                keyExtractor={item => item.id}
+                                numColumns={2}
+                                ListHeaderComponent={<RealTimeClock />}
+                                // ListFooterComponent={<RealTimeClock />}
+                                contentContainerStyle={styles.listContent}
+                                columnWrapperStyle={{ justifyContent: 'space-between' }}
+                            />
+                            <View style={{ height: 100 }}></View>
+                        </BottomSheetScrollView>
+                    </SafeAreaView>
                 </BottomSheetPortal>
             </BottomSheet >
             <Modal
@@ -788,7 +932,7 @@ export default HomeScreen;
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        justifyContent: 'center',
+        backgroundColor: '#f8fafc',
     },
     map: {
         width: '100%',
@@ -896,4 +1040,54 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.8)',
         zIndex: 9999
     },
+    listContent: {
+        paddingBottom: 24
+    },
+    speedometerContainer: {
+        width: '48%',
+        margin: '1%',
+        backgroundColor: 'white',
+        borderRadius: 20,
+        padding: 20,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
+        elevation: 3
+    },
+    sensorTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        marginBottom: 16,
+        color: '#1e293b',
+        textAlign: 'center',
+        letterSpacing: 0.5
+    },
+    speedometerText: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: '#334155',
+        textAlign: 'center',
+        marginTop: 8
+    },
+    speedometerLabel: {
+        fontSize: 10,
+        color: '#64748b',
+        textAlign: 'center',
+        marginTop: 4
+    },
+    statusText: {
+        marginTop: 12,
+        fontSize: 13,
+        color: 'white',
+        fontWeight: '600',
+        textAlign: 'center',
+        backgroundColor: '#3b82f6',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        overflow: 'hidden',
+        alignSelf: 'center'
+    }
 });

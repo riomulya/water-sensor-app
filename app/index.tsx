@@ -1,11 +1,14 @@
 import React from 'react';
-import { Text, Image, Dimensions, StyleSheet, Pressable, } from 'react-native';
+import { Text, Image, Dimensions, StyleSheet, Pressable, LogBox, } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView, MotiText } from 'moti';
 import { Link, router } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import "../global.css";
+
+// Add at the top of your file (outside component)
+LogBox.ignoreLogs(['defaultProps will be removed']);
 
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;

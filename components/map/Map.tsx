@@ -9,10 +9,14 @@ import io from 'socket.io-client';
 import * as Localization from 'expo-localization';
 import 'moment/locale/id';
 
-const markerBaseLocation = Asset.fromModule(require('../../assets/images/marker_base_location.png')).uri;
-const markerSelected = Asset.fromModule(require('../../assets/images/water_selected.png')).uri;
-const markerWaterWays = Asset.fromModule(require('../../assets/images/waterways.png')).uri;
-const waterMarkerLocation = Asset.fromModule(require('../../assets/images/water_marker_location.png')).uri;
+const markerBaseLocation = Asset.fromModule(require('../../assets/images/marker_base_location.png')).uri ||
+    require('../../assets/images/marker_base_location.png').default;
+const markerSelected = Asset.fromModule(require('../../assets/images/water_selected.png')).uri ||
+    require('../../assets/images/water_selected.png').default;
+const markerWaterWays = Asset.fromModule(require('../../assets/images/waterways.png')).uri ||
+    require('../../assets/images/waterways.png').default;
+const waterMarkerLocation = Asset.fromModule(require('../../assets/images/water_marker_location.png')).uri ||
+    require('../../assets/images/water_marker_location.png').default;
 const IOTDeviceMarker = Asset.fromModule(require('../../assets/images/target.png')).uri;
 
 type Props = {
@@ -287,6 +291,8 @@ const Map = (props: Props) => {
             allowsInlineMediaPlayback={true}
             originWhitelist={['*']}
             mixedContentMode="always"
+            cacheEnabled={false}
+            incognito={true}
         />
     );
 };

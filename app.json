@@ -9,10 +9,10 @@
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
       "**/*",
-      "./assets/images/markerBaseLocation.png",
-      "./assets/images/waterSelected.png",
+      "./assets/images/marker_base_location.png",
+      "./assets/images/water_selected.png",
       "./assets/images/waterways.png",
-      "./assets/images/waterMarkerLocation.png",
+      "./assets/images/water_marker_location.png",
       "./assets/images/target.png",
       "**/*.html",
       "**/*.png",
