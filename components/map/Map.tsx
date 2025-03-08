@@ -9,15 +9,11 @@ import io from 'socket.io-client';
 import * as Localization from 'expo-localization';
 import 'moment/locale/id';
 
-const markerBaseLocation = Asset.fromModule(require('../../assets/images/marker_base_location.png')).uri ||
-    require('../../assets/images/marker_base_location.png').default;
-const markerSelected = Asset.fromModule(require('../../assets/images/water_selected.png')).uri ||
-    require('../../assets/images/water_selected.png').default;
-const markerWaterWays = Asset.fromModule(require('../../assets/images/waterways.png')).uri ||
-    require('../../assets/images/waterways.png').default;
-const waterMarkerLocation = Asset.fromModule(require('../../assets/images/water_marker_location.png')).uri ||
-    require('../../assets/images/water_marker_location.png').default;
-const IOTDeviceMarker = Asset.fromModule(require('../../assets/images/target.png')).uri;
+const markerBase = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/markerBaseLocation.png';
+const targetMarker = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/target.png';
+const waterMarker = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/water_marker_location.png';
+const waterSelected = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/waterSelected.png';
+const waterways = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/waterways.png';
 
 type Props = {
     onInitialized: (zoomToGeoJSONFunc: () => void) => void;
@@ -28,7 +24,7 @@ type Props = {
 const Map = (props: Props) => {
     const { onInitialized, onMapPress, onGetCurrentLocation } = props;
 
-    const [assets] = useAssets([require('../../assets/index.html'), markerBaseLocation, markerSelected, markerWaterWays, waterMarkerLocation, IOTDeviceMarker]);
+    const [assets] = useAssets([require('../../assets/index.html'), markerBase, targetMarker, waterways, waterSelected, waterMarker]);
     const [htmlString, setHtmlString] = useState<string>();
 
     const dimensions = useWindowDimensions();
@@ -93,11 +89,11 @@ const Map = (props: Props) => {
             if (assets) {
                 const html = await (await fetch(assets[0].localUri || '')).text();
                 const modifiedHtml = html
-                    .replace('__MARKER_BASE__', markerBaseLocation)
-                    .replace('__MARKER_SELECTED__', markerSelected)
-                    .replace('__MARKER_WATER_WAYS__', markerWaterWays)
-                    .replace('__MARKER_WATER_LOCATION__', waterMarkerLocation)
-                    .replace('__MARKER_IOT_DEVICE__', IOTDeviceMarker)
+                    .replace('__MARKER_BASE__', markerBase)
+                    .replace('__TARGET_MARKER__', targetMarker)
+                    .replace('__WATER_MARKER__', waterMarker)
+                    .replace('__WATER_SELECTED__', waterSelected)
+                    .replace('__WATERWAYS__', waterways)
                     .replace('__API_PORT__', port)
                     .replace(/lang=".*?"/, 'lang="en"') // Force HTML ke English
                     .replace(/moment.locale\('.*?'\)/g, 'moment.locale("en")');
@@ -290,7 +286,7 @@ const Map = (props: Props) => {
             allowFileAccessFromFileURLs={true}
             allowsInlineMediaPlayback={true}
             originWhitelist={['*']}
-            mixedContentMode="always"
+            mixedContentMode="compatibility"
             cacheEnabled={false}
             incognito={true}
         />
