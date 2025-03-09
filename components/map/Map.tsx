@@ -1,5 +1,5 @@
 import { useAssets } from 'expo-asset';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { useWindowDimensions, Alert } from 'react-native';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import * as Location from 'expo-location';
@@ -19,9 +19,12 @@ type Props = {
     onInitialized: (zoomToGeoJSONFunc: () => void) => void;
     onMapPress: (coordinates: [number, number]) => void;
     onGetCurrentLocation: (getCurrentLocationFunc: () => void) => void;
+    ref?: React.Ref<{
+        zoomToLocation: (lat: number, lon: number) => void;
+    }>;
 };
 
-const Map = (props: Props) => {
+const Map = forwardRef((props: Props, ref) => {
     const { onInitialized, onMapPress, onGetCurrentLocation } = props;
 
     const [assets] = useAssets([require('../../assets/index.html'), markerBase, targetMarker, waterways, waterSelected, waterMarker]);
@@ -250,6 +253,23 @@ const Map = (props: Props) => {
         }
     };
 
+    const zoomToLocation = (lat: number, lon: number) => {
+        webViewRef.current?.injectJavaScript(`
+            map.setView([${lat}, ${lon}], 18, {
+                animate: true,
+                duration: 0.5
+            });
+            L.marker([${lat}, ${lon}], { 
+                icon: window.waterMarkerLocation 
+            }).addTo(map).bindPopup("Lokasi Monitoring").openPopup();
+            true;
+        `);
+    };
+
+    React.useImperativeHandle(ref, () => ({
+        zoomToLocation
+    }));
+
     if (!htmlString) {
         return <></>;
     }
@@ -283,6 +303,6 @@ const Map = (props: Props) => {
             incognito={true}
         />
     );
-};
+});
 
 export default Map;

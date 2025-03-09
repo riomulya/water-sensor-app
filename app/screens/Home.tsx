@@ -657,6 +657,8 @@ const HomeScreen = () => {
         );
     };
 
+    const mapRef = useRef<{ zoomToLocation: (lat: number, lon: number) => void }>(null);
+
     return (
         <>
             <SafeAreaView style={styles.container}>
@@ -673,6 +675,7 @@ const HomeScreen = () => {
                     </View>
                 )}
                 <Map
+                    ref={mapRef}
                     onInitialized={(zoomToGeoJSON) =>
                         (zoomToGeoJSONFuncRef.current = zoomToGeoJSON)
                     }
@@ -889,27 +892,57 @@ const HomeScreen = () => {
                     </ModalHeader>
                     <ModalBody className="mt-3 mb-4">
                         {!savedLocation ? (
-                            <Text size="sm">Belum ada lokasi monitoring terpasang</Text>
+                            <Center className="py-8">
+                                <Text size="sm" className="text-typography-500">
+                                    Belum ada lokasi monitoring terpasang
+                                </Text>
+                            </Center>
                         ) : (
-                            <View style={styles.savedLocationItem}>
-                                <View style={styles.locationInfo}>
-                                    <Text size="md" className="font-bold mb-1 text-typography-950">
-                                        {savedLocation.nama_sungai || "Nama Sungai Belum Diisi"}
+                            <View style={styles.savedLocationCard}>
+                                <View style={styles.locationHeader}>
+                                    <AntDesign name="enviromento" size={24} color="#3b82f6" />
+                                    <Text style={styles.locationTitle}>
+                                        {savedLocation.nama_sungai || "Lokasi Sungai"}
                                     </Text>
-                                    <Text size="sm" className="mb-2 text-typography-700">
-                                        {savedLocation.address}
-                                    </Text>
-                                    <Text size="xs" className="text-typography-500">
+                                </View>
+
+                                <View style={styles.locationDetail}>
+                                    <AntDesign name="infocirlceo" size={14} color="#64748b" />
+                                    <Text style={styles.detailText}>{savedLocation.address}</Text>
+                                </View>
+
+                                <View style={styles.coordinateBadge}>
+                                    <AntDesign name="earth" size={14} color="#64748b" />
+                                    <Text style={styles.coordinateText}>
                                         {savedLocation.latitude.toFixed(6)}, {savedLocation.longitude.toFixed(6)}
                                     </Text>
                                 </View>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onPress={handleDeleteLocation}
-                                >
-                                    <ButtonText>Hapus</ButtonText>
-                                </Button>
+
+                                <HStack className="gap-2 mt-4">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onPress={handleDeleteLocation}
+                                        className="flex-1"
+                                    >
+                                        <ButtonText>Hapus Lokasi</ButtonText>
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        onPress={() => {
+                                            if (savedLocation) {
+                                                mapRef.current?.zoomToLocation(
+                                                    savedLocation.latitude,
+                                                    savedLocation.longitude
+                                                );
+                                                setShowSavedLocationsDialog(false);
+                                            }
+                                        }}
+                                        className="flex-1 bg-emerald-500"
+                                    >
+                                        <ButtonText>Lihat Lokasi</ButtonText>
+                                    </Button>
+                                </HStack>
                             </View>
                         )}
                     </ModalBody>
@@ -997,36 +1030,55 @@ const styles = StyleSheet.create({
         color: '#333',
         fontSize: 16
     },
-    savedLocationItem: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: '#f8f9fa',
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: '#dee2e6',
+    savedLocationCard: {
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
+        shadowRadius: 6,
+        elevation: 3,
     },
-    locationInfo: {
+    locationHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+        paddingBottom: 12
+    },
+    locationTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#1e293b'
+    },
+    locationDetail: {
+        flexDirection: 'row',
+        gap: 8,
+        alignItems: 'flex-start',
+        marginBottom: 8
+    },
+    detailText: {
         flex: 1,
-        marginRight: 12,
+        fontSize: 14,
+        color: '#475569',
+        lineHeight: 20
     },
-    coordinateContainer: {
-        backgroundColor: '#e9ecef',
-        borderRadius: 6,
+    coordinateBadge: {
+        flexDirection: 'row',
+        gap: 6,
+        alignItems: 'center',
+        backgroundColor: '#f8fafc',
         padding: 8,
-        marginTop: 10,
+        borderRadius: 8,
+        marginTop: 8
     },
     coordinateText: {
-        fontSize: 12,
-        color: '#6c757d',
-        textAlign: 'center',
+        fontSize: 13,
+        color: '#64748b',
+        fontFamily: 'monospace'
     },
     // Di StyleSheet:
     loadingIndicator: {
@@ -1089,5 +1141,11 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         overflow: 'hidden',
         alignSelf: 'center'
-    }
+    },
+    coordinateContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 10,
+        gap: 8,
+    },
 });
