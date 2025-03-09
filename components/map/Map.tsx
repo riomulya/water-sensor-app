@@ -9,22 +9,31 @@ import io from 'socket.io-client';
 import * as Localization from 'expo-localization';
 import 'moment/locale/id';
 
+declare global {
+    interface Window {
+        ReactNativeWebView: {
+            postMessage: (message: string) => void;
+        };
+    }
+}
+
 const markerBase = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/markerBaseLocation.png';
 const targetMarker = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/target.png';
 const waterMarker = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/water_marker_location.png';
 const waterSelected = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/waterSelected.png';
 const waterways = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/waterways.png';
 
-type Props = {
+interface Props {
     onInitialized: (zoomToGeoJSONFunc: () => void) => void;
     onMapPress: (coordinates: [number, number]) => void;
     onGetCurrentLocation: (getCurrentLocationFunc: () => void) => void;
+    onLocationSelect?: (locationData: any) => void;
     ref?: React.Ref<{
         zoomToLocation: (lat: number, lon: number) => void;
     }>;
-};
+}
 
-const Map = forwardRef((props: Props, ref) => {
+const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
     const { onInitialized, onMapPress, onGetCurrentLocation } = props;
 
     const [assets] = useAssets([require('../../assets/index.html'), markerBase, targetMarker, waterways, waterSelected, waterMarker]);
@@ -190,6 +199,18 @@ const Map = forwardRef((props: Props, ref) => {
                     clearNavigationRoute();
                 }
             `);
+        } else if (data.type === 'selectLocation') {
+            // Handle location selection from map marker
+            const locationData = data.data;
+            if (locationData) {
+                // Kirim data lokasi yang dipilih ke React Native
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'locationSelected',
+                    data: locationData
+                }));
+            }
+        } else if (data.type === 'locationSelected' && onLocationSelect) {
+            onLocationSelect(data.data);
         } else {
             // Existing map press handler
             const coords = data as [number, number];
@@ -235,6 +256,7 @@ const Map = forwardRef((props: Props, ref) => {
 
             // Format data sesuai kebutuhan WebView
             const formattedData = data.map((item: any) => ({
+                id_lokasi: item.id_lokasi,
                 lat: item.lat.toString(),
                 lon: item.lon.toString(),
                 nama_sungai: item.nama_sungai,

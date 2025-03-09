@@ -41,6 +41,7 @@ import { calculateDistance } from '@/utils/geoUtils'; // Fungsi hitung jarak
 import { SchedulableTriggerInputTypes } from 'expo-notifications';
 import Speedometer from 'react-native-speedometer-chart';
 import { HStack } from '@/components/ui/hstack';
+import { DeviceEventEmitter } from 'react-native';
 
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -659,6 +660,58 @@ const HomeScreen = () => {
 
     const mapRef = useRef<{ zoomToLocation: (lat: number, lon: number) => void }>(null);
 
+    // Tambahkan useEffect untuk handle pemilihan lokasi dari peta
+    useEffect(() => {
+        const subscription = DeviceEventEmitter.addListener('message', (event) => {
+            if (event.data?.type === 'locationSelected') {
+                const locationData = JSON.parse(event.data.data);
+                handleSelectExistingLocation(locationData);
+            }
+        });
+
+        return () => subscription.remove();
+    }, []);
+
+    const handleSelectExistingLocation = (locationData: any) => {
+        // Convert ke number dan handle undefined
+        const lat = parseFloat(locationData.latitude) || 0;
+        const lon = parseFloat(locationData.longitude) || 0;
+
+        const newLocation = {
+            id_lokasi: locationData.id_lokasi,
+            nama_sungai: locationData.nama_sungai,
+            address: locationData.alamat || 'Alamat tidak tersedia',
+            latitude: lat,
+            longitude: lon
+        };
+
+        setSavedLocation(newLocation);
+        setDestination({
+            latitude: newLocation.latitude,
+            longitude: newLocation.longitude
+        });
+
+        if (socketRef.current) {
+            socketRef.current.emit('updateLocation', {
+                id_lokasi: newLocation.id_lokasi,
+                nama_sungai: newLocation.nama_sungai,
+                alamat: newLocation.address,
+                latitude: newLocation.latitude.toString(),
+                longitude: newLocation.longitude.toString()
+            });
+        }
+
+        toast.show({
+            placement: 'top',
+            render: () => (
+                <Toast action="success">
+                    <ToastTitle>Lokasi monitoring dipilih!</ToastTitle>
+                    <ToastDescription>{newLocation.nama_sungai}</ToastDescription>
+                </Toast>
+            )
+        });
+    };
+
     return (
         <>
             <SafeAreaView style={styles.container}>
@@ -680,6 +733,7 @@ const HomeScreen = () => {
                         (zoomToGeoJSONFuncRef.current = zoomToGeoJSON)
                     }
                     onMapPress={handleMapPress}
+                    onLocationSelect={handleSelectExistingLocation}
                     onGetCurrentLocation={(getCurrentLocationFunc) =>
                         (getCurrentLocationFuncRef.current = getCurrentLocationFunc)
                     }
@@ -914,7 +968,8 @@ const HomeScreen = () => {
                                 <View style={styles.coordinateBadge}>
                                     <AntDesign name="earth" size={14} color="#64748b" />
                                     <Text style={styles.coordinateText}>
-                                        {savedLocation.latitude.toFixed(6)}, {savedLocation.longitude.toFixed(6)}
+                                        {savedLocation?.latitude?.toFixed?.(6) ?? 'N/A'},
+                                        {savedLocation?.longitude?.toFixed?.(6) ?? 'N/A'}
                                     </Text>
                                 </View>
 

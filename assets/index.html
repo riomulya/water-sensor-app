@@ -291,6 +291,30 @@
             zIndexOffset: 500
           }).bindPopup(createLocationPopup(feature.properties));
 
+          // Tambahkan event click untuk memilih lokasi
+          marker.on('click', function () {
+            // Hapus seleksi sebelumnya
+            if (window.selectedLocationMarker) {
+              window.selectedLocationMarker.setIcon(waterMarkerLocation);
+            }
+
+            // Tandai marker yang dipilih
+            this.setIcon(markerSelected);
+            window.selectedLocationMarker = this;
+
+            // ... kode pengiriman data ke React Native ...
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'locationSelected',
+              data: {
+                id_lokasi: feature.properties.id_lokasi,
+                nama_sungai: feature.properties.nama_sungai,
+                alamat: feature.properties.alamat,
+                latitude: feature.properties.lat,
+                longitude: feature.properties.lon
+              }
+            }));
+          });
+
           // Tambahkan animasi
           marker.on('add', function () {
             this.openPopup();
@@ -328,21 +352,41 @@
 
     // Fungsi pembuatan popup lokasi
     function createLocationPopup(properties) {
-      const options = {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Jakarta',
-        timeZoneName: 'short'
-      };
       return `
-        <b>Nama Sungai :</b> ${properties.nama_sungai}<br>
-        <b>Alamat :</b> ${properties.alamat}<br>
-        <b>Tanggal :</b> ${new Date(properties.tanggal).toLocaleDateString('id-ID', options)}
+        <div style="min-width: 200px">
+          <b>${properties.nama_sungai}</b><br>
+          <small>${properties.alamat}</small>
+          <hr>
+          <button onclick="handleSetMonitoringLocation(
+            ${properties.id_lokasi},
+            ${properties.lat},
+            ${properties.lon},
+            '${properties.nama_sungai}',
+            '${properties.alamat}'
+          )" 
+          style="background: #3b82f6; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer">
+            <i class="fa fa-target"></i> Jadikan Lokasi Monitoring
+          </button>
+        </div>
       `;
+    }
+
+    function handleSetMonitoringLocation(id, lat, lon, nama, alamat) {
+      if (isNaN(lat) || isNaN(lon)) {
+        console.error('Koordinat tidak valid');
+        return;
+      }
+
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'setMonitoringLocation',
+        data: {
+          id_lokasi: id,
+          lat: Number(lat).toFixed(6),
+          lon: Number(lon).toFixed(6),
+          nama_sungai: nama,
+          alamat: alamat || ''
+        }
+      }));
     }
 
     // Function to update the map location from React Native
