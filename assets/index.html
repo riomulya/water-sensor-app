@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-gesture-handling@0.6.0/dist/leaflet-gesture-handling.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Maps Sensors</title>
 
@@ -120,7 +119,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/3.0.0/leaflet-search.min.js"></script>
   <script src="https://unpkg.com/leaflet-gesture-handling@0.6.0/dist/leaflet-gesture-handling.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
   <script>
     // const worker = new Worker('dataWorker.js');
     const markerLocation = L.icon({
@@ -139,7 +137,6 @@
     });
 
     const waterMarkerLocation = L.icon({
-
       iconUrl: 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/water_marker_location.png', // ✅ Path gambar akan diganti oleh React Native
       iconSize: [40, 40],
     });
@@ -210,131 +207,6 @@
     // Variabel global untuk menyimpan data
     let currentSensorData = [];
     let currentLocationData = [];
-
-    // Variabel global untuk routing
-    let routingControl = null;
-    let navigationActive = false;
-
-    let savedLocationMarker = null;
-
-    // Hapus bagian terjemahan sebelumnya dan ganti dengan ini
-    const indonesianTranslations = {
-      directions: {
-        N: "Utara",
-        NE: "Timur Laut",
-        E: "Timur",
-        SE: "Tenggara",
-        S: "Selatan",
-        SW: "Barat Daya",
-        W: "Barat",
-        NW: "Barat Laut",
-        SlightRight: "Belok sedikit ke kanan",
-        Right: "Belok kanan",
-        SharpRight: "Belok tajam ke kanan",
-        SlightLeft: "Belok sedikit ke kiri",
-        Left: "Belok kiri",
-        SharpLeft: "Belok tajam ke kiri",
-        Continue: "Terus lurus",
-        WaypointReached: "Tiba di titik",
-        Roundabout: "Putari bundaran",
-        Fork: "Ambil cabang",
-        UTurn: "Putar balik"
-      },
-      instructions: {
-        start: "Mulai perjalanan",
-        end: "Tiba di tujuan",
-        leaveAt: "Keluar di {exit}",
-        turnAround: "Putar balik",
-        turnLeft: "Belok kiri",
-        turnRight: "Belok kanan",
-        slightLeft: "Belok sedikit ke kiri",
-        slightRight: "Belok sedikit ke kanan",
-        sharpLeft: "Belok tajam ke kiri",
-        sharpRight: "Belok tajam ke kanan",
-        continueFor: "Lanjutkan {distance}",
-        continue: "Terus lurus",
-        onto: "ke {road}"
-      }
-    };
-
-    // Perbaikan terjemahan dengan extend formatter
-    L.Routing.Formatter.include({
-      _translations: {
-        id: {
-          directions: {
-            N: "Utara",
-            NE: "Timur Laut",
-            E: "Timur",
-            SE: "Tenggara",
-            S: "Selatan",
-            SW: "Barat Daya",
-            W: "Barat",
-            NW: "Barat Laut",
-            SlightRight: "Belok sedikit ke kanan",
-            Right: "Belok kanan",
-            SharpRight: "Belok tajam ke kanan",
-            SlightLeft: "Belok sedikit ke kiri",
-            Left: "Belok kiri",
-            SharpLeft: "Belok tajam ke kiri",
-            Continue: "Terus lurus",
-            WaypointReached: "Tiba di titik",
-            Roundabout: "Putari bundaran",
-            Fork: "Ambil cabang",
-            UTurn: "Putar balik"
-          },
-          instructions: {
-            start: "Mulai perjalanan",
-            end: "Tiba di tujuan",
-            leaveAt: "Keluar di {exit}",
-            turnAround: "Putar balik",
-            turnLeft: "Belok kiri",
-            turnRight: "Belok kanan",
-            slightLeft: "Belok sedikit ke kiri",
-            slightRight: "Belok sedikit ke kanan",
-            sharpLeft: "Belok tajam ke kiri",
-            sharpRight: "Belok tajam ke kanan",
-            continueFor: "Lanjutkan {distance}",
-            continue: "Terus lurus",
-            onto: "ke {road}"
-          }
-        }
-      },
-
-      // Tambahkan method translate untuk bahasa Indonesia
-      translate: function (key, values) {
-        const lang = this._translations[this._language] || this._translations.en;
-        let str = lang[key] || this._translations.en[key];
-
-        if (values) {
-          for (const k in values) {
-            str = str.replace(new RegExp(`{${k}}`, 'g'), values[k]);
-          }
-        }
-        return str;
-      }
-    });
-
-    // Tambahkan fallback ke bahasa Inggris
-    L.Routing.Formatter.include({
-      _translations: {
-        en: L.Routing.Formatter.prototype._translations.en,
-        id: {
-          // ... terjemahan Indonesia yang sudah ada ...
-        }
-      },
-      translate: function (key, values) {
-        const locale = navigator.language.split('-')[0] || 'en';
-        const lang = this._translations[locale] || this._translations.en;
-        let str = lang[key] || this._translations.en[key];
-
-        if (values) {
-          for (const k in values) {
-            str = str.replace(new RegExp(`{${k}}`, 'g'), values[k]);
-          }
-        }
-        return str;
-      }
-    });
 
     // Fungsi update dari React Native
     window.updateSensorData = function (data) {
@@ -470,22 +342,6 @@
         <b>Nama Sungai :</b> ${properties.nama_sungai}<br>
         <b>Alamat :</b> ${properties.alamat}<br>
         <b>Tanggal :</b> ${new Date(properties.tanggal).toLocaleDateString('id-ID', options)}
-        <div style="margin-top: 10px; text-align: center;">
-          <button 
-            onclick="showNavigationRoute(${properties.lat}, ${properties.lon})"
-            style="
-              background: #3388ff;
-              color: white;
-              border: none;
-              padding: 8px 16px;
-              border-radius: 4px;
-              cursor: pointer;
-              font-size: 14px;
-            "
-          >
-            🧭 Mulai Navigasi
-          </button>
-        </div>
       `;
     }
 
@@ -581,191 +437,6 @@
         [-6.5, 106.0],
         [-6.0, 107.0]
       ]);
-    };
-
-    // Fungsi untuk menampilkan rute navigasi
-    function showNavigationRoute(destinationLat, destLng) {
-      try {
-        if (!map) {
-          console.error('Peta belum diinisialisasi');
-          return;
-        }
-
-        if (!baseLocationMarker) {
-          alert('Aktifkan GPS terlebih dahulu untuk mendapatkan lokasi Anda');
-          return;
-        }
-
-        // Perbaikan: Gunakan nama variable yang berbeda dari parameter
-        const parsedDestLat = Number(destinationLat);
-        const parsedDestLng = Number(destLng);
-
-        // Hapus rute sebelumnya jika ada
-        if (routingControl) {
-          map.removeControl(routingControl);
-          routingControl = null;
-        }
-
-        const startLatLng = baseLocationMarker.getLatLng();
-        const destLatLng = L.latLng(parsedDestLat, parsedDestLng); // Gunakan variable yang sudah diparse
-
-        console.log('Destination:', parsedDestLat, parsedDestLng);
-        console.log('Current Location:', startLatLng);
-
-        routingControl = L.Routing.control({
-          waypoints: [
-            L.latLng(startLatLng.lat, startLatLng.lng),
-            destLatLng
-          ],
-          routeWhileDragging: true,
-          formatter: new L.Routing.Formatter({
-            language: 'en',
-            units: 'metric'
-          }),
-          lineOptions: {
-            styles: [{ // Style untuk garis rute
-              color: '#1a73e8', // Warna biru
-              opacity: 0.8,
-              weight: 6
-            }],
-            extendToWaypoints: true,
-            missingRouteTolerance: 10
-          },
-          show: true,
-          addWaypoints: false,
-          routeLine: function (route) {
-            return L.polyline(route.coordinates, {
-              color: '#1a73e8', // Warna biru
-              weight: 6,
-              opacity: 0.8,
-              className: 'animate-route' // Untuk animasi
-            });
-          },
-          createMarker: function (i, waypoint, n) { // Marker penunjuk arah
-            return L.marker(waypoint.latLng, {
-              icon: L.icon({
-                iconUrl: i === 0 ?
-                  '__MARKER_BASE__' : // Marker start
-                  '__MARKER_SELECTED__', // Marker end
-                iconSize: [40, 40]
-              }),
-              zIndexOffset: 1000
-            });
-          }
-        }).addTo(map);
-
-        // Pindahkan zoom ke dalam event routesfound
-        routingControl.on('routesfound', function (e) {
-          const routes = e.routes;
-          const summary = routes[0].summary;
-
-          // Zoom ke rute setelah data tersedia
-          map.fitBounds(routes[0].coordinates, { padding: [50, 50] });
-
-          // Kirim data ke React Native
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'navigationData',
-            data: {
-              totalDistance: summary.totalDistance,
-              totalTime: summary.totalTime
-            }
-          }));
-        });
-
-        // Tambahkan error handling
-        routingControl.on('routingerror', function (e) {
-          console.error('Routing error:', e.error);
-          alert('Gagal membuat rute: ' + e.error.message);
-        });
-
-        navigationActive = true;
-        updateNavigationControls();
-      } catch (error) {
-        console.error('Error dalam navigasi:', error);
-        alert('Gagal membuat rute: ' + error.message);
-      }
-    }
-
-    // Make clearNavigationRoute available globally
-    window.clearNavigationRoute = function () {
-      if (routingControl) {
-        map.removeControl(routingControl);
-        routingControl = null;
-      }
-      if (map._navigationButton) {
-        map.removeControl(map._navigationButton);
-        map._navigationButton = null;
-      }
-      navigationActive = false;
-    };
-
-    // Update original clearNavigationRoute function
-    function clearNavigationRoute() {
-      window.clearNavigationRoute();
-    }
-
-    // Tambahkan kontrol navigasi
-    function updateNavigationControls() {
-      if (!navigationActive) return;
-
-      L.Control.navigationButton = L.Control.extend({
-        onAdd: function (map) {
-          const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control navigation-close-button');
-          const button = L.DomUtil.create('a', '', container);
-          button.innerHTML = '❌';
-
-          // Stop event propagation
-          L.DomEvent.disableClickPropagation(container);
-          L.DomEvent.disableScrollPropagation(container);
-
-          L.DomEvent.on(button, 'click', function (e) {
-            e.stopPropagation(); // Tambahkan ini
-            window.clearNavigationRoute();
-            map.removeControl(map._navigationButton);
-            map._navigationButton = null;
-          });
-
-          return container;
-        }
-      });
-
-      if (!map._navigationButton) {
-        map._navigationButton = new L.Control.navigationButton({ position: 'topleft' }).addTo(map);
-      }
-    }
-
-    // Hapus semua terjemahan custom dan gunakan default
-    L.Routing.Formatter.include({
-      translate: function (key, values) {
-        return L.Routing.Formatter.prototype.translate.call(this, key, values);
-      }
-    });
-
-    function createSavedLocation(location) {
-      // Hapus marker lama jika ada
-      if (savedLocationMarker) {
-        map.removeLayer(savedLocationMarker);
-      }
-
-      // Buat marker baru
-      savedLocationMarker = L.marker([location.lat, location.lon], {
-        icon: waterMarkerLocation,
-        title: location.nama_sungai,
-        zIndexOffset: 1000
-      }).bindPopup(`
-        <div class="saved-location-popup">
-          <h4>${location.nama_sungai}</h4>
-          <p>${location.alamat}</p>
-          <small>Terakhir update: ${new Date(location.tanggal).toLocaleString()}</small>
-        </div>
-      `);
-
-      savedLocationMarker.addTo(map);
-    }
-
-    // Handle update dari React Native
-    window.updateSavedLocation = function (location) {
-      createSavedLocation(location);
     };
   </script>
 </body>

@@ -180,15 +180,7 @@ const Map = (props: Props) => {
     const messageHandler = (e: WebViewMessageEvent) => {
         const data = JSON.parse(e.nativeEvent.data);
 
-        if (data.type === 'navigationData') {
-            // Handle navigation instructions
-            console.log('Navigation Data:', data.data);
-            Alert.alert(
-                'Navigasi Dimulai',
-                `Jarak: ${(data.data.totalDistance / 1000).toFixed(1)} km\n` +
-                `Perkiraan Waktu: ${Math.round(data.data.totalTime / 60)} menit`
-            );
-        } else if (data.type === 'clearNavigation') {
+        if (data.type === 'clearNavigation') {
             // Handle clear navigation
             webViewRef.current?.injectJavaScript(`
                 if (window.clearNavigationRoute) {
