@@ -467,10 +467,11 @@ const HomeScreen = () => {
         });
         setShowAddressDialog(true);
 
-        // Set timeout untuk auto focus
-        setTimeout(() => {
-            riverNameInputRef.current?.focus();
-        }, 100);
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                riverNameInputRef.current?.focus();
+            }, 3000);
+        });
     };
 
     const zoomToGeoJSONFuncRef = useRef<() => void>();
@@ -865,10 +866,18 @@ const HomeScreen = () => {
             >
                 <ModalBackdrop />
                 <ModalContent>
-                    <ModalHeader>
-                        <Heading size="md" className="text-typography-950 font-semibold">
-                            📍 Pilih Destinasi Monitoring
-                        </Heading>
+                    <ModalHeader className="pb-2">
+                        <View className="flex-row items-center gap-3">
+                            <AntDesign name="enviroment" size={24} color="#3b82f6" />
+                            <View>
+                                <Heading size="md" className="text-typography-950 font-bold">
+                                    Tambah Lokasi Monitoring
+                                </Heading>
+                                <Text size="sm" className="text-typography-500 mt-1">
+                                    Pilih titik di peta atau masukkan manual
+                                </Text>
+                            </View>
+                        </View>
                         <ModalCloseButton onPress={() => setShowAddressDialog(false)}>
                             <Icon
                                 as={CloseIcon}
@@ -878,50 +887,73 @@ const HomeScreen = () => {
                         </ModalCloseButton>
                     </ModalHeader>
                     <ModalBody className="mt-3 mb-4">
-                        <TextInput
-                            ref={riverNameInputRef}
-                            style={styles.input}
-                            placeholder="Nama Sungai/Kali *"
-                            value={dialogContent.nama_sungai}
-                            onChangeText={(text) => setDialogContent(prev => ({
-                                ...prev,
-                                nama_sungai: text
-                            }))}
-                            autoFocus
-                            onLayout={() => riverNameInputRef.current?.focus()}
-                        />
-                        <TextInput
-                            style={[styles.input, { height: 80, paddingVertical: 10, marginTop: 10 }]}
-                            value={dialogContent.address}
-                            onChangeText={(text) => setDialogContent(prev => ({ ...prev, address: text }))}
-                            placeholder="Alamat lengkap (dapat diedit manual)"
-                            multiline={true}
-                            numberOfLines={4}
-                            textAlignVertical="top"
-                        />
-                        <View style={styles.coordinateContainer}>
-                            <Text style={styles.coordinateText}>
-                                Latitude: {dialogContent.latitude.toFixed(6)}
-                            </Text>
-                            <Text style={styles.coordinateText}>
-                                Longitude: {dialogContent.longitude.toFixed(6)}
-                            </Text>
+                        <View className="gap-3">
+                            <View>
+                                <Text className="text-sm text-typography-600 mb-1.5">
+                                    Nama Lokasi <Text className="text-red-500">*</Text>
+                                </Text>
+                                <TextInput
+                                    ref={riverNameInputRef}
+                                    style={styles.inputImproved}
+                                    placeholder="Contoh: Kali Ciliwung Depok"
+                                    placeholderTextColor="#94a3b8"
+                                    value={dialogContent.nama_sungai}
+                                    onChangeText={(text) => setDialogContent(prev => ({
+                                        ...prev,
+                                        nama_sungai: text
+                                    }))}
+                                    autoFocus
+                                />
+                            </View>
+
+                            <View>
+                                <Text className="text-sm text-typography-600 mb-1.5">Alamat Lengkap</Text>
+                                <TextInput
+                                    style={[styles.inputImproved, styles.multilineInput]}
+                                    value={dialogContent.address}
+                                    onChangeText={(text) => setDialogContent(prev => ({ ...prev, address: text }))}
+                                    placeholder="Alamat akan otomatis terisi dari koordinat peta"
+                                    placeholderTextColor="#94a3b8"
+                                    multiline={true}
+                                    numberOfLines={4}
+                                />
+                            </View>
+
+                            <View className="flex-row gap-3">
+                                <View style={styles.coordinateBadge}>
+                                    <AntDesign name="pushpino" size={14} color="#64748b" />
+                                    <Text style={styles.coordinateText}>
+                                        {dialogContent.latitude.toFixed(6)}
+                                    </Text>
+                                </View>
+                                <View style={styles.coordinateBadge}>
+                                    <AntDesign name="pushpino" size={14} color="#64748b" />
+                                    <Text style={styles.coordinateText}>
+                                        {dialogContent.longitude.toFixed(6)}
+                                    </Text>
+                                </View>
+                            </View>
                         </View>
                     </ModalBody>
-                    <ModalFooter>
-                        <Button
-                            variant="outline"
-                            onPress={() => setShowAddressDialog(false)}
-                            size="sm"
-                        >
-                            <ButtonText>Tutup</ButtonText>
-                        </Button>
-                        <Button
-                            onPress={handleSaveLocation}
-                            size="sm"
-                        >
-                            <ButtonText>Simpan Lokasi</ButtonText>
-                        </Button>
+                    <ModalFooter className="mt-2">
+                        <View style={styles.footerButtonContainer}>
+                            <Button
+                                variant="outline"
+                                onPress={() => setShowAddressDialog(false)}
+                                size="sm"
+                                className="flex-1"
+                            >
+                                <ButtonText>Batal</ButtonText>
+                            </Button>
+                            <Button
+                                onPress={handleSaveLocation}
+                                size="sm"
+                                className="flex-1 bg-emerald-600"
+                            >
+                                <AntDesign name="save" size={16} color="white" style={{ marginRight: 8 }} />
+                                <ButtonText>Simpan Lokasi</ButtonText>
+                            </Button>
+                        </View>
                     </ModalFooter>
                 </ModalContent>
             </Modal>
@@ -1202,5 +1234,24 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         marginTop: 10,
         gap: 8,
+    },
+    inputImproved: {
+        backgroundColor: '#f8fafc',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        borderRadius: 8,
+        padding: 12,
+        fontSize: 14,
+        color: '#1e293b',
+    },
+    multilineInput: {
+        height: 80,
+        textAlignVertical: 'top',
+        paddingTop: 12,
+    },
+    footerButtonContainer: {
+        flexDirection: 'row',
+        gap: 12,
+        width: '100%',
     },
 });
