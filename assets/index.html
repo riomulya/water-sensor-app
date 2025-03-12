@@ -291,34 +291,10 @@
             zIndexOffset: 500
           }).bindPopup(createLocationPopup(feature.properties));
 
-          // Tambahkan event click untuk memilih lokasi
+          // Hapus event click langsung ke React Native
           marker.on('click', function () {
-            // Hapus seleksi sebelumnya
-            if (window.selectedLocationMarker) {
-              window.selectedLocationMarker.setIcon(waterMarkerLocation);
-            }
-
-            // Tandai marker yang dipilih
-            this.setIcon(markerSelected);
-            window.selectedLocationMarker = this;
-
-            // ... kode pengiriman data ke React Native ...
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'locationSelected',
-              data: {
-                id_lokasi: feature.properties.id_lokasi,
-                nama_sungai: feature.properties.nama_sungai,
-                alamat: feature.properties.alamat,
-                latitude: feature.properties.lat,
-                longitude: feature.properties.lon
-              }
-            }));
-          });
-
-          // Tambahkan animasi
-          marker.on('add', function () {
+            // Hanya tampilkan popup tanpa mengirim data
             this.openPopup();
-            setTimeout(() => this.closePopup(), 2000);
           });
 
           return marker;
@@ -352,19 +328,32 @@
 
     // Fungsi pembuatan popup lokasi
     function createLocationPopup(properties) {
+      // Tambahkan validasi properti
+      const safeLat = properties.lat || 0;
+      const safeLon = properties.lon || 0;
+      const safeNama = properties.nama_sungai ? properties.nama_sungai.replace(/'/g, "\\'") : '';
+      const safeAlamat = properties.alamat ? properties.alamat.replace(/'/g, "\\'") : '';
+
       return `
         <div style="min-width: 200px">
-          <b>${properties.nama_sungai}</b><br>
-          <small>${properties.alamat}</small>
+          <b>${properties.nama_sungai || 'Nama tidak tersedia'}</b><br>
+          <small>${properties.alamat || 'Alamat tidak tersedia'}</small>
+          <b>${properties.id_lokasi || 'ID tidak tersedia'}</b>
+          <br>
+          <b>${properties.lat || 'Latitude tidak tersedia'}</b>
+          <br>
+          <b>${properties.lon || 'Longitude tidak tersedia'}</b>
+          <br>
+          <b>${properties.id_lokasi || 'ID tidak tersedia'}</b>
           <hr>
           <button onclick="handleSetMonitoringLocation(
-            ${properties.id_lokasi},
-            ${properties.lat},
-            ${properties.lon},
-            '${properties.nama_sungai}',
-            '${properties.alamat}'
+            ${properties.id_lokasi || 0},
+            ${safeLat},
+            ${safeLon},
+            '${safeNama}',
+            '${safeAlamat}'
           )" 
-          style="background: #3b82f6; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer">
+          style="background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 8px;">
             <i class="fa fa-target"></i> Jadikan Lokasi Monitoring
           </button>
         </div>
@@ -378,11 +367,11 @@
       }
 
       window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'setMonitoringLocation',
+        type: 'setMonitoringLocation', // Ubah type menjadi setMonitoringLocation
         data: {
           id_lokasi: id,
-          lat: Number(lat).toFixed(6),
-          lon: Number(lon).toFixed(6),
+          lat: Number(lat),
+          lon: Number(lon),
           nama_sungai: nama,
           alamat: alamat || ''
         }

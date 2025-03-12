@@ -192,6 +192,25 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
     const messageHandler = (e: WebViewMessageEvent) => {
         const data = JSON.parse(e.nativeEvent.data);
 
+        if (data.type === 'setMonitoringLocation') {
+            try {
+                const locationData = data.data;
+
+                // Validasi data sebelum diproses
+                if (!locationData?.lat || !locationData?.lon) {
+                    throw new Error('Data lokasi tidak lengkap');
+                }
+
+                onMapPress([
+                    parseFloat(locationData.lat),
+                    parseFloat(locationData.lon)
+                ]);
+
+            } catch (error) {
+                console.error('Error processing location data:', error);
+            }
+        }
+
         if (data.type === 'clearNavigation') {
             // Handle clear navigation
             webViewRef.current?.injectJavaScript(`

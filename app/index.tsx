@@ -6,6 +6,16 @@ import { Link, router } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import "../global.css";
+import {
+  configureReanimatedLogger,
+  ReanimatedLogLevel,
+} from 'react-native-reanimated';
+
+// This is the default configuration
+configureReanimatedLogger({
+  level: ReanimatedLogLevel.warn,
+  strict: false, // Reanimated runs in strict mode by default
+});
 
 // Add at the top of your file (outside component)
 LogBox.ignoreLogs(['defaultProps will be removed']);

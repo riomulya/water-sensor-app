@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+
 import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, RefreshControl, ActivityIndicator, Platform, LogBox, ScrollView } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 import { Marker } from 'react-native-maps'; // Import Marker
@@ -42,6 +43,8 @@ import { SchedulableTriggerInputTypes } from 'expo-notifications';
 import Speedometer from 'react-native-speedometer-chart';
 import { HStack } from '@/components/ui/hstack';
 import { DeviceEventEmitter } from 'react-native';
+import { Divider } from '@/components/ui/divider';
+import { AnimatePresence, MotiView } from 'moti';
 
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -52,44 +55,6 @@ Notifications.setNotificationHandler({
 });
 
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
-
-const data = [{
-    title: 'accel_x',
-    name: 'Accel X',
-    color: 'orange',
-    max: 100,
-    suffix: " ms2"
-}, {
-    title: 'accel_y',
-    name: 'Accel Y',
-    color: 'tomato',
-    max: 100,
-    suffix: " ms2"
-}, {
-    title: 'accel_z',
-    name: 'Accel Z',
-    color: 'red',
-    max: 100,
-    suffix: " ms2"
-}, {
-    title: 'ph',
-    name: 'pH',
-    color: 'blue',
-    max: 14,
-    suffix: " pH"
-}, {
-    title: 'turbidity',
-    name: 'Turbidity',
-    color: 'lime',
-    max: 100,
-    suffix: " NTU"
-}, {
-    title: 'temperature',
-    name: 'Temperature',
-    color: 'cyan',
-    max: 100,
-    suffix: " °C"
-},]
 
 // Update interface
 interface SavedLocation {
@@ -219,6 +184,7 @@ const HomeScreen = () => {
     const [destination, setDestination] = useState<{ latitude: number, longitude: number } | null>(null); // Untuk marker destinasi
     const [address, setAddress] = useState<string | null>(null); // Untuk menyimpan alamat lengkap
     const [mqttData, setMqttData] = useState<any>(null);
+    const [bottomSheetOpen, setBottomSheetOpen] = useState(false);
     const [sensorData, setSensorData] = useState<{ [key: string]: number }>({
         accel_x: 0,
         accel_y: 0,
@@ -239,15 +205,19 @@ const HomeScreen = () => {
         longitude: 0
     });
     const [savedLocation, setSavedLocation] = useState<SavedLocation | null>(null); // Change to single location
-    const [showSavedLocationsDialog, setShowSavedLocationsDialog] = useState(false);
-    const [isFetchingLocation, setIsFetchingLocation] = useState(false);
-    const [location, setLocation] = useState<[number, number] | null>(null);
+    // const [showSavedLocationsDialog, setShowSavedLocationsDialog] = useState(false);
+    // const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+    // const [location, setLocation] = useState<[number, number] | null>(null);
     const [channels, setChannels] = useState<Notifications.NotificationChannel[]>([]);
     const [notification, setNotification] = useState<Notifications.Notification | undefined>(
         undefined
     );
     const notificationListener = useRef<Notifications.EventSubscription>();
     const responseListener = useRef<Notifications.EventSubscription>();
+    const [locations, setLocations] = useState<SavedLocation[]>([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isLoadingLocations, setIsLoadingLocations] = useState(false);
+    const [locationsError, setLocationsError] = useState('');
 
     useEffect(() => {
         // registerForPushNotificationsAsync().then(token => token && setExpoPushToken(token));
@@ -365,14 +335,14 @@ const HomeScreen = () => {
     }, []);
 
     useEffect(() => {
-        if (!mqttData || !location) return;
+        if (!mqttData || !savedLocation) return;
 
         const checkDistance = async () => {
             try {
                 const deviceLat = parseFloat(mqttData.message.latitude);
                 const deviceLon = parseFloat(mqttData.message.longitude);
-                const userLat = location[0];
-                const userLon = location[1];
+                const userLat = savedLocation[0];
+                const userLon = savedLocation[1];
 
                 const distance = calculateDistance(
                     userLat, userLon,
@@ -407,7 +377,7 @@ const HomeScreen = () => {
         };
 
         checkDistance();
-    }, [mqttData, location]); // Trigger saat ada update data MQTT atau lokasi user
+    }, [mqttData, savedLocation]); // Trigger saat ada update data MQTT atau lokasi user
 
     // Fungsi untuk melakukan reverse geocoding (mengambil alamat dari lat dan lon)
     const fetchAddressFromCoordinates = async (latitude: number, longitude: number): Promise<string | null> => {
@@ -561,12 +531,6 @@ const HomeScreen = () => {
 
     // Update delete handler
     const handleDeleteLocation = () => {
-        // try {
-        //     const response = await fetch(`${port}data_lokasi/${savedLocation?.id_lokasi}`, {
-        //         method: 'DELETE'
-        //     });
-
-        // if (response.ok) {
         // Kirim event clear location ke server
         if (socketRef.current) {
             socketRef.current.emit('clearLocation');
@@ -581,15 +545,8 @@ const HomeScreen = () => {
                 </Toast>
             )
         });
-        // }
-        // } catch (error) {
-        //     console.error('Error:', error);
-        //     Alert.alert(
-        //         'Error Lokasi',
-        //         (error as Error).message || 'Terjadi kesalahan saat menghapus lokasi'
-        //     );
-        // }
-        setShowSavedLocationsDialog(false);
+
+        //
     };
 
     const webViewRef = useRef<any>(null);
@@ -674,44 +631,113 @@ const HomeScreen = () => {
     }, []);
 
     const handleSelectExistingLocation = (locationData: any) => {
-        // Convert ke number dan handle undefined
-        const lat = parseFloat(locationData.latitude) || 0;
-        const lon = parseFloat(locationData.longitude) || 0;
+        try {
+            // Perbaikan validasi data
+            if (!locationData ||
+                typeof locationData.lat === 'undefined' ||
+                typeof locationData.lon === 'undefined') {
+                console.error('Data lokasi tidak valid:', locationData);
+                return;
+            }
 
-        const newLocation = {
-            id_lokasi: locationData.id_lokasi,
-            nama_sungai: locationData.nama_sungai,
-            address: locationData.alamat || 'Alamat tidak tersedia',
-            latitude: lat,
-            longitude: lon
+            // Perbaikan parsing koordinat
+            const lat = parseFloat(locationData.lat);
+            const lon = parseFloat(locationData.lon);
+
+            // Perbaikan inisialisasi alamat
+            const newLocation = {
+                id_lokasi: locationData.id_lokasi,
+                nama_sungai: locationData.nama_sungai || 'Lokasi Sungai',
+                address: locationData.alamat || 'Alamat tidak tersedia',
+                latitude: lat,
+                longitude: lon
+            };
+
+            setSavedLocation(newLocation);
+            setDestination({
+                latitude: lat,
+                longitude: lon
+            });
+
+            // Perbaikan pemanggilan API dengan data yang valid
+            if (socketRef.current) {
+                socketRef.current.emit('updateLocation', {
+                    id_lokasi: newLocation.id_lokasi,
+                    nama_sungai: newLocation.nama_sungai,
+                    alamat: newLocation.address,
+                    latitude: lat.toString(),
+                    longitude: lon.toString()
+                });
+            }
+
+            // Perbaikan toast dengan data yang benar
+            toast.show({
+                placement: 'top',
+                render: () => (
+                    <Toast action="success">
+                        <ToastTitle>Lokasi monitoring dipilih!</ToastTitle>
+                        <ToastDescription>{newLocation.nama_sungai}</ToastDescription>
+                    </Toast>
+                )
+            });
+
+            // Perbaikan fetch alamat
+            fetchAddressFromCoordinates(lat, lon)
+                .catch(error => console.error('Gagal mengambil alamat:', error));
+
+        } catch (error) {
+            console.error('Error handling location selection:', error);
+        }
+    };
+
+    // Add filtered locations calculation
+    const filteredLocations = locations.filter(loc =>
+        loc.nama_sungai.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        loc.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        loc.latitude.toString().includes(searchQuery) ||
+        loc.longitude.toString().includes(searchQuery) ||
+        loc.id_lokasi.toString().includes(searchQuery)
+    );
+
+    // Add useEffect for fetching locations
+    useEffect(() => {
+        const fetchLocations = async () => {
+            try {
+                setIsLoadingLocations(true);
+                const response = await fetch(`${port}data_lokasi`);
+
+                if (!response.ok) {
+                    const errorBody = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorBody}`);
+                }
+
+                const data = await response.json();
+                console.log('API Response:', data); // Periksa response di console
+
+                if (!Array.isArray(data)) {
+                    throw new Error(`Format data tidak valid. Diterima: ${typeof data}`);
+                }
+                const validatedData = data.map((item: any) => ({
+                    id_lokasi: Number(item.id_lokasi),
+                    nama_sungai: item.nama_sungai || item.nama || 'Nama Tidak Tersedia',
+                    address: item.alamat || item.lokasi || item.address || 'Alamat Tidak Tersedia',
+                    latitude: Number(item.latitude || item.lat),
+                    longitude: Number(item.longitude || item.lng || item.lon)
+                }));
+                setLocations(validatedData);
+                setLocationsError('');
+            } catch (error) {
+                console.error('Fetch error:', error);
+                setLocationsError('Gagal memuat daftar lokasi. Coba lagi nanti.');
+            } finally {
+                setIsLoadingLocations(false);
+            }
         };
 
-        setSavedLocation(newLocation);
-        setDestination({
-            latitude: newLocation.latitude,
-            longitude: newLocation.longitude
-        });
-
-        if (socketRef.current) {
-            socketRef.current.emit('updateLocation', {
-                id_lokasi: newLocation.id_lokasi,
-                nama_sungai: newLocation.nama_sungai,
-                alamat: newLocation.address,
-                latitude: newLocation.latitude.toString(),
-                longitude: newLocation.longitude.toString()
-            });
-        }
-
-        toast.show({
-            placement: 'top',
-            render: () => (
-                <Toast action="success">
-                    <ToastTitle>Lokasi monitoring dipilih!</ToastTitle>
-                    <ToastDescription>{newLocation.nama_sungai}</ToastDescription>
-                </Toast>
-            )
-        });
-    };
+        // if (showSavedLocationsDialog) {
+        fetchLocations();
+        // }
+    }, []);
 
     return (
         <>
@@ -722,12 +748,7 @@ const HomeScreen = () => {
                         <Text style={styles.loadingText}>Mengambil alamat...</Text>
                     </View>
                 )}
-                {isFetchingLocation && (
-                    <View style={styles.loadingIndicator}>
-                        <ActivityIndicator size="large" color="#3388ff" />
-                        <Text style={{ marginTop: 10, color: '#333' }}>Mendapatkan lokasi...</Text>
-                    </View>
-                )}
+
                 <Map
                     ref={mapRef}
                     onInitialized={(zoomToGeoJSON) =>
@@ -740,23 +761,7 @@ const HomeScreen = () => {
                     }
                 />
             </SafeAreaView>
-            <Fab
-                size="sm"
-                isHovered={false}
-                isDisabled={false}
-                isPressed={true}
-                onPress={() => setShowSavedLocationsDialog(true)}
-                placement='bottom left'
-                style={{
-                    backgroundColor: 'white',
-                    position: 'absolute',
-                    bottom: 200,
-                    left: 25,
-                    zIndex: 0,
-                }}
-            >
-                <AntDesign name="enviromento" size={35} color="#ea5757" />
-            </Fab>
+
             <Fab
                 size="sm"
                 isHovered={false}
@@ -766,26 +771,242 @@ const HomeScreen = () => {
                 placement='bottom left'
                 style={{
                     backgroundColor: 'white',
-                    position: 'absolute', // FAB menjadi elemen absolut di layar
-                    bottom: 120,           // Jarak dari bagian bawah layar
-                    left: 25,            // Jarak dari sisi kiri layar
-                    zIndex: 0,           // Memastikan FAB berada di atas elemen lain
+                    position: 'absolute',
+                    bottom: 200,
+                    left: 25,
+                    zIndex: 0,
                 }}
             >
                 <AntDesign name="team" size={35} color="#ea5757" />
             </Fab>
+
+            <BottomSheet onOpen={() => setBottomSheetOpen(true)} onClose={() => setBottomSheetOpen(false)}>
+                <Fab
+                    size="sm"
+                    isHovered={false}
+                    isDisabled={false}
+                    isPressed={true}
+                    onPress={() => setBottomSheetOpen(true)}
+                    placement='bottom left'
+                    style={{
+                        backgroundColor: 'white',
+                        position: 'absolute', // FAB menjadi elemen absolut di layar
+                        bottom: 120,           // Jarak dari bagian bawah layar
+                        left: 25,            // Jarak dari sisi kiri layar
+                        zIndex: 0,           // Memastikan FAB berada di atas elemen lain
+                        elevation: 0,
+                    }}
+                >
+                    <BottomSheetTrigger>
+                        <AntDesign name="enviromento" size={35} color="#ea5757" />
+                    </BottomSheetTrigger>
+                </Fab>
+
+                <BottomSheetPortal
+                    snapPoints={["30%", "55%", "100%"]}
+                    defaultIsOpen={bottomSheetOpen}
+                    backdropComponent={BottomSheetBackdrop}
+                    handleComponent={BottomSheetDragIndicator}
+                    style={{ zIndex: 1000, elevation: 1000 }}
+                >
+                    <AnimatePresence>
+                        {bottomSheetOpen && (
+                            <MotiView
+                                from={{
+                                    opacity: 0,
+                                    scale: 0.9,
+                                    translateY: 50
+                                }}
+                                animate={{
+                                    opacity: 1,
+                                    scale: 1,
+                                    translateY: 0
+                                }}
+                                exit={{
+                                    opacity: 0,
+                                    scale: 0.9,
+                                    translateY: 50
+                                }}
+                                transition={{ type: 'timing', duration: 300 }}
+                                style={{ flex: 1 }}
+                            >
+                                <SafeAreaView style={{ flex: 1, zIndex: 1000, elevation: 1000 }}>
+                                    <BottomSheetScrollView nestedScrollEnabled={true} style={{ zIndex: 1000, elevation: 1000 }}>
+                                        <View style={styles.searchContainer}>
+                                            <TextInput
+                                                placeholder="Cari lokasi..."
+                                                placeholderTextColor="#94a3b8"
+                                                style={styles.searchInput}
+                                                onChangeText={(text) => setSearchQuery(text)}
+                                                value={searchQuery}
+                                            />
+                                            <AntDesign name="search1" size={20} color="#64748b" style={styles.searchIcon} />
+                                        </View>
+                                        {!savedLocation ? (
+                                            <Center className="py-8">
+                                                <Text size="sm" className=" text-red-700">
+                                                    Belum ada lokasi monitoring terpasang
+                                                </Text>
+                                                <Text size="sm" className=" text-red-700">
+                                                    Silahkan tambahkan lokasi monitoring terlebih dahulu
+                                                </Text>
+                                            </Center>
+                                        ) : (
+                                            <View style={styles.locationCard}>
+                                                <View style={styles.locationHeader}>
+                                                    <AntDesign name="enviromento" size={24} color="#3b82f6" />
+                                                    <Text style={styles.locationTitle} className='text-emerald-300'>
+                                                        {savedLocation.nama_sungai || "Lokasi Sungai"} <Text className='text-blue-600'> (Lokasi Monitoring) </Text>
+                                                    </Text>
+                                                </View>
+
+                                                <View style={styles.locationDetail}>
+                                                    <AntDesign name="infocirlceo" size={14} color="#64748b" />
+                                                    <Text style={styles.detailText}>{savedLocation.address}</Text>
+                                                </View>
+
+                                                <View style={styles.coordinateBadge}>
+                                                    <AntDesign name="earth" size={14} color="#64748b" />
+                                                    <HStack className=" flex-col ms-3">
+                                                        <Text style={styles.coordinateText}>
+                                                            Latitude : {savedLocation?.latitude?.toFixed?.(6) ?? 'N/A'}
+                                                        </Text>
+                                                        <Text style={styles.coordinateText}>
+                                                            Longitude : {savedLocation?.longitude?.toFixed?.(6) ?? 'N/A'}
+                                                        </Text>
+                                                    </HStack>
+                                                </View>
+
+                                                <HStack className="gap-2 mt-4">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onPress={handleDeleteLocation}
+                                                        className="flex-1"
+                                                    >
+                                                        <ButtonText>Hapus Lokasi</ButtonText>
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        onPress={() => {
+                                                            if (savedLocation) {
+                                                                mapRef.current?.zoomToLocation(
+                                                                    savedLocation.latitude,
+                                                                    savedLocation.longitude
+                                                                );
+                                                                () => setBottomSheetOpen(false);
+                                                            }
+                                                        }}
+                                                        className="flex-1 bg-emerald-500"
+                                                    >
+                                                        <ButtonText>Lihat Lokasi</ButtonText>
+                                                    </Button>
+                                                </HStack>
+                                            </View>
+                                        )}
+                                        {isLoadingLocations ? (
+                                            <Center className="py-8">
+                                                <ActivityIndicator size="large" color="#3b82f6" />
+                                                <Text className="mt-2 text-typography-500">Memuat daftar lokasi...</Text>
+                                            </Center>
+                                        ) : locationsError ? (
+                                            <Center className="py-8">
+                                                <AntDesign name="warning" size={24} color="#ef4444" />
+                                                <Text className="mt-2 text-danger-500">{locationsError}</Text>
+                                            </Center>
+                                        ) : (
+                                            <FlatList
+                                                data={filteredLocations.filter(loc => loc.id_lokasi !== savedLocation?.id_lokasi)}
+                                                ListHeaderComponent={<Text className="text-blue-600 text-center pb-3">
+                                                    <Divider className='bg-emerald-300 my-2' />
+                                                    Lokasi Lainnya </Text>}
+                                                ListFooterComponent={<View style={{
+                                                    height: 150,
+                                                }}></View>}
+                                                scrollEnabled={false}
+                                                keyExtractor={(item) => item.id_lokasi.toString()}
+                                                renderItem={({ item }) => (
+                                                    <View style={styles.locationCard}>
+                                                        <View style={styles.cardHeader}>
+                                                            <AntDesign name="enviromento" size={20} color="#3b82f6" />
+                                                            <Text style={styles.locationName}>{item.nama_sungai}</Text>
+                                                        </View>
+                                                        <View style={styles.locationDetail}>
+                                                            <AntDesign name="infocirlceo" size={14} color="#64748b" />
+                                                            <Text style={styles.detailText}>{item.address}</Text>
+                                                        </View>
+                                                        <View style={styles.coordinateBadge}>
+                                                            <AntDesign name="pushpino" size={14} color="#64748b" />
+                                                            <HStack className=" flex-col ms-3">
+                                                                <Text style={styles.coordinateText}>
+                                                                    Latitude : {item?.latitude?.toFixed?.(6) ?? 'N/A'}
+                                                                </Text>
+                                                                <Text style={styles.coordinateText}>
+                                                                    Longitude : {item?.longitude?.toFixed?.(6) ?? 'N/A'}
+                                                                </Text>
+                                                            </HStack>
+                                                        </View>
+                                                        <HStack className="gap-2 mt-3">
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="flex-1"
+                                                                onPress={() => handleSelectExistingLocation(item)}
+                                                            >
+                                                                <ButtonText>Set sebagai Monitoring</ButtonText>
+                                                            </Button>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="flex-1"
+                                                                onPress={() => {
+                                                                    if (item) {
+                                                                        mapRef.current?.zoomToLocation(
+                                                                            item.latitude,
+                                                                            item.longitude
+                                                                        );
+
+                                                                    }
+                                                                }}
+                                                            // onPress={() => {
+                                                            //     mapRef.current?.zoomToLocation(
+                                                            //         item.latitude,
+                                                            //         item.longitude
+                                                            //     );
+
+                                                            // }}
+                                                            >
+                                                                <ButtonText>Lihat di Peta</ButtonText>
+                                                            </Button>
+                                                        </HStack>
+                                                    </View>
+                                                )}
+                                                contentContainerStyle={styles.listContent}
+                                            />
+                                        )}
+                                    </BottomSheetScrollView>
+                                </SafeAreaView>
+                            </MotiView>
+                        )}
+                    </AnimatePresence>
+                </BottomSheetPortal>
+            </BottomSheet>
+
             <BottomSheet>
                 <Fab
                     size="sm"
                     isHovered={false}
                     isDisabled={false}
                     isPressed={true}
+                    // 
+                    placement='bottom right'
                     style={{
                         backgroundColor: 'white',
                         position: 'absolute', // FAB menjadi elemen absolut di layar
                         bottom: 120,           // Jarak dari bagian bawah layar
                         right: 25,            // Jarak dari sisi kanan layar
                         zIndex: 0,           // Memastikan FAB berada di atas elemen lain
+                        elevation: 0,
                     }}
                 >
                     <BottomSheetTrigger>
@@ -798,25 +1019,49 @@ const HomeScreen = () => {
                     backdropComponent={BottomSheetBackdrop}
                     handleComponent={BottomSheetDragIndicator}
                 >
-                    <SafeAreaView style={{ flex: 1 }}>
-                        <BottomSheetScrollView nestedScrollEnabled>
-                            {/* <RealTimeClock /> */}
+                    <AnimatePresence>
 
-                            <FlatList
-                                scrollEnabled={false}
-                                // nestedScrollEnabled={true}
-                                data={sensorConfigs}
-                                renderItem={renderSpeedometer}
-                                keyExtractor={item => item.id}
-                                numColumns={2}
-                                ListHeaderComponent={<RealTimeClock />}
-                                // ListFooterComponent={<RealTimeClock />}
-                                contentContainerStyle={styles.listContent}
-                                columnWrapperStyle={{ justifyContent: 'space-between' }}
-                            />
-                            <View style={{ height: 100 }}></View>
-                        </BottomSheetScrollView>
-                    </SafeAreaView>
+                        <MotiView
+                            from={{
+                                opacity: 0,
+                                scale: 0.9,
+                                translateY: 50
+                            }}
+                            animate={{
+                                opacity: 1,
+                                scale: 1,
+                                translateY: 0
+                            }}
+                            exit={{
+                                opacity: 0,
+                                scale: 0.9,
+                                translateY: 50
+                            }}
+                            transition={{ type: 'timing', duration: 300 }}
+                            style={{ flex: 1 }}
+                        >
+                            <SafeAreaView style={{ flex: 1 }}>
+                                <BottomSheetScrollView nestedScrollEnabled>
+                                    {/* <RealTimeClock /> */}
+
+                                    <FlatList
+                                        scrollEnabled={false}
+                                        // nestedScrollEnabled={true}
+                                        data={sensorConfigs}
+                                        renderItem={renderSpeedometer}
+                                        keyExtractor={item => item.id}
+                                        numColumns={2}
+                                        ListHeaderComponent={<RealTimeClock />}
+                                        // ListFooterComponent={<RealTimeClock />}
+                                        contentContainerStyle={styles.listContent}
+                                        columnWrapperStyle={{ justifyContent: 'space-between' }}
+                                    />
+                                    <View style={{ height: 100 }}></View>
+                                </BottomSheetScrollView>
+                            </SafeAreaView>
+                        </MotiView>
+
+                    </AnimatePresence>
                 </BottomSheetPortal>
             </BottomSheet >
             <Modal
@@ -954,92 +1199,6 @@ const HomeScreen = () => {
                                 <ButtonText>Simpan Lokasi</ButtonText>
                             </Button>
                         </View>
-                    </ModalFooter>
-                </ModalContent>
-            </Modal>
-            <Modal
-                isOpen={showSavedLocationsDialog}
-                onClose={() => setShowSavedLocationsDialog(false)}
-                size="lg"
-            >
-                <ModalBackdrop />
-                <ModalContent>
-                    <ModalHeader>
-                        <Heading size="md" className="text-typography-950 font-semibold">
-                            📍 Lokasi Monitoring Aktif
-                        </Heading>
-                        <ModalCloseButton onPress={() => setShowSavedLocationsDialog(false)}>
-                            <Icon
-                                as={CloseIcon}
-                                size="md"
-                                className="stroke-background-400 group-[:hover]/modal-close-button:stroke-background-700"
-                            />
-                        </ModalCloseButton>
-                    </ModalHeader>
-                    <ModalBody className="mt-3 mb-4">
-                        {!savedLocation ? (
-                            <Center className="py-8">
-                                <Text size="sm" className="text-typography-500">
-                                    Belum ada lokasi monitoring terpasang
-                                </Text>
-                            </Center>
-                        ) : (
-                            <View style={styles.savedLocationCard}>
-                                <View style={styles.locationHeader}>
-                                    <AntDesign name="enviromento" size={24} color="#3b82f6" />
-                                    <Text style={styles.locationTitle}>
-                                        {savedLocation.nama_sungai || "Lokasi Sungai"}
-                                    </Text>
-                                </View>
-
-                                <View style={styles.locationDetail}>
-                                    <AntDesign name="infocirlceo" size={14} color="#64748b" />
-                                    <Text style={styles.detailText}>{savedLocation.address}</Text>
-                                </View>
-
-                                <View style={styles.coordinateBadge}>
-                                    <AntDesign name="earth" size={14} color="#64748b" />
-                                    <Text style={styles.coordinateText}>
-                                        {savedLocation?.latitude?.toFixed?.(6) ?? 'N/A'},
-                                        {savedLocation?.longitude?.toFixed?.(6) ?? 'N/A'}
-                                    </Text>
-                                </View>
-
-                                <HStack className="gap-2 mt-4">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onPress={handleDeleteLocation}
-                                        className="flex-1"
-                                    >
-                                        <ButtonText>Hapus Lokasi</ButtonText>
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        onPress={() => {
-                                            if (savedLocation) {
-                                                mapRef.current?.zoomToLocation(
-                                                    savedLocation.latitude,
-                                                    savedLocation.longitude
-                                                );
-                                                setShowSavedLocationsDialog(false);
-                                            }
-                                        }}
-                                        className="flex-1 bg-emerald-500"
-                                    >
-                                        <ButtonText>Lihat Lokasi</ButtonText>
-                                    </Button>
-                                </HStack>
-                            </View>
-                        )}
-                    </ModalBody>
-                    <ModalFooter>
-                        <Button
-                            onPress={() => setShowSavedLocationsDialog(false)}
-                            size="sm"
-                        >
-                            <ButtonText>Tutup</ButtonText>
-                        </Button>
                     </ModalFooter>
                 </ModalContent>
             </Modal>
@@ -1253,5 +1412,46 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: 12,
         width: '100%',
+    },
+    searchContainer: {
+        position: 'relative',
+        marginHorizontal: 16,
+        marginBottom: 12,
+    },
+    searchInput: {
+        backgroundColor: '#f1f5f9',
+        borderRadius: 8,
+        padding: 12,
+        paddingLeft: 40,
+        fontSize: 14,
+        color: '#1e293b',
+    },
+    searchIcon: {
+        position: 'absolute',
+        left: 12,
+        top: 14,
+    },
+    locationCard: {
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 16,
+        marginHorizontal: 16,
+        marginBottom: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+        elevation: 3,
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+    },
+    locationName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1e293b',
     },
 });
