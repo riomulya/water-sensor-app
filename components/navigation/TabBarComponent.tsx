@@ -18,7 +18,7 @@ export const routes = {
     home: { name: 'Home', icon: 'home' },
     feeds: { name: 'Feeds', icon: 'barschart' },
     analysis: { name: 'Analysis', icon: 'scan1' },
-    settings: { name: 'Settings', icon: 'setting' },
+    faq: { name: 'Faq', icon: 'questioncircleo' },
 };
 
 type Props = {

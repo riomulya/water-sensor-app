@@ -634,24 +634,25 @@ const HomeScreen = () => {
         try {
             // Perbaikan validasi data
             if (!locationData ||
-                typeof locationData.lat === 'undefined' ||
-                typeof locationData.lon === 'undefined') {
+                typeof locationData.latitude === 'undefined' ||
+                typeof locationData.longitude === 'undefined') {
                 console.error('Data lokasi tidak valid:', locationData);
                 return;
             }
 
             // Perbaikan parsing koordinat
-            const lat = parseFloat(locationData.lat);
-            const lon = parseFloat(locationData.lon);
+            const lat = parseFloat(locationData.latitude);
+            const lon = parseFloat(locationData.longitude);
 
             // Perbaikan inisialisasi alamat
             const newLocation = {
                 id_lokasi: locationData.id_lokasi,
                 nama_sungai: locationData.nama_sungai || 'Lokasi Sungai',
-                address: locationData.alamat || 'Alamat tidak tersedia',
+                address: locationData.address || 'Alamat tidak tersedia',
                 latitude: lat,
                 longitude: lon
             };
+            console.log({ newLocation })
 
             setSavedLocation(newLocation);
             setDestination({
@@ -681,9 +682,11 @@ const HomeScreen = () => {
                 )
             });
 
+
+
             // Perbaikan fetch alamat
-            fetchAddressFromCoordinates(lat, lon)
-                .catch(error => console.error('Gagal mengambil alamat:', error));
+            // fetchAddressFromCoordinates(lat, lon)
+            //     .catch(error => console.error('Gagal mengambil alamat:', error));
 
         } catch (error) {
             console.error('Error handling location selection:', error);
@@ -968,13 +971,6 @@ const HomeScreen = () => {
 
                                                                     }
                                                                 }}
-                                                            // onPress={() => {
-                                                            //     mapRef.current?.zoomToLocation(
-                                                            //         item.latitude,
-                                                            //         item.longitude
-                                                            //     );
-
-                                                            // }}
                                                             >
                                                                 <ButtonText>Lihat di Peta</ButtonText>
                                                             </Button>

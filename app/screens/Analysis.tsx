@@ -1,23 +1,20 @@
-import { View, StyleSheet, ScrollView, Modal, Button } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput, Modal, Button, Pressable } from 'react-native';
 import React, { useState, useEffect } from 'react';
-import { Input, InputField } from '@/components/ui/input';
+import { InputField } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Heading } from '@/components/ui/heading';
 import { Text } from '@/components/ui/text';
 import { Image } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
-import { Link } from '@/components/ui/link';
-import {
-    AlertDialog,
-    AlertDialogContent,
-    AlertDialogHeader,
-    AlertDialogFooter,
-    AlertDialogBody,
-    AlertDialogBackdrop
-} from "@/components/ui/alert-dialog";
+
 import { Button as CustomButton, ButtonText } from "@/components/ui/button";
 import { useRouter } from 'expo-router';
 import { port } from '@/constants/https';
+import { MotiView } from 'moti';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+// import { InputField as TextInput } from '@/components/ui/input';
+// import { Input, InputField } from '@gluestack-ui/themed';
 
 interface ApiLocation {
     id_lokasi: number;
@@ -40,6 +37,7 @@ const AnalysisScreen = () => {
     const router = useRouter();
     const [data, setData] = useState<FormattedLocation[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [isPressed, setIsPressed] = useState(false);
 
     const filteredData = data.filter(item =>
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -62,12 +60,16 @@ const AnalysisScreen = () => {
                     id: item.id_lokasi,
                     title: item.nama_sungai,
                     location: item.alamat,
-                    date: new Date(item.tanggal).toLocaleDateString('en-ID', {
+                    date: new Date(item.tanggal).toLocaleString('id-ID', {
                         weekday: 'long',
                         year: 'numeric',
-                        month: 'numeric',
-                        day: 'numeric'
-                    }),
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    }).replace(/\./g, ':'),
                     image: 'https://via.placeholder.com/150',
                 }));
                 setData(formattedData);
@@ -75,61 +77,147 @@ const AnalysisScreen = () => {
     }, []);
 
     return (
-        <View style={styles.container}>
-            <View style={{ ...styles.searchBox, zIndex: 1 }} >
-                {/* <View style={{ ...styles.inputContainer }}> */}
-                <Input variant="outline" size="xl" isDisabled={false} isInvalid={false} isReadOnly={false} className='flex-1'  >
-                    <InputField
-                        placeholder='Cari Data ...'
-                        value={searchQuery}
-                        onChangeText={(text) => setSearchQuery(text)}
+        <LinearGradient
+            colors={['#f8fafc', '#e0f2ff']}
+            style={styles.container}
+        >
+            <MotiView
+                from={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'spring' }}
+                style={styles.searchContainer}
+            >
+                <View style={styles.searchInner}>
+                    <Ionicons
+                        name="search"
+                        size={20}
+                        color="#3b82f6"
+                        style={styles.searchIcon}
                     />
-                </Input>
-                {/* </View> */}
-            </View>
+                    <TextInput
+                        placeholder="Cari lokasi..."
+                        placeholderTextColor="#94a3b8"
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        style={styles.inputField}
+                        cursorColor="#3b82f6"
+                    />
+                    {searchQuery.length > 0 && (
+                        <MotiView
+                            from={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            style={styles.clearButton}
+                        >
+                            <Pressable
+                                onPress={() => setSearchQuery('')}
+                                android_ripple={{ color: '#e2e8f0', borderless: true }}
+                            >
+                                <Ionicons name="close-circle" size={20} color="#94a3b8" />
+                            </Pressable>
+                        </MotiView>
+                    )}
+                </View>
+            </MotiView>
+
             <ScrollView contentContainerStyle={styles.scrollViewContainer}>
                 {filteredData.map((item, index) => (
-                    <Card
+                    <MotiView
                         key={item.id}
-                        size="lg"
-                        variant="outline"
-                        className={`m-3 ${index === data.length - 1 ? 'mb-28' : ''}`}
+                        from={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ type: 'spring', delay: index * 40 }}
+                        style={styles.cardContainer}
                     >
-                        <View className='flex flex-row'>
-                            {/* <Image
-                                source={require('../../assets/images/Nature.png')}
-                                // className="mb-6 h-[240px] rounded-md"
-                                alt="Nature"
-                            /> */}
-                            <View className='ml-3 flex-1'>
-                                <Heading size="lg" className="mb-1">
-                                    {item.title}
-                                </Heading>
-                                <Text
-                                    size="sm"
-                                    // className='color-gray-400'
-                                    style={{ flexWrap: 'wrap' }}
+                        <Card style={styles.card}>
+                            <Pressable
+                                onPress={() => handleCardPress(item.id)}
+                                style={styles.pressable}
+                            >
+                                <MotiView
+                                    animate={{ translateX: isPressed ? 2 : 0 }}
+                                    transition={{ type: 'spring' }}
                                 >
-                                    {item.location}
-                                </Text>
-                                <Text size="sm" className='color-gray-400'>{item.date}</Text>
-                                <Link>
-                                    <Text
-                                        size="lg"
-                                        className='color-red-600'
-                                        onPress={() => handleCardPress(item.id)}
-                                    >
-                                        Cek Selengkapnya <FontAwesome6 name="arrow-right-from-bracket" size={15} />
-                                    </Text>
-                                </Link>
-                            </View>
-                        </View>
-                    </Card>
+                                    <View style={styles.cardContent}>
+                                        <MotiView
+                                            style={styles.iconWrapper}
+                                            animate={{ rotate: isPressed ? '-3deg' : '0deg' }}
+                                        >
+                                            <LinearGradient
+                                                colors={['#4f46e5', '#6366f1']}
+                                                style={styles.gradientIcon}
+                                            >
+                                                <Ionicons
+                                                    name="water"
+                                                    size={28}
+                                                    color="white"
+                                                    style={styles.waterIcon}
+                                                />
+                                            </LinearGradient>
+                                        </MotiView>
+
+                                        <View style={styles.textContainer}>
+                                            <Heading
+                                                numberOfLines={1}
+                                                ellipsizeMode="tail"
+                                                style={styles.title}
+                                            >
+                                                {item.title}
+                                            </Heading>
+
+                                            <View style={styles.infoRow}>
+                                                <Ionicons
+                                                    name="location-sharp"
+                                                    size={16}
+                                                    color="#4f46e5"
+                                                    style={styles.rowIcon}
+                                                />
+                                                <Text
+                                                    numberOfLines={1}
+                                                    ellipsizeMode="tail"
+                                                    style={styles.locationText}
+                                                >
+                                                    {item.location}
+                                                </Text>
+                                            </View>
+
+                                            <View style={styles.infoRow}>
+                                                <Ionicons
+                                                    name="calendar-sharp"
+                                                    size={16}
+                                                    color="#4f46e5"
+                                                    style={styles.rowIcon}
+                                                />
+                                                <Text
+                                                    numberOfLines={1}
+                                                    ellipsizeMode="tail"
+                                                    style={styles.dateText}
+                                                >
+                                                    {item.date}
+                                                </Text>
+                                            </View>
+
+                                            <MotiView
+                                                style={styles.ctaContainer}
+                                                animate={{
+                                                    backgroundColor: isPressed ? '#e0e7ff' : '#eef2ff',
+                                                }}
+                                            >
+                                                <Text style={styles.ctaText}>
+                                                    Lihat Detail Analisis
+
+                                                </Text>
+
+                                            </MotiView>
+                                        </View>
+                                    </View>
+                                </MotiView>
+                            </Pressable>
+                        </Card>
+                    </MotiView>
                 ))}
             </ScrollView>
-
-            <View style={{ height: 70 }}></View>
-        </View >
+            <View style={{ height: 100 }}></View>
+        </LinearGradient>
     );
 };
 
@@ -138,59 +226,134 @@ export default AnalysisScreen;
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        justifyContent: 'center',
+        paddingTop: 24,
     },
-    map: {
-        width: '100%',
-        height: '100%',
-    },
-    searchBox: {
-        position: 'absolute',
-        top: 6,
-        width: '90%',
-        alignSelf: 'center',
+    searchContainer: {
+        marginHorizontal: 20,
+        marginBottom: 16,
         backgroundColor: 'white',
-        borderRadius: 8,
-        padding: 5,
-        shadowColor: '#000',
+        borderRadius: 12,
+        elevation: 2,
+        shadowColor: '#1e40af',
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.8,
-        shadowRadius: 2,
-        elevation: 5,
-        zIndex: 0,
     },
-    inputContainer: {
-        padding: 2,
+    searchInner: {
         flexDirection: 'row',
         alignItems: 'center',
-        width: '100%',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
     },
-    input: {
+    inputField: {
         flex: 1,
-        // height: 40,
-        paddingHorizontal: 10,
-        borderRadius: 8,
-        borderColor: '#ccc',
-        borderWidth: 1,
-        padding: 5,
+        color: '#1e293b',
+        fontSize: 16,
+        paddingLeft: 32,
+        paddingRight: 24,
+        includeFontPadding: false,
+    },
+    searchIcon: {
+        position: 'absolute',
+        left: 16,
+        zIndex: 1,
     },
     clearButton: {
-        marginLeft: 8,
-        marginRight: 5,
+        position: 'absolute',
+        right: 16,
+        padding: 4,
     },
-    suggestions: {
+    cardContainer: {
+        marginHorizontal: 20,
+        marginBottom: 16,
+    },
+    card: {
         backgroundColor: 'white',
-        marginTop: 5,
-        borderRadius: 8,
-        padding: 5,
+        borderRadius: 16,
+        padding: 16,
+        shadowColor: '#1e40af',
+        shadowOpacity: 0.03,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 2 },
     },
-    suggestionText: {
-        padding: 10,
-        borderBottomColor: '#ccc',
-        borderBottomWidth: 1,
+    pressable: {
+        borderRadius: 16,
+    },
+    cardContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    iconWrapper: {
+        width: 56,
+        height: 56,
+        borderRadius: 12,
+        overflow: 'hidden',
+        marginRight: 16,
+    },
+    gradientIcon: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    waterIcon: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+    },
+    textContainer: {
+        flex: 1,
+    },
+    title: {
+        color: '#1e293b',
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 8,
+        letterSpacing: -0.3,
+    },
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    rowIcon: {
+        width: 20,
+        marginRight: 8,
+    },
+    locationText: {
+        color: '#475569',
+        fontSize: 13,
+        flex: 1,
+        marginRight: 8,
+    },
+    dateText: {
+        color: '#64748b',
+        fontSize: 12.5,
+        flex: 1,
+    },
+    ctaContainer: {
+        marginTop: 12,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+    },
+    ctaText: {
+        color: '#4f46e5',
+        fontWeight: '600',
+        fontSize: 13,
+        letterSpacing: -0.2,
+    },
+    ctaIcon: {
+        marginLeft: 6,
+        marginTop: 2,
     },
     scrollViewContainer: {
         paddingTop: 80, // Memberikan padding di atas untuk mencegah konten tertutup oleh search bar
         paddingBottom: 20, // Menambahkan ruang bawah agar lebih nyaman scrollnya
+    },
+    map: {
+        width: '100%',
+        height: '100%',
     },
 });

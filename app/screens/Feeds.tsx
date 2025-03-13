@@ -12,7 +12,7 @@ interface DataPoint {
     value: number;
     dataPointText: string;
     label: string
-    
+
 }
 
 interface ChartData {
@@ -118,7 +118,7 @@ const FeedsScreen: React.FC = () => {
         const response = await fetch(`${url}?page=${page}&limit=${limit}`);
         const json = await response.json();
         if (json.success) {
-            const formattedData: DataPoint[] = json.data.slice(-limit).map((item: any) => 
+            const formattedData: DataPoint[] = json.data.slice(-limit).map((item: any) =>
                 createDataPoint(item, as)
             );
             return { formattedData, totalPage: json.totalPage };
@@ -131,14 +131,14 @@ const FeedsScreen: React.FC = () => {
         try {
             // First set all charts to loading
             setChartData(prev => prev.map(chart => ({ ...chart, loading: true })));
-            
+
             const updatedChartData = await Promise.all(
                 chartData.map(async (chart) => {
                     const { formattedData, totalPage } = await fetchData(chart.url, chart.as, chart.page);
                     return { ...chart, data: formattedData, loading: false, totalPage };
                 })
             );
-            
+
             setChartData(updatedChartData);
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -228,10 +228,10 @@ const FeedsScreen: React.FC = () => {
     };
 
     // Optimize pagination buttons with proper memoization:
-    const PaginationButton = memo(({ onPress, disabled, text }: { 
-        onPress: () => void, 
-        disabled: boolean, 
-        text: string 
+    const PaginationButton = memo(({ onPress, disabled, text }: {
+        onPress: () => void,
+        disabled: boolean,
+        text: string
     }) => (
         <Button size="md" variant="solid" action="primary">
             <TouchableOpacity onPress={onPress} disabled={disabled}>
@@ -284,7 +284,7 @@ const FeedsScreen: React.FC = () => {
                     )}
 
                     {/* Pagination for individual chart */}
-                    <View style={styles.pagination}>                        
+                    <View style={styles.pagination}>
                         <PaginationButton
                             onPress={() => handlePageChange(index, 'first')}
                             disabled={chart.page <= 1}

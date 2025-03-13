@@ -1,6 +1,6 @@
 import { useAssets } from 'expo-asset';
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import { useWindowDimensions, Alert } from 'react-native';
+import { useWindowDimensions, Alert, ActivityIndicator, View, StyleSheet, Text } from 'react-native';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { Asset } from 'expo-asset';
@@ -47,10 +47,12 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
     const [sensorData, setSensorData] = useState<any[]>([]);
     const [locationData, setLocationData] = useState<any[]>([]);
     const [socket, setSocket] = useState<any>(null);
+    const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
     // Function to get the current location
     const getCurrentLocation = async () => {
         try {
+            setIsFetchingLocation(true);
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
                 Alert.alert('Izin Ditolak', 'Izin lokasi diperlukan untuk fitur ini');
@@ -81,6 +83,8 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
         } catch (error) {
             console.error('Error getting location:', error);
             throw error;
+        } finally {
+            setIsFetchingLocation(false);
         }
     };
 
@@ -197,39 +201,15 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
                 const locationData = data.data;
 
                 // Validasi data sebelum diproses
-                if (!locationData?.lat || !locationData?.lon) {
+                if (!locationData?.latitude || !locationData?.longitude) {
                     throw new Error('Data lokasi tidak lengkap');
                 }
 
-                onMapPress([
-                    parseFloat(locationData.lat),
-                    parseFloat(locationData.lon)
-                ]);
+                onLocationSelect(locationData);
 
             } catch (error) {
                 console.error('Error processing location data:', error);
             }
-        }
-
-        if (data.type === 'clearNavigation') {
-            // Handle clear navigation
-            webViewRef.current?.injectJavaScript(`
-                if (window.clearNavigationRoute) {
-                    clearNavigationRoute();
-                }
-            `);
-        } else if (data.type === 'selectLocation') {
-            // Handle location selection from map marker
-            const locationData = data.data;
-            if (locationData) {
-                // Kirim data lokasi yang dipilih ke React Native
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'locationSelected',
-                    data: locationData
-                }));
-            }
-        } else if (data.type === 'locationSelected' && onLocationSelect) {
-            onLocationSelect(data.data);
         } else {
             // Existing map press handler
             const coords = data as [number, number];
@@ -311,38 +291,68 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
         zoomToLocation
     }));
 
+    // Tambahkan style sheet
+    const styles = StyleSheet.create({
+        loadingContainer: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: '#f0f3f5'
+        },
+        overlayLoading: {
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: 'rgba(255,255,255,0.7)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 999
+        }
+    });
+
     if (!htmlString) {
-        return <></>;
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#2196F3" />
+                <Text style={{ marginTop: 10 }}>Memuat Peta...</Text>
+            </View>
+        );
     }
 
     return (
-        <WebView
-            ref={(r) => (webViewRef.current = r)}
-            injectedJavaScript=''
-            source={{
-                html: htmlString,
-            }}
-            javaScriptEnabled
-            style={{
-                width: dimensions.width,
-                height: dimensions.height,
-            }}
-            scrollEnabled={false}
-            overScrollMode='never'
-            showsHorizontalScrollIndicator={false}
-            showsVerticalScrollIndicator={false}
-            scalesPageToFit={false}
-            containerStyle={{ flex: 1 }}
-            onMessage={messageHandler}
-            allowFileAccess={true}
-            allowUniversalAccessFromFileURLs={true}
-            allowFileAccessFromFileURLs={true}
-            allowsInlineMediaPlayback={true}
-            originWhitelist={['*']}
-            mixedContentMode="compatibility"
-            cacheEnabled={false}
-            incognito={true}
-        />
+        <>
+            <WebView
+                ref={(r) => (webViewRef.current = r)}
+                injectedJavaScript=''
+                source={{
+                    html: htmlString,
+                }}
+                javaScriptEnabled
+                style={{
+                    width: dimensions.width,
+                    height: dimensions.height,
+                }}
+                scrollEnabled={false}
+                overScrollMode='never'
+                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}
+                scalesPageToFit={false}
+                containerStyle={{ flex: 1 }}
+                onMessage={messageHandler}
+                allowFileAccess={true}
+                allowUniversalAccessFromFileURLs={true}
+                allowFileAccessFromFileURLs={true}
+                allowsInlineMediaPlayback={true}
+                originWhitelist={['*']}
+                mixedContentMode="compatibility"
+                cacheEnabled={false}
+                incognito={true}
+            />
+            {isFetchingLocation && (
+                <View style={styles.overlayLoading}>
+                    <ActivityIndicator size="large" color="#2196F3" />
+                    <Text style={{ marginTop: 10 }}>Mengambil lokasi saat ini...</Text>
+                </View>
+            )}
+        </>
     );
 });
 

@@ -109,6 +109,23 @@
       pointer-events: auto;
       /* Aktifkan hanya untuk child elements */
     }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+      background: linear-gradient(145deg, #1d4ed8, #2563eb);
+    }
+
+    button:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    button[disabled] {
+      background: #94a3b8;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
   </style>
 </head>
 
@@ -336,26 +353,42 @@
 
       return `
         <div style="min-width: 200px">
-          <b>${properties.nama_sungai || 'Nama tidak tersedia'}</b><br>
-          <small>${properties.alamat || 'Alamat tidak tersedia'}</small>
-          <b>${properties.id_lokasi || 'ID tidak tersedia'}</b>
+          <b style="display: none;">ID Lokasi : ${properties.id_lokasi || 'ID tidak tersedia'}</b>
+          <b>Nama Sungai : ${properties.nama_sungai || 'Nama tidak tersedia'}</b><br>
+          <b> Latitude : ${properties.lat || 'Latitude tidak tersedia'}</b>
           <br>
-          <b>${properties.lat || 'Latitude tidak tersedia'}</b>
+          <b> Longitude : ${properties.lon || 'Longitude tidak tersedia'}</b>
           <br>
-          <b>${properties.lon || 'Longitude tidak tersedia'}</b>
+          <small>Alamat : ${properties.alamat || 'Alamat tidak tersedia'}</small>
           <br>
-          <b>${properties.id_lokasi || 'ID tidak tersedia'}</b>
-          <hr>
-          <button onclick="handleSetMonitoringLocation(
+          
+          <br>
+          <center>
+            <button onclick="handleSetMonitoringLocation(
             ${properties.id_lokasi || 0},
             ${safeLat},
             ${safeLon},
             '${safeNama}',
             '${safeAlamat}'
           )" 
-          style="background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 8px;">
-            <i class="fa fa-target"></i> Jadikan Lokasi Monitoring
-          </button>
+          style="background: linear-gradient(145deg, #2563eb, #3b82f6);
+                 color: white;
+                 border: none;
+                 padding: 10px 20px;
+                 border-radius: 8px;
+                 cursor: pointer;
+                 margin-top: 8px;
+                 font-weight: 600;
+                 letter-spacing: 0.5px;
+                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                 transition: all 0.3s ease;
+                 display: inline-flex;
+                 align-items: center;
+                 gap: 8px;">
+              <i class="fa fa-target" style="filter: drop-shadow(0 1px 1px rgba(0,0,0,0.2))"></i>
+              <span>Jadikan Lokasi Monitoring</span>
+            </button>
+          </center>
         </div>
       `;
     }
@@ -370,10 +403,10 @@
         type: 'setMonitoringLocation', // Ubah type menjadi setMonitoringLocation
         data: {
           id_lokasi: id,
-          lat: Number(lat),
-          lon: Number(lon),
+          latitude: lat,
+          longitude: lon,
           nama_sungai: nama,
-          alamat: alamat || ''
+          address: alamat || ''
         }
       }));
     }
