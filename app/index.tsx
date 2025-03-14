@@ -1,5 +1,5 @@
-import React from 'react';
-import { Text, Image, Dimensions, StyleSheet, Pressable, LogBox, } from 'react-native';
+import React, { useEffect } from 'react';
+import { Text, Image, Dimensions, StyleSheet, Pressable, LogBox, Button, View, Alert, } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView, MotiText } from 'moti';
 import { Link, router } from 'expo-router';
@@ -10,6 +10,13 @@ import {
   configureReanimatedLogger,
   ReanimatedLogLevel,
 } from 'react-native-reanimated';
+import * as TaskManager from "expo-task-manager";
+import * as BackgroundFetch from "expo-background-fetch";
+
+
+// ID Task untuk notifikasi berjalan di background
+const BACKGROUND_NOTIFICATION_TASK = "BACKGROUND_NOTIFICATION_TASK";
+
 
 // This is the default configuration
 configureReanimatedLogger({
@@ -23,26 +30,90 @@ LogBox.ignoreLogs(['defaultProps will be removed']);
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
 
+// Konfigurasi listener notifikasi
+// Notifications.setNotificationHandler({
+//   handleNotification: async () => ({
+//     shouldShowAlert: true,
+//     shouldPlaySound: true,
+//     shouldSetBadge: true,
+//   }),
+// });
+
+
+
+// ID Task untuk background fetch
+// const BACKGROUND_NOTIFICATION_TASK = "BACKGROUND_NOTIFICATION_TASK";
+
+// Menangani Task di Background
+TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async () => {
+  console.log("Task background notifikasi berjalan...");
+
+  // Contoh: Data real-time dari API atau sensor
+  const data = new Date().toLocaleTimeString();
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "Notifikasi Tetap! ⏳",
+      body: `Waktu saat ini: ${data}`,
+      sound: true,
+      sticky: true, // Notifikasi tetap
+    },
+    trigger: null, // Muncul langsung
+  });
+
+  return BackgroundFetch.BackgroundFetchResult.NewData;
+});
+
+
 export default function App() {
   // Setup notifikasi di root component
-  React.useEffect(() => {
-    const setupNotifications = async () => {
-      // Request permissions
+  useEffect(() => {
+    async function registerBackgroundTask() {
       const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Izin Ditolak", "Aplikasi membutuhkan izin untuk notifikasi.");
+        return;
+      }
 
-      // Android channel setup
-      await Notifications.setNotificationChannelAsync('alerts', {
-        name: 'Alerts',
-        importance: Notifications.AndroidImportance.HIGH,
-        sound: 'default',
-        vibrationPattern: [0, 250, 250, 250],
-      });
-    };
+      // Cek apakah task sudah terdaftar
+      const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_NOTIFICATION_TASK);
+      if (!isRegistered) {
+        console.log("Mendaftarkan task background...");
 
-    setupNotifications();
+        await BackgroundFetch.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK, {
+          minimumInterval: 10, // Update setiap 10 detik
+          stopOnTerminate: false, // Tetap berjalan saat aplikasi ditutup
+          startOnBoot: true, // Mulai saat HP direstart
+        });
+      }
+    }
+
+    registerBackgroundTask();
   }, []);
 
+  // Fungsi mengirim notifikasi langsung
+  // async function sendNotification() {
+  //   await Notifications.scheduleNotificationAsync({
+  //     content: {
+  //       title: "Halo, Rio! 🎸",
+  //       body: "Ini adalah notifikasi lokal!",
+  //       sound: true,
+  //     },
+  //     trigger: null, // null = langsung muncul
+  //   });
+  // }
 
+  // Fungsi menjadwalkan notifikasi dalam 5 detik
+  // async function scheduleNotification() {
+  //   await Notifications.scheduleNotificationAsync({
+  //     content: {
+  //       title: "Pengingat!",
+  //       body: "Cek transaksi hari ini!",
+  //       sound: true,
+  //     },
+  //     trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 5 },
+  //   });
+  // }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -126,6 +197,10 @@ export default function App() {
               Lanjutkan
             </Text>
           </MotiView>
+          {/* <View style={{ padding: 20 }}>
+            <Button title="Kirim Notifikasi" onPress={sendNotification} />
+            <Button title="Jadwalkan Notifikasi (5s)" onPress={scheduleNotification} />
+          </View> */}
         </Pressable>
       </LinearGradient>
     </GestureHandlerRootView>

@@ -39,20 +39,20 @@ import { Toast, ToastTitle, ToastDescription } from "@/components/ui/toast";
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { calculateDistance } from '@/utils/geoUtils'; // Fungsi hitung jarak
-import { SchedulableTriggerInputTypes } from 'expo-notifications';
+// import { SchedulableTriggerInputTypes } from 'expo-notifications';
 import Speedometer from 'react-native-speedometer-chart';
 import { HStack } from '@/components/ui/hstack';
 import { DeviceEventEmitter } from 'react-native';
 import { Divider } from '@/components/ui/divider';
 import { AnimatePresence, MotiView } from 'moti';
 
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-    }),
-});
+// Notifications.setNotificationHandler({
+//     handleNotification: async () => ({
+//         shouldShowAlert: true,
+//         shouldPlaySound: false,
+//         shouldSetBadge: false,
+//     }),
+// });
 
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?";
 
@@ -219,25 +219,25 @@ const HomeScreen = () => {
     const [isLoadingLocations, setIsLoadingLocations] = useState(false);
     const [locationsError, setLocationsError] = useState('');
 
-    useEffect(() => {
-        // registerForPushNotificationsAsync().then(token => token && setExpoPushToken(token));
+    // useEffect(() => {
+    //     // registerForPushNotificationsAsync().then(token => token && setExpoPushToken(token));
 
-        if (Platform.OS === 'android') {
-            Notifications.getNotificationChannelsAsync().then(value => setChannels(value ?? []));
-        }
-        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-            setNotification(notification);
-        });
+    //     if (Platform.OS === 'android') {
+    //         Notifications.getNotificationChannelsAsync().then(value => setChannels(value ?? []));
+    //     }
+    //     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+    //         setNotification(notification);
+    //     });
 
-        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-            console.log(response);
-        }); return () => {
-            notificationListener.current &&
-                Notifications.removeNotificationSubscription(notificationListener.current);
-            responseListener.current &&
-                Notifications.removeNotificationSubscription(responseListener.current);
-        };
-    }, []);
+    //     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+    //         console.log(response);
+    //     }); return () => {
+    //         notificationListener.current &&
+    //             Notifications.removeNotificationSubscription(notificationListener.current);
+    //         responseListener.current &&
+    //             Notifications.removeNotificationSubscription(responseListener.current);
+    //     };
+    // }, []);
 
     // Tambah ref untuk input
     const riverNameInputRef = useRef<TextInput>(null);
@@ -324,60 +324,60 @@ const HomeScreen = () => {
         };
     }, [savedLocation]); // Tambahkan savedLocation ke dependency array
 
-    useEffect(() => {
-        const setupNotifications = async () => {
-            const { status } = await Notifications.requestPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Izin notifikasi diperlukan untuk mendapatkan peringatan perangkat');
-            }
-        };
-        setupNotifications();
-    }, []);
+    // useEffect(() => {
+    //     const setupNotifications = async () => {
+    //         const { status } = await Notifications.requestPermissionsAsync();
+    //         if (status !== 'granted') {
+    //             Alert.alert('Izin notifikasi diperlukan untuk mendapatkan peringatan perangkat');
+    //         }
+    //     };
+    //     setupNotifications();
+    // }, []);
 
-    useEffect(() => {
-        if (!mqttData || !savedLocation) return;
+    // useEffect(() => {
+    //     if (!mqttData || !savedLocation) return;
 
-        const checkDistance = async () => {
-            try {
-                const deviceLat = parseFloat(mqttData.message.latitude);
-                const deviceLon = parseFloat(mqttData.message.longitude);
-                const userLat = savedLocation[0];
-                const userLon = savedLocation[1];
+    //     const checkDistance = async () => {
+    //         try {
+    //             const deviceLat = parseFloat(mqttData.message.latitude);
+    //             const deviceLon = parseFloat(mqttData.message.longitude);
+    //             const userLat = savedLocation[0];
+    //             const userLon = savedLocation[1];
 
-                const distance = calculateDistance(
-                    userLat, userLon,
-                    deviceLat, deviceLon
-                );
+    //             const distance = calculateDistance(
+    //                 userLat, userLon,
+    //                 deviceLat, deviceLon
+    //             );
 
-                if (distance >= 1 && distance <= 10) {
-                    await Notifications.scheduleNotificationAsync({
-                        content: {
-                            title: "🚨 Perangkat IOT Dekat!",
-                            body: `Perangkat berada dalam jarak ${distance.toFixed(1)} meter`,
-                            sound: true,
-                            data: {
-                                lat: deviceLat,
-                                lon: deviceLon
-                            },
-                            // android: {
-                            //     channelId: 'alerts',
-                            //     priority: Notifications.AndroidNotificationPriority.HIGH,
-                            //     vibrationPattern: [0, 250, 250, 250],
-                            // }
-                        },
-                        trigger: {
-                            type: SchedulableTriggerInputTypes.TIME_INTERVAL,
-                            seconds: 2,
-                        },
-                    });
-                }
-            } catch (error) {
-                console.error('Error checking distance:', error);
-            }
-        };
+    //             if (distance >= 1 && distance <= 10) {
+    //                 await Notifications.scheduleNotificationAsync({
+    //                     content: {
+    //                         title: "🚨 Perangkat IOT Dekat!",
+    //                         body: `Perangkat berada dalam jarak ${distance.toFixed(1)} meter`,
+    //                         sound: true,
+    //                         data: {
+    //                             lat: deviceLat,
+    //                             lon: deviceLon
+    //                         },
+    //                         // android: {
+    //                         //     channelId: 'alerts',
+    //                         //     priority: Notifications.AndroidNotificationPriority.HIGH,
+    //                         //     vibrationPattern: [0, 250, 250, 250],
+    //                         // }
+    //                     },
+    //                     trigger: {
+    //                         type: SchedulableTriggerInputTypes.TIME_INTERVAL,
+    //                         seconds: 2,
+    //                     },
+    //                 });
+    //             }
+    //         } catch (error) {
+    //             console.error('Error checking distance:', error);
+    //         }
+    //     };
 
-        checkDistance();
-    }, [mqttData, savedLocation]); // Trigger saat ada update data MQTT atau lokasi user
+    //     checkDistance();
+    // }, [mqttData, savedLocation]); // Trigger saat ada update data MQTT atau lokasi user
 
     // Fungsi untuk melakukan reverse geocoding (mengambil alamat dari lat dan lon)
     const fetchAddressFromCoordinates = async (latitude: number, longitude: number): Promise<string | null> => {
