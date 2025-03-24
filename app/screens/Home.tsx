@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/toast";
 import { Toast, ToastTitle, ToastDescription } from "@/components/ui/toast";
-import * as Notifications from 'expo-notifications';
+// import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { calculateDistance } from '@/utils/geoUtils'; // Fungsi hitung jarak
 // import { SchedulableTriggerInputTypes } from 'expo-notifications';
@@ -45,6 +45,7 @@ import { HStack } from '@/components/ui/hstack';
 import { DeviceEventEmitter } from 'react-native';
 import { Divider } from '@/components/ui/divider';
 import { AnimatePresence, MotiView } from 'moti';
+import { BottomSheetContext } from '@gorhom/bottom-sheet/lib/typescript/contexts';
 
 // Notifications.setNotificationHandler({
 //     handleNotification: async () => ({
@@ -208,16 +209,17 @@ const HomeScreen = () => {
     // const [showSavedLocationsDialog, setShowSavedLocationsDialog] = useState(false);
     // const [isFetchingLocation, setIsFetchingLocation] = useState(false);
     // const [location, setLocation] = useState<[number, number] | null>(null);
-    const [channels, setChannels] = useState<Notifications.NotificationChannel[]>([]);
-    const [notification, setNotification] = useState<Notifications.Notification | undefined>(
-        undefined
-    );
-    const notificationListener = useRef<Notifications.EventSubscription>();
-    const responseListener = useRef<Notifications.EventSubscription>();
+    // const [channels, setChannels] = useState<Notifications.NotificationChannel[]>([]);
+    // const [notification, setNotification] = useState<Notifications.Notification | undefined>(
+    //     undefined
+    // );
+    // const notificationListener = useRef<Notifications.EventSubscription>();
+    // const responseListener = useRef<Notifications.EventSubscription>();
     const [locations, setLocations] = useState<SavedLocation[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoadingLocations, setIsLoadingLocations] = useState(false);
     const [locationsError, setLocationsError] = useState('');
+    const bottomSheetRef = React.useRef(null);
 
     // useEffect(() => {
     //     // registerForPushNotificationsAsync().then(token => token && setExpoPushToken(token));
@@ -783,7 +785,7 @@ const HomeScreen = () => {
                 <AntDesign name="team" size={35} color="#ea5757" />
             </Fab>
 
-            <BottomSheet onOpen={() => setBottomSheetOpen(true)} onClose={() => setBottomSheetOpen(false)}>
+            <BottomSheet snapToIndex={bottomSheetOpen ? 0 : 1} onOpen={() => setBottomSheetOpen(true)} onClose={() => setBottomSheetOpen(false)}>
                 <Fab
                     size="sm"
                     isHovered={false}
@@ -806,8 +808,15 @@ const HomeScreen = () => {
                 </Fab>
 
                 <BottomSheetPortal
+                    // ref={bottomSheetRef}
                     snapPoints={["30%", "55%", "100%"]}
                     defaultIsOpen={bottomSheetOpen}
+                    snapToIndex={bottomSheetOpen ? 1 : 0}
+                    onClose={() => setBottomSheetOpen(false)}
+                    // onOpen={() => setBottomSheetOpen(true)}
+
+                    enablePanDownToClose={true}
+
                     backdropComponent={BottomSheetBackdrop}
                     handleComponent={BottomSheetDragIndicator}
                     style={{ zIndex: 1000, elevation: 1000 }}
@@ -897,7 +906,10 @@ const HomeScreen = () => {
                                                                     savedLocation.latitude,
                                                                     savedLocation.longitude
                                                                 );
-                                                                () => setBottomSheetOpen(false);
+
+                                                                // handleCloseBottomSheet();
+                                                                //bottomSheetRef.current.close();
+                                                                setBottomSheetOpen(false);
                                                             }
                                                         }}
                                                         className="flex-1 bg-emerald-500"
@@ -969,6 +981,7 @@ const HomeScreen = () => {
                                                                             item.longitude
                                                                         );
 
+                                                                        setBottomSheetOpen(false);
                                                                     }
                                                                 }}
                                                             >

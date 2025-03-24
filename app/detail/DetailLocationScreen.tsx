@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Dimensions } from 'react-native';
 import { Heading } from '@/components/ui/heading';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -11,10 +11,11 @@ import { DataTable } from 'react-native-paper';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { AntDesign } from '@expo/vector-icons';
-import { MotiView, MotiText, AnimatePresence } from 'moti'
+import { MotiView, MotiText, AnimatePresence, useAnimationState } from 'moti'
 import { Easing } from 'react-native-reanimated'
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
 
 interface ApiLocation {
     id_lokasi: number;
@@ -35,6 +36,7 @@ interface CombinedData {
     nilai_ph: number;
     nilai_temperature: number;
     nilai_turbidity: number;
+    nilai_speed: number | null;
 }
 
 const DetailLocationScreen = () => {
@@ -43,10 +45,12 @@ const DetailLocationScreen = () => {
     const [data, setData] = useState<ApiLocation | null>(null);
     const [allCombinedData, setAllCombinedData] = useState<CombinedData[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(100);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
     const [loading, setLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
     const [totalItems, setTotalItems] = useState(0);
+    const [page, setPage] = useState(0);
+    const numberOfItemsPerPageList = [10, 20, 50, 100];
 
     useEffect(() => {
         const fetchData = async () => {
@@ -65,13 +69,13 @@ const DetailLocationScreen = () => {
     useEffect(() => {
         const fetchCombinedData = async () => {
             try {
-                const response = await fetch(`${port}data_combined/paginated/${id}?page=${currentPage}&limit=${itemsPerPage}`);
-                const responseTotal = await fetch(`${port}data_combined/${id}`);
+                const response = await fetch(
+                    `${port}data_combined/paginated/${id}?page=${page + 1}&limit=${itemsPerPage}`
+                );
                 const result = await response.json();
-                const resultTotal = await responseTotal.json();
                 if (result.success) {
                     setAllCombinedData(result.data);
-                    setTotalItems(resultTotal.length); // Set total items from response
+                    setTotalItems(result.total);
                 }
             } catch (error) {
                 console.error('Error fetching combined data:', error);
@@ -81,7 +85,7 @@ const DetailLocationScreen = () => {
         };
 
         fetchCombinedData();
-    }, [id, currentPage, itemsPerPage]);
+    }, [id, page, itemsPerPage]);
 
     const handleBack = () => {
         router.back();
@@ -92,20 +96,36 @@ const DetailLocationScreen = () => {
         try {
             const response = await fetch(`${port}data_combined/export/${Number(id)}`);
             const blob: Blob = await response.blob();
-            const fileUri = FileSystem.documentDirectory + `data_${id}_${data?.nama_sungai}.xlsx`;
+
+            // Simpan ke folder Downloads
+            const downloadsDir = FileSystem.cacheDirectory + 'Download/';
+            await FileSystem.makeDirectoryAsync(downloadsDir, { intermediates: true });
+
+            const fileUri = downloadsDir + `data_${id}_${data?.nama_sungai}.xlsx`;
             const base64Data = await blobToBase64(blob);
+
             await FileSystem.writeAsStringAsync(fileUri, base64Data, {
                 encoding: FileSystem.EncodingType.Base64,
             });
 
-            Alert.alert('Download Sukses', 'File berhasil diunduh ke perangkat Anda.', [
+            // Tampilkan notifikasi
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: 'Download Berhasil 📥',
+                    body: 'File Excel telah tersimpan di folder Download',
+                    sound: 'default',
+                },
+                trigger: null,
+            });
+
+            Alert.alert('Download Sukses', 'File berhasil diunduh ke folder Download', [
                 {
                     text: 'Buka File',
                     onPress: async () => {
                         await Sharing.shareAsync(fileUri);
                     },
                 },
-                { text: 'OK', onPress: () => console.log('OK Pressed') },
+                { text: 'OK' },
             ]);
         } catch (error) {
             console.error('Error downloading file:', error);
@@ -124,16 +144,18 @@ const DetailLocationScreen = () => {
         });
     };
 
+    // Animasi untuk tabel
+    const tableAnimation = useAnimationState({
+        from: { opacity: 0, translateY: 20 },
+        to: { opacity: 1, translateY: 0 },
+    });
+
     return (
         <LinearGradient
             colors={['#f0f4ff', '#ffffff']}
             style={styles.gradientContainer}
         >
-            <ScrollView
-                // vertical={true}
-                showsVerticalScrollIndicator={true}
-            // contentContainerStyle={styles.verticalScroll}
-            >
+            <ScrollView contentContainerStyle={styles.scrollContainer}>
                 <MotiView
                     style={styles.container}
                     from={{ opacity: 0 }}
@@ -193,7 +215,7 @@ const DetailLocationScreen = () => {
                             animate={{ translateX: 0 }}
                         >
                             <Feather name="calendar" size={20} color="#3b82f6" />
-                            <Text className="text-slate-600 mt-2" size="sm">Tanggal Pengukuran</Text>
+                            <Text className="text-slate-600 mt-2" size="sm">Tanggal Pengukuran (WIB)</Text>
                             <Text className="text-slate-800 font-semibold" size="md">
                                 {data && new Date(data.tanggal).toLocaleDateString('id-ID', {
                                     weekday: 'long',
@@ -269,111 +291,137 @@ const DetailLocationScreen = () => {
                         </MotiView>
                     )}
 
-                    {/* Data Table */}
-                    {loading ? (
+                    {/* Enhanced Table */}
+                    {loading && (
                         <MotiView
+                            from={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            transition={{ type: 'spring' }}
                             style={styles.loadingContainer}
-                            from={{ rotate: '0deg' }}
-                            animate={{ rotate: '360deg' }}
-                            transition={{
-                                loop: true,
-                                duration: 1000,
-                                type: 'timing'
-                            }}
                         >
-                            <ActivityIndicator size="large" color="#3B82F6" />
+                            <ActivityIndicator size="large" color="#3b82f6" />
+                            <MotiText
+                                from={{ translateY: 10 }}
+                                animate={{ translateY: 0 }}
+                                transition={{ loop: true, type: 'timing', duration: 1000 }}
+                                className="text-slate-600 mt-4"
+                            >
+                                Memuat data sensor...
+                            </MotiText>
                         </MotiView>
-                    ) : allCombinedData.length === 0 ? (
+                    )}
+                    {!loading && allCombinedData.length > 0 && (
+                        <MotiView state={tableAnimation} style={styles.tableWrapper}>
+                            <ScrollView
+                                horizontal
+                                style={styles.horizontalScroll}
+                                contentContainerStyle={styles.tableContent}
+                                persistentScrollbar={true}
+                            >
+                                <DataTable style={styles.dataTable}>
+                                    <DataTable.Header>
+                                        <DataTable.Title style={styles.numberCell}>No</DataTable.Title>
+                                        <DataTable.Title style={[styles.headerCell, { width: 120 }]}>
+                                            <MotiText
+                                                from={{ scale: 0.9 }}
+                                                animate={{ scale: 1 }}
+                                                transition={{ loop: true, type: 'timing', duration: 2000 }}
+                                            >
+                                                Tanggal
+                                            </MotiText>
+                                        </DataTable.Title>
+                                        <DataTable.Title numeric style={[styles.headerCell, { width: 80 }]}>pH</DataTable.Title>
+                                        <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>Suhu</DataTable.Title>
+                                        <DataTable.Title numeric style={[styles.headerCell, { width: 120 }]}>Turbidity</DataTable.Title>
+                                        <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>Kecepatan</DataTable.Title>
+                                        <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>Accel X</DataTable.Title>
+                                        <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>Accel Y</DataTable.Title>
+                                        <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>Accel Z</DataTable.Title>
+                                    </DataTable.Header>
+
+                                    <AnimatePresence>
+                                        {allCombinedData.map((item, index) => (
+                                            <MotiView
+                                                key={index}
+                                                from={{ opacity: 0, scale: 0.95 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                exit={{ opacity: 0, scale: 0.8 }}
+                                                transition={{ delay: index * 30, type: 'spring', damping: 12 }}
+                                            >
+                                                <DataTable.Row style={[
+                                                    styles.dataRow,
+                                                    index % 2 === 0 && { backgroundColor: '#f8fafc' }
+                                                ]}>
+                                                    <DataTable.Cell style={styles.numberCell}>
+                                                        {(page * itemsPerPage) + index + 1}
+                                                    </DataTable.Cell>
+                                                    <DataTable.Cell style={[styles.dataCell, { width: 120 }]}>
+                                                        <Text className="text-slate-600 text-sm">
+                                                            {new Date(item.tanggal).toLocaleDateString('id-ID')}
+                                                        </Text>
+                                                    </DataTable.Cell>
+                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 80 }]}>
+                                                        <Text style={{
+                                                            color: item.nilai_ph < 6 ? '#ef4444' : '#10b981',
+                                                            fontWeight: '600'
+                                                        }}>
+                                                            {item.nilai_ph.toFixed(2)}
+                                                        </Text>
+                                                    </DataTable.Cell>
+                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
+                                                        <Text style={{
+                                                            color: item.nilai_temperature > 30 ? '#ef4444' : '#3b82f6',
+                                                            fontWeight: '600'
+                                                        }}></Text>
+                                                        {item.nilai_temperature.toFixed(2)}°C
+                                                    </DataTable.Cell>
+                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 120 }]}>
+                                                        {item.nilai_turbidity.toFixed(2)} NTU
+                                                    </DataTable.Cell>
+                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
+                                                        {item.nilai_speed?.toFixed(2) ?? '0.00'} m/s
+                                                    </DataTable.Cell>
+                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
+                                                        {item.nilai_accel_x.toFixed(2)}
+                                                    </DataTable.Cell>
+                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
+                                                        {item.nilai_accel_y.toFixed(2)}
+                                                    </DataTable.Cell>
+                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
+                                                        {item.nilai_accel_z.toFixed(2)}
+                                                    </DataTable.Cell>
+                                                </DataTable.Row>
+                                            </MotiView>
+                                        ))}
+                                    </AnimatePresence>
+                                </DataTable>
+                            </ScrollView>
+
+                            {/* Pagination di luar ScrollView */}
+                            <DataTable.Pagination
+                                page={page}
+                                numberOfPages={Math.ceil(totalItems / itemsPerPage)}
+                                onPageChange={setPage}
+                                label={`${page * itemsPerPage + 1}-${Math.min(
+                                    (page + 1) * itemsPerPage,
+                                    totalItems
+                                )} of ${totalItems}`}
+                                numberOfItemsPerPageList={numberOfItemsPerPageList}
+                                numberOfItemsPerPage={itemsPerPage}
+                                onItemsPerPageChange={setItemsPerPage}
+                                showFastPaginationControls
+                                selectPageDropdownLabel={'Baris per halaman'}
+                                style={styles.pagination}
+                            />
+                        </MotiView>
+                    )}
+                    {!loading && allCombinedData.length === 0 && (
                         <MotiView
                             style={styles.emptyContainer}
-                            from={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
                         >
-                            <Feather name="database" size={40} color="#94a3b8" />
-                            <Text className="text-slate-500 mt-4">Tidak ada data yang tersedia</Text>
+                            <Text>Tidak ada data sensor di lokasi {data?.nama_sungai}</Text>
                         </MotiView>
-                    ) : (
-                        <AnimatePresence>
-                            <MotiView
-                                style={styles.tableContainer}
-                                from={{ opacity: 0, translateY: 20 }}
-                                animate={{ opacity: 1, translateY: 0 }}
-                            >
-                                <ScrollView
-                                    // vertical={true}
-                                    showsVerticalScrollIndicator={false}
-                                    contentContainerStyle={styles.verticalScroll}
-                                >
-                                    <ScrollView
-                                        horizontal
-                                        showsHorizontalScrollIndicator={false}
-                                        contentContainerStyle={styles.horizontalScroll}
-                                    >
-
-                                        <DataTable style={styles.dataTable}>
-                                            <DataTable.Header style={styles.tableHeader}>
-                                                <DataTable.Title style={styles.headerCell}>Tanggal</DataTable.Title>
-                                                <DataTable.Title numeric style={styles.headerCell}>pH</DataTable.Title>
-                                                <DataTable.Title numeric style={styles.headerCell}>Suhu</DataTable.Title>
-                                                <DataTable.Title numeric style={styles.headerCell}>Turbidity</DataTable.Title>
-                                                <DataTable.Title numeric style={styles.headerCell}>Accel X</DataTable.Title>
-                                                <DataTable.Title numeric style={styles.headerCell}>Accel Y</DataTable.Title>
-                                                <DataTable.Title numeric style={styles.headerCell}>Accel Z</DataTable.Title>
-                                            </DataTable.Header>
-
-                                            {allCombinedData.map((item, index) => (
-                                                <MotiView
-                                                    key={index}
-                                                    from={{ opacity: 0, scale: 0.95 }}
-                                                    animate={{ opacity: 1, scale: 1 }}
-                                                    transition={{
-                                                        delay: index * 30,
-                                                        type: 'spring',
-                                                        damping: 12
-                                                    }}
-                                                >
-                                                    <DataTable.Row style={[
-                                                        styles.dataRow,
-                                                        index % 2 === 0 && { backgroundColor: '#f8fafc' }
-                                                    ]}>
-                                                        <DataTable.Cell style={styles.dataCell}>
-                                                            {new Date(item.tanggal).toLocaleDateString('id-ID')}
-                                                        </DataTable.Cell>
-                                                        <DataTable.Cell numeric style={styles.dataCell}>
-                                                            <Text style={{
-                                                                color: item.nilai_ph < 6 ? '#ef4444' : '#10b981',
-                                                                fontWeight: '600'
-                                                            }}>
-                                                                {item.nilai_ph.toFixed(2)}
-                                                            </Text>
-                                                        </DataTable.Cell>
-                                                        <DataTable.Cell numeric style={styles.dataCell}>
-                                                            <Text style={{
-                                                                color: item.nilai_temperature > 30 ? '#ef4444' : '#3b82f6',
-                                                                fontWeight: '600'
-                                                            }}></Text>
-                                                            {item.nilai_temperature.toFixed(2)}°C
-                                                        </DataTable.Cell>
-                                                        <DataTable.Cell numeric style={styles.dataCell}>
-                                                            {item.nilai_turbidity.toFixed(2)} NTU
-                                                        </DataTable.Cell>
-                                                        <DataTable.Cell numeric style={styles.dataCell}>
-                                                            {item.nilai_accel_x.toFixed(2)}
-                                                        </DataTable.Cell>
-                                                        <DataTable.Cell numeric style={styles.dataCell}>
-                                                            {item.nilai_accel_y.toFixed(2)}
-                                                        </DataTable.Cell>
-                                                        <DataTable.Cell numeric style={styles.dataCell}>
-                                                            {item.nilai_accel_z.toFixed(2)}
-                                                        </DataTable.Cell>
-                                                    </DataTable.Row>
-                                                </MotiView>
-                                            ))}
-                                        </DataTable>
-                                    </ScrollView>
-                                </ScrollView>
-                            </MotiView>
-                        </AnimatePresence>
                     )}
                 </MotiView>
             </ScrollView>
@@ -435,19 +483,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         borderRadius: 12,
     },
-    tableContainer: {
-        backgroundColor: 'white',
-        borderRadius: 16,
-        // padding: 12,
-        elevation: 2,
-        marginHorizontal: 2,
-        marginBottom: 24,
-        height: '60%',
+    tableWrapper: {
+        flex: 1,
+        minHeight: Dimensions.get('window').height * 0.6, // Minimum 60% dari tinggi layar
     },
     tableHeader: {
         backgroundColor: '#3b82f6',
-        borderTopLeftRadius: 12,
-        borderTopRightRadius: 12,
+        elevation: 3,
     },
     dataRow: {
         borderBottomWidth: 1,
@@ -457,6 +499,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         padding: 40,
+        backgroundColor: 'white',
+        borderRadius: 16,
+        marginVertical: 24,
+        elevation: 2
     },
     emptyContainer: {
         justifyContent: 'center',
@@ -469,10 +515,9 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: 'bold',
     },
-    scrollViewContainer: {
-        paddingTop: 70, // Adjust for search box height
-        paddingBottom: 20,
-        paddingHorizontal: 10,
+    scrollContainer: {
+        flexGrow: 1,
+        paddingBottom: 100, // Ruang untuk pagination
     },
     card: {
         marginVertical: 8,
@@ -482,28 +527,38 @@ const styles = StyleSheet.create({
         marginBottom: 80, // Space for bottom navigation
     },
     horizontalScroll: {
-        flexGrow: 1,
+        flex: 1,
     },
-    verticalScroll: {
+    tableContent: {
         flexGrow: 1,
-        minHeight: 1000,
+        paddingBottom: 16, // Jarak antara tabel dan pagination
     },
     dataTable: {
-        minWidth: 800,
+        flex: 1,
+        minWidth: Dimensions.get('window').width * 1.5,
+        minHeight: Dimensions.get('window').height * 0.6, // Ganti dengan nilai fixed
     },
     headerCell: {
-        paddingVertical: 15,
-        paddingHorizontal: 12,
-        justifyContent: 'center',
+        paddingVertical: 12,
         borderRightWidth: 1,
         borderRightColor: '#e2e8f0',
+        justifyContent: 'center',
     },
     dataCell: {
-        paddingVertical: 12,
-        paddingHorizontal: 12,
-        minHeight: 50,
+        paddingVertical: 10,
         borderRightWidth: 1,
         borderRightColor: '#e2e8f0',
+        justifyContent: 'center',
+    },
+    numberCell: {
+        width: 60,
+        justifyContent: 'center',
+    },
+    pagination: {
+        backgroundColor: '#f8fafc',
+        borderTopWidth: 1,
+        borderTopColor: '#e2e8f0',
+        paddingVertical: 8,
     },
 });
 

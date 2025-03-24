@@ -1,9 +1,11 @@
-import { View, ScrollView, StyleSheet } from 'react-native';
-import React from 'react';
+import { View, ScrollView, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
+import React, { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Heading } from '@/components/ui/heading';
 import { Text } from '@/components/ui/text';
 import { MotiView } from 'moti';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons } from '@expo/vector-icons';
 
 const faqData = [
     {
@@ -37,56 +39,155 @@ const faqData = [
 ];
 
 const Faq = () => {
+    const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+
     return (
-        <ScrollView style={styles.container}>
-            <View>
-                {faqData.map((item, index) => (
+        <SafeAreaView style={{ flex: 1 }}>
+            <LinearGradient
+                colors={['#FFF0F0', '#FFE5E5', '#FFDADA']}
+                style={styles.container}
+            >
+                <ScrollView
+                    contentContainerStyle={styles.scrollContainer}
+                    showsVerticalScrollIndicator={false}
+                >
                     <MotiView
-                        key={index}
-                        from={{ opacity: 0, translateY: 20 }}
+                        style={styles.header}
+                        from={{ opacity: 0, translateY: -20 }}
                         animate={{ opacity: 1, translateY: 0 }}
                         transition={{ type: 'timing', duration: 300 }}
                     >
-                        <Card style={styles.card}>
-                            <Heading style={styles.question}>{item.question}</Heading>
-                            <Text style={styles.answer}>{item.answer}</Text>
-                        </Card>
+                        <Heading style={styles.title}>FAQ</Heading>
+                        <Text style={styles.subtitle}>Pertanyaan yang Sering Diajukan</Text>
                     </MotiView>
-                ))}
-            </View>
-        </ScrollView>
+
+                    {faqData.map((item, index) => (
+                        <MotiView
+                            key={index}
+                            from={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: index * 50 }}
+                        >
+                            <TouchableOpacity
+                                onPress={() => setExpandedIndex(expandedIndex === index ? null : index)}
+                                activeOpacity={0.9}
+                            >
+                                <Card style={styles.card}>
+                                    <MotiView
+                                        animate={{
+                                            height: expandedIndex === index ? 300 : 70,
+                                            backgroundColor: expandedIndex === index ? '#FEF2F2' : '#FFFFFF'
+                                        }}
+                                        transition={{ type: 'spring' }}
+                                        style={styles.cardContent}
+                                    >
+                                        <View style={styles.cardHeader}>
+                                            <Heading
+                                                style={styles.question}
+                                                numberOfLines={expandedIndex === index ? 3 : 2}
+                                            >
+                                                {item.question}
+                                            </Heading>
+                                            <MotiView
+                                                animate={{ rotate: expandedIndex === index ? '180deg' : '0deg' }}
+                                                transition={{ type: 'timing', duration: 200 }}
+                                            >
+                                                <MaterialIcons
+                                                    name="keyboard-arrow-down"
+                                                    size={28}
+                                                    color="#EF4444"
+                                                />
+                                            </MotiView>
+                                        </View>
+
+                                        <MotiView
+                                            animate={{
+                                                opacity: expandedIndex === index ? 1 : 0,
+                                                translateY: expandedIndex === index ? 0 : -10
+                                            }}
+                                            style={styles.answerContainer}
+                                        >
+                                            <View style={styles.divider} />
+                                            <Text style={styles.answer}>
+                                                {item.answer}
+                                            </Text>
+                                        </MotiView>
+                                    </MotiView>
+                                </Card>
+                            </TouchableOpacity>
+                        </MotiView>
+                    ))}
+                </ScrollView>
+                <View style={{ height: 100 }} />
+            </LinearGradient>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f9f9f9',
-        padding: 16,
+        paddingTop: 20,
+    },
+    scrollContainer: {
+        paddingHorizontal: 20,
+        paddingBottom: 40,
+        paddingTop: 10,
+    },
+    header: {
+        marginBottom: 20,
+        height: 100,
+    },
+    title: {
+        fontSize: 34,
+        color: '#B91C1C',
+        textAlign: 'center',
+        marginBottom: 8,
+        fontWeight: '800',
+        paddingTop: 20,
+    },
+    subtitle: {
+        fontSize: 16,
+        color: '#DC2626',
+        textAlign: 'center',
     },
     card: {
-        marginVertical: 10,
-        padding: 16,
-        borderRadius: 10,
-        backgroundColor: '#ffffff',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
+        borderRadius: 15,
+        marginBottom: 16,
+        overflow: 'hidden',
+    },
+    cardContent: {
+        padding: 20,
+        minHeight: 100,
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        overflow: 'visible',
     },
     question: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333',
+        fontSize: 16,
+        color: '#7F1D1D',
+        flex: 1,
+        marginRight: 15,
+        fontWeight: '600',
+        lineHeight: 22, // Tambahkan line height
+        flexShrink: 1,
+    },
+    answerContainer: {
+        paddingTop: 10,
+        flex: 1,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: '#FECACA',
+        marginVertical: 8,
     },
     answer: {
-        fontSize: 16,
-        color: '#666',
-        marginTop: 8,
+        fontSize: 14,
+        color: '#57534E',
+        lineHeight: 20,
     },
 });
 
