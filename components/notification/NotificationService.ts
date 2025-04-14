@@ -16,6 +16,21 @@ type SensorData = {
 const ONGOING_NOTIFICATION_ID = 'sensor-monitoring-ongoing';
 const BACKGROUND_DATA_KEY = 'BACKGROUND_SENSOR_DATA';
 
+// Tambahkan ID untuk notifikasi warning
+const WARNING_NOTIFICATION_ID = 'sensor-warning-notification';
+
+// Variabel untuk menyimpan status warning terakhir
+let lastWarningStatus = {
+    hasActiveWarning: false,
+    warningTimestamp: 0,
+    warningType: '',
+    warningValue: 0,
+    warningThreshold: 0
+};
+
+// Periode minimum antar warning baru (dalam milidetik) - 30 menit
+const MIN_WARNING_INTERVAL = 30 * 60 * 1000;
+
 // Inisialisasi notifikasi handler secara global
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -118,6 +133,12 @@ export const showBackgroundNotification = async (sensorData: Partial<SensorData>
         // Save data for background access
         await saveSensorDataForBackground(sanitizedData);
 
+        // Check for warnings first
+        const hasWarning = await checkSensorWarnings(sanitizedData);
+
+        // If warning shown, still show the main notification but don't play sound
+        // to avoid too many sounds at once
+
         // Create a persistent notification with safe value checking
         const ph = sanitizedData.ph.toFixed(2);
         const accel_x = sanitizedData.accel_x.toFixed(2);
@@ -153,7 +174,7 @@ export const showBackgroundNotification = async (sensorData: Partial<SensorData>
                     timestamp: Date.now(),
                     sensorData: sanitizedData
                 },
-                sound: 'default',
+                sound: hasWarning ? false : 'default', // Jangan berbunyi jika sudah ada warning
                 priority: 'max',
                 badge: 1,
                 android: {
@@ -204,6 +225,14 @@ export const updateBackgroundNotification = async (sensorData: Partial<SensorDat
 
         // Save data first
         await saveSensorDataForBackground(sanitizedData);
+
+        // Check for warnings first - if warning detected, it will show warning notif
+        const hasWarning = await checkSensorWarnings(sanitizedData);
+
+        // If warning shown, don't update the regular notification to avoid clutter
+        if (hasWarning) {
+            return true;
+        }
 
         // Use sanitized values
         const ph = sanitizedData.ph.toFixed(2);
@@ -289,7 +318,7 @@ const getPHStatusInfo = (ph: number) => {
 // Function to get turbidity status information
 const getTurbidityStatusInfo = (turbidity: number) => {
     if (turbidity < 5) return { label: 'Jernih', color: '#4CAF50' }; // Green
-    if (turbidity < 30) return { label: 'Agak Keruh', color: '#FFC107' }; // Yellow
+    if (turbidity < 40) return { label: 'Agak Keruh', color: '#FFC107' }; // Yellow
     if (turbidity < 100) return { label: 'Keruh', color: '#FF9800' }; // Orange
     return { label: 'Sangat Keruh', color: '#F44336' }; // Red
 };
@@ -303,12 +332,10 @@ const getOverallWaterQuality = (data: SensorData) => {
     if (phQuality.label === 'Asam' || phQuality.label === 'Basa' ||
         turbidityQuality.label === 'Sangat Keruh') {
         return 'Buruk';
-    } else if (turbidityQuality.label === 'Cukup Keruh') {
+    } else if (turbidityQuality.label === 'Keruh') {
         return 'Cukup';
     } else if (turbidityQuality.label === 'Agak Keruh') {
         return 'Baik';
-    } else {
-        return 'Sangat Baik';
     }
 };
 
@@ -316,7 +343,6 @@ const getOverallWaterQuality = (data: SensorData) => {
 const getOverallWaterQualityColor = (data: SensorData) => {
     const quality = getOverallWaterQuality(data);
     switch (quality) {
-        case 'Sangat Baik': return '#4CAF50'; // Green
         case 'Baik': return '#8BC34A'; // Light Green
         case 'Cukup': return '#FFC107'; // Yellow
         case 'Buruk': return '#F44336'; // Red
@@ -425,3 +451,213 @@ Speed: ${speed} m/s`,
         console.error('[NOTIFICATION] Failed to show notification:', error);
     }
 }
+
+// Fungsi untuk memeriksa data sensor apakah melebihi ambang batas
+export const checkSensorWarnings = async (sensorData: Partial<SensorData> | null | undefined) => {
+    try {
+        if (!sensorData) return false;
+
+        // Sanitize data
+        const sanitizedData = sanitizeSensorData(sensorData);
+        const currentTime = Date.now();
+
+        // Objek untuk menyimpan hasil warning
+        let warningResult = {
+            hasWarning: false,
+            warningType: '',
+            warningValue: 0,
+            warningThreshold: 0,
+            warningMessage: '',
+            isNewWarning: false
+        };
+
+        // Periksa pH - terlalu asam atau terlalu basa
+        if (sanitizedData.ph < 6.0) {
+            warningResult = {
+                hasWarning: true,
+                warningType: 'pH_ASAM',
+                warningValue: sanitizedData.ph,
+                warningThreshold: 6.0,
+                warningMessage: `pH air ${sanitizedData.ph.toFixed(2)} terlalu asam (di bawah 6.0)`,
+                isNewWarning: lastWarningStatus.warningType !== 'pH_ASAM' ||
+                    (currentTime - lastWarningStatus.warningTimestamp > MIN_WARNING_INTERVAL)
+            };
+        } else if (sanitizedData.ph > 9.0) {
+            warningResult = {
+                hasWarning: true,
+                warningType: 'pH_BASA',
+                warningValue: sanitizedData.ph,
+                warningThreshold: 9.0,
+                warningMessage: `pH air ${sanitizedData.ph.toFixed(2)} terlalu basa (di atas 9.0)`,
+                isNewWarning: lastWarningStatus.warningType !== 'pH_BASA' ||
+                    (currentTime - lastWarningStatus.warningTimestamp > MIN_WARNING_INTERVAL)
+            };
+        }
+
+        // Periksa kekeruhan/turbidity
+        if (!warningResult.hasWarning && sanitizedData.turbidity > 80) {
+            warningResult = {
+                hasWarning: true,
+                warningType: 'TURBIDITY_HIGH',
+                warningValue: sanitizedData.turbidity,
+                warningThreshold: 80,
+                warningMessage: `Kekeruhan air ${sanitizedData.turbidity.toFixed(2)} NTU terlalu tinggi (di atas 80 NTU)`,
+                isNewWarning: lastWarningStatus.warningType !== 'TURBIDITY_HIGH' ||
+                    (currentTime - lastWarningStatus.warningTimestamp > MIN_WARNING_INTERVAL)
+            };
+        }
+
+        // Periksa suhu air
+        if (!warningResult.hasWarning && (sanitizedData.temperature < 15 || sanitizedData.temperature > 35)) {
+            const isTooHot = sanitizedData.temperature > 35;
+            warningResult = {
+                hasWarning: true,
+                warningType: isTooHot ? 'TEMP_HIGH' : 'TEMP_LOW',
+                warningValue: sanitizedData.temperature,
+                warningThreshold: isTooHot ? 35 : 15,
+                warningMessage: isTooHot
+                    ? `Suhu air ${sanitizedData.temperature.toFixed(2)}°C terlalu tinggi (di atas 35°C)`
+                    : `Suhu air ${sanitizedData.temperature.toFixed(2)}°C terlalu rendah (di bawah 15°C)`,
+                isNewWarning: lastWarningStatus.warningType !== (isTooHot ? 'TEMP_HIGH' : 'TEMP_LOW') ||
+                    (currentTime - lastWarningStatus.warningTimestamp > MIN_WARNING_INTERVAL)
+            };
+        }
+
+        // Jika ada warning, tampilkan notifikasi
+        if (warningResult.hasWarning) {
+            // Perbarui status warning terakhir
+            lastWarningStatus = {
+                hasActiveWarning: true,
+                warningTimestamp: currentTime,
+                warningType: warningResult.warningType,
+                warningValue: warningResult.warningValue,
+                warningThreshold: warningResult.warningThreshold
+            };
+
+            // Tampilkan notifikasi baru atau perbarui yang ada
+            await showWarningNotification(sanitizedData, warningResult.warningMessage, warningResult.isNewWarning);
+            return true;
+        } else if (lastWarningStatus.hasActiveWarning) {
+            // Jika sebelumnya ada warning tapi sekarang sudah normal, hapus notifikasi warning
+            await Notifications.dismissNotificationAsync(WARNING_NOTIFICATION_ID);
+            lastWarningStatus.hasActiveWarning = false;
+
+            // Tampilkan notifikasi kondisi normal
+            await showNormalConditionNotification(sanitizedData);
+        }
+
+        return false;
+    } catch (error) {
+        console.error('[NOTIF] Error checking sensor warnings:', error);
+        return false;
+    }
+};
+
+// Fungsi untuk menampilkan notifikasi warning
+const showWarningNotification = async (sensorData: SensorData, warningMessage: string, playSound: boolean) => {
+    try {
+        // Get current time in a nice format
+        const timeString = new Date().toLocaleTimeString();
+
+        // Format seluruh data untuk tampilan lengkap
+        const fullMessage = `⚠️ PERINGATAN: ${warningMessage}\n\n` +
+            `Data Sensor saat ini:\n` +
+            `pH: ${sensorData.ph.toFixed(2)} (${getPHStatusInfo(sensorData.ph).label})\n` +
+            `Kekeruhan: ${sensorData.turbidity.toFixed(2)} NTU (${getTurbidityStatusInfo(sensorData.turbidity).label})\n` +
+            `Suhu: ${sensorData.temperature.toFixed(2)}°C\n` +
+            `Kecepatan: ${sensorData.speed.toFixed(2)} m/s\n\n` +
+            `Waktu terdeteksi: ${timeString}`;
+
+        // Tampilkan atau perbarui notifikasi warning
+        await Notifications.scheduleNotificationAsync({
+            identifier: WARNING_NOTIFICATION_ID,
+            content: {
+                title: '⚠️ Peringatan Kualitas Air',
+                subtitle: warningMessage,
+                body: fullMessage,
+                data: {
+                    type: 'water-quality-warning',
+                    timestamp: Date.now(),
+                    sensorData: sensorData
+                },
+                sound: playSound, // Hanya bunyi jika notifikasi baru
+                priority: 'max',
+                badge: 1,
+                android: {
+                    channelId: 'sensor_monitoring',
+                    priority: Notifications.AndroidNotificationPriority.MAX,
+                    color: '#FF9800', // Orange for warnings
+                    sticky: true,
+                    smallIcon: 'ic_warning', // Ganti dengan icon warning yang ada di resources
+                    style: {
+                        type: 'bigText',
+                        title: '⚠️ Peringatan Kualitas Air',
+                        summary: warningMessage,
+                        bigText: fullMessage
+                    },
+                    vibrate: playSound ? [0, 250, 250, 250] : false, // Hanya getar jika notifikasi baru
+                }
+            } as Notifications.NotificationContentInput,
+            trigger: null
+        });
+
+        return true;
+    } catch (error) {
+        console.error('[NOTIF] Error showing warning notification:', error);
+        return false;
+    }
+};
+
+// Fungsi untuk menampilkan notifikasi kondisi normal kembali
+const showNormalConditionNotification = async (sensorData: SensorData) => {
+    try {
+        const timeString = new Date().toLocaleTimeString();
+
+        // Notifikasi normal dengan ID baru (tidak update yang sebelumnya)
+        const normalNotificationId = `normal-condition-${Date.now()}`;
+
+        await Notifications.scheduleNotificationAsync({
+            identifier: normalNotificationId,
+            content: {
+                title: '✅ Kualitas Air Kembali Normal',
+                body: `Semua parameter air telah kembali ke nilai normal pada ${timeString}.\n\n` +
+                    `pH: ${sensorData.ph.toFixed(2)}\n` +
+                    `Kekeruhan: ${sensorData.turbidity.toFixed(2)} NTU\n` +
+                    `Suhu: ${sensorData.temperature.toFixed(2)}°C`,
+                data: {
+                    type: 'water-quality-normal',
+                    timestamp: Date.now(),
+                    sensorData: sensorData
+                },
+                sound: true,
+                priority: 'high',
+                badge: 1,
+                android: {
+                    channelId: 'sensor_monitoring',
+                    priority: Notifications.AndroidNotificationPriority.HIGH,
+                    color: '#4CAF50', // Green for normal conditions
+                    smallIcon: 'ic_check_circle',
+                    style: {
+                        type: 'bigText',
+                        title: '✅ Kualitas Air Kembali Normal',
+                        bigText: `Semua parameter air telah kembali ke nilai normal pada ${timeString}.\n\n` +
+                            `pH: ${sensorData.ph.toFixed(2)}\n` +
+                            `Kekeruhan: ${sensorData.turbidity.toFixed(2)} NTU\n` +
+                            `Suhu: ${sensorData.temperature.toFixed(2)}°C`
+                    }
+                }
+            } as Notifications.NotificationContentInput,
+            trigger: null
+        });
+
+        // Notifikasi normal akan otomatis hilang setelah 10 detik
+        setTimeout(async () => {
+            await Notifications.dismissNotificationAsync(normalNotificationId);
+        }, 10000);
+
+        return true;
+    } catch (error) {
+        console.error('[NOTIF] Error showing normal condition notification:', error);
+        return false;
+    }
+};
