@@ -127,33 +127,56 @@ export const showBackgroundNotification = async (sensorData: Partial<SensorData>
         const temperature = sanitizedData.temperature.toFixed(2);
         const speed = sanitizedData.speed.toFixed(2);
 
-        // Hapus notifikasi sebelumnya jika ada
-        await Notifications.dismissNotificationAsync(ONGOING_NOTIFICATION_ID);
+        // Get pH status label and color
+        const phStatus = getPHStatusInfo(sanitizedData.ph);
 
+        // Get water quality category based on turbidity
+        const turbidityStatus = getTurbidityStatusInfo(sanitizedData.turbidity);
+
+        // Create or update notification with the same identifier
         const notificationId = await Notifications.scheduleNotificationAsync({
             identifier: ONGOING_NOTIFICATION_ID,
             content: {
-                title: '🌊 Monitoring Sensor Air Aktif',
-                body: `Memantau data sensor secara real-time:
-pH: ${ph}
-Turbidity: ${turbidity} NTU
-Temperature: ${temperature} °C
-Speed: ${speed} m/s 
-Accelerometer X: ${accel_x}
-Accelerometer Y: ${accel_y}
-Accelerometer Z: ${accel_z}`,
-
-                data: { type: 'background-monitoring', timestamp: Date.now() },
+                title: '🌊 Monitor Sensor Air - Aktif',
+                subtitle: `Kualitas Air: ${getOverallWaterQuality(sanitizedData)}`,
+                body: `📊 Pembacaan Sensor Terkini:\n\n` +
+                    `pH: ${ph} (${phStatus.label})\n` +
+                    `Kekeruhan: ${turbidity} NTU (${turbidityStatus.label})\n` +
+                    `Suhu: ${temperature}°C\n` +
+                    `Kecepatan: ${speed} m/s\n\n` +
+                    `Accelerometer X: ${accel_x}\n` +
+                    `Accelerometer Y: ${accel_y}\n` +
+                    `Accelerometer Z: ${accel_z}\n\n` +
+                    `Terakhir diperbarui: ${new Date().toLocaleTimeString()}`,
+                data: {
+                    type: 'background-monitoring',
+                    timestamp: Date.now(),
+                    sensorData: sanitizedData
+                },
                 sound: 'default',
                 priority: 'max',
                 badge: 1,
                 android: {
                     channelId: 'sensor_monitoring',
                     priority: Notifications.AndroidNotificationPriority.MAX,
-                    color: '#2196F3',
+                    color: getOverallWaterQualityColor(sanitizedData),
                     ongoing: true,
                     sticky: true,
-                    // vibrate: [0, 250, 250, 250],
+                    smallIcon: 'ic_water_drop',  // Make sure this icon exists in your Android resources
+                    style: {
+                        type: 'bigText',
+                        title: '🌊 Monitor Sensor Air - Aktif',
+                        summary: `Kualitas Air: ${getOverallWaterQuality(sanitizedData)}`,
+                        bigText: `📊 Pembacaan Sensor Terkini:\n\n` +
+                            `pH: ${ph} (${phStatus.label})\n` +
+                            `Kekeruhan: ${turbidity} NTU (${turbidityStatus.label})\n` +
+                            `Suhu: ${temperature}°C\n` +
+                            `Kecepatan: ${speed} m/s\n\n` +
+                            `Accelerometer X: ${accel_x}\n` +
+                            `Accelerometer Y: ${accel_y}\n` +
+                            `Accelerometer Z: ${accel_z}\n\n` +
+                            `Terakhir diperbarui: ${new Date().toLocaleTimeString()}`,
+                    }
                 }
             } as Notifications.NotificationContentInput,
             trigger: null, // Tampilkan segera
@@ -182,36 +205,65 @@ export const updateBackgroundNotification = async (sensorData: Partial<SensorDat
         // Save data first
         await saveSensorDataForBackground(sanitizedData);
 
-        // Cancel existing notification
-        await Notifications.cancelScheduledNotificationAsync(ONGOING_NOTIFICATION_ID);
-
         // Use sanitized values
         const ph = sanitizedData.ph.toFixed(2);
+        const accel_x = sanitizedData.accel_x.toFixed(2);
+        const accel_y = sanitizedData.accel_y.toFixed(2);
+        const accel_z = sanitizedData.accel_z.toFixed(2);
         const turbidity = sanitizedData.turbidity.toFixed(2);
         const temperature = sanitizedData.temperature.toFixed(2);
         const speed = sanitizedData.speed.toFixed(2);
 
-        // Create a new one with updated data
+        // Get pH status label and color
+        const phStatus = getPHStatusInfo(sanitizedData.ph);
+
+        // Get water quality category based on turbidity
+        const turbidityStatus = getTurbidityStatusInfo(sanitizedData.turbidity);
+
+        // Create a new one with updated data - using the same identifier will update existing notification
         const notificationId = await Notifications.scheduleNotificationAsync({
             identifier: ONGOING_NOTIFICATION_ID,
             content: {
-                title: '🌊 Monitoring Sensor Air Aktif',
-                body: `Data diperbarui pada ${new Date().toLocaleTimeString()}:
-pH: ${ph}
-Turbidity: ${turbidity} NTU
-Temperature: ${temperature} °C
-Speed: ${speed} m/s`,
-                data: { type: 'background-monitoring-update', timestamp: Date.now() },
+                title: '🌊 Monitor Sensor Air - Aktif',
+                subtitle: `Kualitas Air: ${getOverallWaterQuality(sanitizedData)}`,
+                body: `📊 Pembacaan Sensor Terkini:\n\n` +
+                    `pH: ${ph} (${phStatus.label})\n` +
+                    `Kekeruhan: ${turbidity} NTU (${turbidityStatus.label})\n` +
+                    `Suhu: ${temperature}°C\n` +
+                    `Kecepatan: ${speed} m/s\n\n` +
+                    `Accelerometer X: ${accel_x}\n` +
+                    `Accelerometer Y: ${accel_y}\n` +
+                    `Accelerometer Z: ${accel_z}\n\n` +
+                    `Terakhir diperbarui: ${new Date().toLocaleTimeString()}`,
+                data: {
+                    type: 'background-monitoring-update',
+                    timestamp: Date.now(),
+                    sensorData: sanitizedData
+                },
                 sound: 'default',
                 priority: 'max',
                 badge: 1,
                 android: {
                     channelId: 'sensor_monitoring',
                     priority: Notifications.AndroidNotificationPriority.MAX,
-                    color: '#2196F3',
+                    color: getOverallWaterQualityColor(sanitizedData),
                     ongoing: true,
                     sticky: true,
-                    vibrate: [0, 250, 250, 250],
+                    smallIcon: 'ic_water_drop',  // Make sure this icon exists in your Android resources
+                    style: {
+                        type: 'bigText',
+                        title: '🌊 Monitor Sensor Air - Aktif',
+                        summary: `Kualitas Air: ${getOverallWaterQuality(sanitizedData)}`,
+                        bigText: `📊 Pembacaan Sensor Terkini:\n\n` +
+                            `pH: ${ph} (${phStatus.label})\n` +
+                            `Kekeruhan: ${turbidity} NTU (${turbidityStatus.label})\n` +
+                            `Suhu: ${temperature}°C\n` +
+                            `Kecepatan: ${speed} m/s\n\n` +
+                            `Accelerometer X: ${accel_x}\n` +
+                            `Accelerometer Y: ${accel_y}\n` +
+                            `Accelerometer Z: ${accel_z}\n\n` +
+                            `Terakhir diperbarui: ${new Date().toLocaleTimeString()}`,
+                    }
                 }
             } as Notifications.NotificationContentInput,
             trigger: null,
@@ -222,6 +274,53 @@ Speed: ${speed} m/s`,
     } catch (error) {
         console.error('[NOTIF] Error updating background notification:', error);
         return false;
+    }
+};
+
+// Helper functions for water quality assessment
+
+// Function to get pH status information
+const getPHStatusInfo = (ph: number) => {
+    if (ph < 6.5) return { label: 'Asam', color: '#F44336' }; // Red
+    if (ph > 8.5) return { label: 'Basa', color: '#FF9800' }; // Orange
+    return { label: 'Normal', color: '#4CAF50' }; // Green
+};
+
+// Function to get turbidity status information
+const getTurbidityStatusInfo = (turbidity: number) => {
+    if (turbidity < 5) return { label: 'Jernih', color: '#4CAF50' }; // Green
+    if (turbidity < 30) return { label: 'Agak Keruh', color: '#FFC107' }; // Yellow
+    if (turbidity < 100) return { label: 'Keruh', color: '#FF9800' }; // Orange
+    return { label: 'Sangat Keruh', color: '#F44336' }; // Red
+};
+
+// Function to get overall water quality assessment
+const getOverallWaterQuality = (data: SensorData) => {
+    const phQuality = getPHStatusInfo(data.ph);
+    const turbidityQuality = getTurbidityStatusInfo(data.turbidity);
+
+    // Simple algorithm - if any parameter is bad, the overall quality is bad
+    if (phQuality.label === 'Asam' || phQuality.label === 'Basa' ||
+        turbidityQuality.label === 'Sangat Keruh') {
+        return 'Buruk';
+    } else if (turbidityQuality.label === 'Cukup Keruh') {
+        return 'Cukup';
+    } else if (turbidityQuality.label === 'Agak Keruh') {
+        return 'Baik';
+    } else {
+        return 'Sangat Baik';
+    }
+};
+
+// Function to get color for overall water quality
+const getOverallWaterQualityColor = (data: SensorData) => {
+    const quality = getOverallWaterQuality(data);
+    switch (quality) {
+        case 'Sangat Baik': return '#4CAF50'; // Green
+        case 'Baik': return '#8BC34A'; // Light Green
+        case 'Cukup': return '#FFC107'; // Yellow
+        case 'Buruk': return '#F44336'; // Red
+        default: return '#2196F3'; // Blue (default)
     }
 };
 

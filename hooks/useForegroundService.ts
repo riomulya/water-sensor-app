@@ -20,7 +20,7 @@ type SensorData = {
     speed: number;
 };
 
-const NOTIFICATION_UPDATE_INTERVAL = 10000; // 10 seconds
+const NOTIFICATION_UPDATE_INTERVAL = 5000; // 5 seconds
 
 export const useForegroundService = (sensorData: SensorData) => {
     const [isServiceRunning, setIsServiceRunning] = useState(false);
