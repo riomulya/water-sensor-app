@@ -45,7 +45,7 @@ import { HStack } from '@/components/ui/hstack';
 import { DeviceEventEmitter } from 'react-native';
 import { Divider } from '@/components/ui/divider';
 import { AnimatePresence, MotiView } from 'moti';
-import { NotificationComponent } from '@/components/notification/NotificationComponent';
+// import { NotificationComponent } from '@/components/notification/NotificationComponent';
 import { useForegroundService } from '@/hooks/useForegroundService';
 
 // Notifications.setNotificationHandler({
@@ -758,8 +758,10 @@ const HomeScreen = () => {
     }, []);
 
     useEffect(() => {
-        if (mqttData?.isStart) {
+        if (mqttData) {
             startService();
+            // Update sensor data for background notifications
+
         } else {
             stopService();
         }
@@ -1261,10 +1263,10 @@ const HomeScreen = () => {
                     </ModalFooter>
                 </ModalContent>
             </Modal>
-            <NotificationComponent
+            {/* <NotificationComponent
                 isRunning={isServiceRunning}
                 sensorData={sensorData}
-            />
+            /> */}
         </>
     );
 };

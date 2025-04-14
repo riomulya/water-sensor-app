@@ -26,23 +26,37 @@
     ],
     "splash": {
       "image": "./assets/images/LogoSplash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "resizeMode": "contain"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.watersensor.app"
+      "bundleIdentifier": "com.watersensor.app",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification",
+          "fetch",
+          "location",
+          "processing"
+        ],
+        "NSLocationWhenInUseUsageDescription": "This app needs access to location to monitor water quality.",
+        "NSLocationAlwaysUsageDescription": "This app needs access to location to monitor water quality in the background.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to location to monitor water quality in the background.",
+        "NSBackgroundFetchIntervalMinimum": 5
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/LogoSplash.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/LogoSplash.png"
       },
       "package": "com.watersensor.app",
       "permissions": [
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK",
         "FOREGROUND_SERVICE",
-        "RECEIVE_BOOT_COMPLETED"
-      ]
+        "SCHEDULE_EXACT_ALARM"
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro",
@@ -55,7 +69,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Show current location on map."
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
         }
       ],
       [
@@ -82,8 +96,19 @@
             "color": "#2196F3",
             "sound": "default",
             "priority": "max",
-            "vibrate": true
-          }
+            "vibrate": true,
+            "importance": "high",
+            "visibility": "public"
+          },
+          "sounds": [
+            "./assets/notification-sound.wav"
+          ]
+        }
+      ],
+      [
+        "expo-background-fetch",
+        {
+          "minimumInterval": 5
         }
       ]
     ],
