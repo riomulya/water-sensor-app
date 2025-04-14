@@ -144,6 +144,7 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
                     nilai_ph: data.message.ph,
                     nilai_temperature: data.message.temperature,
                     nilai_turbidity: data.message.turbidity,
+                    nilai_speed: data.message.speed,
                     tanggal: data.timestamp
                 };
 
@@ -161,13 +162,16 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
                     // Update popup
                     window.iotMarker.bindPopup(\`
                         <b>Status Perangkat IOT</b><br>
-                        Lokasi Terakhir: ${new Date().toLocaleString()}<br>
-                        Accel X: ${formattedData.nilai_accel_x}<br>
-                        Accel Y: ${formattedData.nilai_accel_y}<br>
-                        Accel Z: ${formattedData.nilai_accel_z}<br>
-                        pH: ${formattedData.nilai_ph}<br>
-                        Suhu: ${formattedData.nilai_temperature}°C<br>
-                        Kekeruhan: ${formattedData.nilai_turbidity} NTU
+                        <b>Lat</b>: ${formattedData.lat}<br>
+                        <b>Lon</b>: ${formattedData.lon}<br>
+                        <b>Waktu</b>: ${new Date().toLocaleString()}<br>
+                        <b>Accel X</b> : ${formattedData.nilai_accel_x} m/s<sup>2</sup><br>
+                        <b>Accel Y</b> : ${formattedData.nilai_accel_y} m/s<sup>2</sup><br>
+                        <b>Accel Z</b> : ${formattedData.nilai_accel_z} m/s<sup>2</sup><br>
+                        <b>pH</b> : ${formattedData.nilai_ph}<br>
+                        <b>Suhu</b> : ${formattedData.nilai_temperature}°C<br>
+                        <b>Kekeruhan</b> : ${formattedData.nilai_turbidity} NTU<br>
+                        <b>Kecepatan</b> : ${formattedData.nilai_speed} m/s
                     \`);
                     
                     // Auto-pan ke marker

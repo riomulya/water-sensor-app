@@ -45,6 +45,8 @@ import { HStack } from '@/components/ui/hstack';
 import { DeviceEventEmitter } from 'react-native';
 import { Divider } from '@/components/ui/divider';
 import { AnimatePresence, MotiView } from 'moti';
+import { NotificationComponent } from '@/components/notification/NotificationComponent';
+import { useForegroundService } from '@/hooks/useForegroundService';
 
 // Notifications.setNotificationHandler({
 //     handleNotification: async () => ({
@@ -167,7 +169,7 @@ const sensorConfigs: SensorConfig[] = [
     // Sensor Kecepatan
     {
         id: 'speed',
-        name: 'Kecepatan Air',
+        name: 'Kecepatan Alat',
         min: 0,
         max: 5,
         unit: 'm/s',
@@ -180,12 +182,23 @@ const sensorConfigs: SensorConfig[] = [
     }
 ];
 
+// Tambahkan interface di atas komponen
+interface SensorData {
+    accel_x: number;
+    accel_y: number;
+    accel_z: number;
+    ph: number;
+    turbidity: number;
+    temperature: number;
+    speed: number;
+}
+
 const HomeScreen = () => {
     const [destination, setDestination] = useState<{ latitude: number, longitude: number } | null>(null); // Untuk marker destinasi
     const [address, setAddress] = useState<string | null>(null); // Untuk menyimpan alamat lengkap
     const [mqttData, setMqttData] = useState<any>(null);
     const [bottomSheetOpen, setBottomSheetOpen] = useState<boolean>(false);
-    const [sensorData, setSensorData] = useState<{ [key: string]: number }>({
+    const [sensorData, setSensorData] = useState<SensorData>({
         accel_x: 0,
         accel_y: 0,
         accel_z: 0,
@@ -218,7 +231,6 @@ const HomeScreen = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoadingLocations, setIsLoadingLocations] = useState(false);
     const [locationsError, setLocationsError] = useState('');
-    const bottomSheetRef = React.useRef(null);
 
     // useEffect(() => {
     //     // registerForPushNotificationsAsync().then(token => token && setExpoPushToken(token));
@@ -247,6 +259,8 @@ const HomeScreen = () => {
     const toast = useToast();
 
     const GEOFENCE_TASK = 'geofence-monitoring';
+
+    const { isServiceRunning, startService, stopService } = useForegroundService(sensorData);
 
     useEffect(() => {
         if (!socketRef.current) {
@@ -716,7 +730,7 @@ const HomeScreen = () => {
                 }
 
                 const data = await response.json();
-                console.log('API Response:', data); // Periksa response di console
+                // console.log('API Response:', data); // Periksa response di console
 
                 if (!Array.isArray(data)) {
                     throw new Error(`Format data tidak valid. Diterima: ${typeof data}`);
@@ -742,6 +756,14 @@ const HomeScreen = () => {
         fetchLocations();
         // }
     }, []);
+
+    useEffect(() => {
+        if (mqttData?.isStart) {
+            startService();
+        } else {
+            stopService();
+        }
+    }, [mqttData, sensorData]);
 
     return (
         <>
@@ -1001,7 +1023,6 @@ const HomeScreen = () => {
                                                                     }}
                                                                 >
                                                                     <Button
-                                                                        closeOnSelect
                                                                         size="sm"
                                                                         variant="outline"
                                                                         className="flex-1 text-center w-auto"
@@ -1240,6 +1261,10 @@ const HomeScreen = () => {
                     </ModalFooter>
                 </ModalContent>
             </Modal>
+            <NotificationComponent
+                isRunning={isServiceRunning}
+                sensorData={sensorData}
+            />
         </>
     );
 };

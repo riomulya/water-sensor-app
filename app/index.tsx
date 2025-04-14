@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Text, Image, Dimensions, StyleSheet, Pressable, LogBox, Button, View, Alert, } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Text, Image, Dimensions, StyleSheet, Pressable, LogBox, Button, View, Alert, Linking, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView, MotiText } from 'moti';
 import { Link, router } from 'expo-router';
@@ -9,7 +9,7 @@ import {
   configureReanimatedLogger,
   ReanimatedLogLevel,
 } from 'react-native-reanimated';
-
+import { BatteryOptimizationDialog } from '../components/AlertDialog';
 
 // This is the default configuration
 configureReanimatedLogger({
@@ -23,13 +23,33 @@ LogBox.ignoreLogs(['defaultProps will be removed']);
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
 
-
-
 export default function App() {
+  const [showBatteryDialog, setShowBatteryDialog] = useState(false);
 
+  useEffect(() => {
+    const checkBatteryOptimization = async () => {
+      if (Platform.OS === 'android') {
+        setShowBatteryDialog(true); // Tampilkan dialog saat komponen mount
+      }
+    };
+    checkBatteryOptimization();
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <BatteryOptimizationDialog
+        visible={showBatteryDialog}
+        onClose={() => setShowBatteryDialog(false)}
+        onConfirm={async () => {
+          try {
+            await Linking.sendIntent('android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS');
+            setShowBatteryDialog(false);
+          } catch (error) {
+            Alert.alert('Error', 'Gagal membuka pengaturan baterai');
+          }
+        }}
+      />
+
       <LinearGradient
         colors={['#ffffff', '#ffcccc']}
         style={styles.container}

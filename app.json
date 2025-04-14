@@ -38,7 +38,11 @@
         "foregroundImage": "./assets/images/LogoSplash.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.watersensor.app"
+      "package": "com.watersensor.app",
+      "permissions": [
+        "FOREGROUND_SERVICE",
+        "RECEIVE_BOOT_COMPLETED"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -64,6 +68,22 @@
             "./assets/images/water_marker_location.png",
             "./assets/images/target.png"
           ]
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/LogoSplash.png",
+          "color": "#2196F3",
+          "androidMode": "collapse",
+          "androidCollapsedTitle": "Sensor Monitoring",
+          "androidNotification": {
+            "icon": "./assets/images/LogoSplash.png",
+            "color": "#2196F3",
+            "sound": "default",
+            "priority": "max",
+            "vibrate": true
+          }
         }
       ]
     ],
