@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Dimensions } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Dimensions, Platform } from 'react-native';
 import { Heading } from '@/components/ui/heading';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -39,6 +39,120 @@ interface CombinedData {
     nilai_speed: number | null;
 }
 
+// Define download state type
+type DownloadState = 'idle' | 'preparing' | 'downloading' | 'completed' | 'error';
+
+// Download Animation Component
+const DownloadAnimation = ({ downloadState }: { downloadState: DownloadState }) => {
+    const states = {
+        idle: {
+            scale: 1,
+            opacity: 1,
+            backgroundColor: '#3b82f6',
+        },
+        preparing: {
+            scale: 1.05,
+            opacity: 1,
+            backgroundColor: '#60a5fa',
+        },
+        downloading: {
+            scale: 1.05,
+            opacity: 1,
+            backgroundColor: '#60a5fa',
+        },
+        completed: {
+            scale: 1.1,
+            opacity: 1,
+            backgroundColor: '#2563eb',
+        },
+        error: {
+            scale: 1,
+            opacity: 1,
+            backgroundColor: '#ef4444',
+        }
+    };
+
+    const currentState = states[downloadState] || states.idle;
+
+    return (
+        <MotiView
+            style={styles.gradientButton}
+            from={states.idle}
+            animate={currentState}
+            transition={{
+                type: 'timing',
+                duration: 300,
+            }}
+        >
+            <MotiView
+                style={{ flexDirection: 'row', alignItems: 'center' }}
+            >
+                {downloadState === 'idle' && (
+                    <Feather name="download" size={20} color="white" />
+                )}
+                {downloadState === 'preparing' && (
+                    <MotiView
+                        from={{ rotate: '0deg' }}
+                        animate={{ rotate: '360deg' }}
+                        transition={{
+                            loop: true,
+                            repeatReverse: false,
+                            duration: 1000,
+                        }}
+                    >
+                        <Feather name="refresh-cw" size={20} color="white" />
+                    </MotiView>
+                )}
+                {downloadState === 'downloading' && (
+                    <MotiView
+                        from={{ translateY: 0 }}
+                        animate={{ translateY: [-4, 4, -4] }}
+                        transition={{
+                            loop: true,
+                            duration: 1000,
+                        }}
+                    >
+                        <Feather name="download-cloud" size={20} color="white" />
+                    </MotiView>
+                )}
+                {downloadState === 'completed' && (
+                    <MotiView
+                        from={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{
+                            type: 'spring',
+                            stiffness: 200,
+                            damping: 15
+                        }}
+                    >
+                        <Feather name="check-circle" size={20} color="white" />
+                    </MotiView>
+                )}
+                {downloadState === 'error' && (
+                    <MotiView
+                        from={{ rotate: '0deg' }}
+                        animate={{ rotate: '10deg' }}
+                        transition={{
+                            loop: true,
+                            repeatReverse: true,
+                            duration: 100,
+                        }}
+                    >
+                        <Feather name="alert-circle" size={20} color="white" />
+                    </MotiView>
+                )}
+                <Text className="text-white font-semibold ml-2">
+                    {downloadState === 'idle' && 'Unduh Data Excel'}
+                    {downloadState === 'preparing' && 'Mempersiapkan Data...'}
+                    {downloadState === 'downloading' && 'Mengunduh...'}
+                    {downloadState === 'completed' && 'Berhasil Diunduh!'}
+                    {downloadState === 'error' && 'Gagal Mengunduh'}
+                </Text>
+            </MotiView>
+        </MotiView>
+    );
+};
+
 const DetailLocationScreen = () => {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
@@ -51,6 +165,7 @@ const DetailLocationScreen = () => {
     const [totalItems, setTotalItems] = useState(0);
     const [page, setPage] = useState(0);
     const numberOfItemsPerPageList = [10, 20, 50, 100];
+    const [downloadState, setDownloadState] = useState<DownloadState>('idle');
 
     useEffect(() => {
         const fetchData = async () => {
@@ -93,47 +208,210 @@ const DetailLocationScreen = () => {
 
     const handleDownload = async () => {
         setIsDownloading(true);
+        setDownloadState('preparing');
+
         try {
-            const response = await fetch(`${port}data_combined/export/${Number(id)}`);
-            const blob: Blob = await response.blob();
-
-            // Simpan ke folder Downloads
-            const downloadsDir = FileSystem.cacheDirectory + 'Download/';
-            await FileSystem.makeDirectoryAsync(downloadsDir, { intermediates: true });
-
-            const fileUri = downloadsDir + `data_${id}_${data?.nama_sungai}.xlsx`;
-            const base64Data = await blobToBase64(blob);
-
-            await FileSystem.writeAsStringAsync(fileUri, base64Data, {
-                encoding: FileSystem.EncodingType.Base64,
-            });
-
-            // Tampilkan notifikasi
-            await Notifications.scheduleNotificationAsync({
+            // Create a notification ID for tracking
+            const notificationId = await Notifications.scheduleNotificationAsync({
                 content: {
-                    title: 'Download Berhasil 📥',
-                    body: 'File Excel telah tersimpan di folder Download',
-                    sound: 'default',
+                    title: "Mengunduh Data Sensor",
+                    body: "Sedang mempersiapkan data...",
                 },
                 trigger: null,
             });
 
-            Alert.alert('Download Sukses', 'File berhasil diunduh ke folder Download', [
-                {
-                    text: 'Buka File',
-                    onPress: async () => {
-                        await Sharing.shareAsync(fileUri);
-                    },
+            // Fetch Excel data from API
+            const response = await fetch(`${port}data_combined/export/${Number(id)}`);
+            const blob: Blob = await response.blob();
+
+            // Generate filename
+            const filename = `data_${id}_${data?.nama_sungai || 'lokasi'}.xlsx`;
+
+            // Convert blob to base64
+            const base64Data = await blobToBase64(blob);
+
+            // Update notification and state
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Mengunduh Data Sensor",
+                    body: "Sedang menyimpan file...",
                 },
-                { text: 'OK' },
-            ]);
+                trigger: null,
+                identifier: notificationId.toString(),
+            });
+
+            setDownloadState('downloading');
+
+            if (Platform.OS === 'android') {
+                try {
+                    // Request directory permissions for Android
+                    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+
+                    if (permissions.granted) {
+                        // Create file in the selected directory
+                        const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+                            permissions.directoryUri,
+                            filename,
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                        );
+
+                        // Write the file content directly
+                        await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+                            encoding: FileSystem.EncodingType.Base64
+                        });
+
+                        // Create a temporary copy in cache for sharing
+                        const tempFileUri = FileSystem.cacheDirectory + filename;
+                        await FileSystem.writeAsStringAsync(tempFileUri, base64Data, {
+                            encoding: FileSystem.EncodingType.Base64
+                        });
+
+                        // Update notification to show completion
+                        await Notifications.scheduleNotificationAsync({
+                            content: {
+                                title: "Unduhan Selesai",
+                                body: `File ${filename} berhasil disimpan. Ketuk untuk membuka file.`,
+                                data: {
+                                    filepath: fileUri,
+                                    tempFilepath: tempFileUri
+                                },
+                            },
+                            trigger: null,
+                            identifier: notificationId.toString(),
+                        });
+
+                        setDownloadState('completed');
+
+                        // Reset state after 2 seconds
+                        setTimeout(() => {
+                            setDownloadState('idle');
+                        }, 2000);
+
+                        Alert.alert(
+                            'Download Berhasil',
+                            `File telah berhasil disimpan di folder yang dipilih.`,
+                            [{ text: 'OK', style: 'default' }]
+                        );
+                    } else {
+                        // If permissions denied, fallback to sharing
+                        await handleFileSharing(base64Data, filename, notificationId);
+                    }
+                } catch (error) {
+                    console.error('Error saving file on Android:', error);
+                    setDownloadState('error');
+                    setTimeout(() => {
+                        setDownloadState('idle');
+                    }, 2000);
+                    await handleFileSharing(base64Data, filename, notificationId);
+                }
+            } else {
+                // For iOS, use sharing
+                await handleFileSharing(base64Data, filename, notificationId);
+            }
         } catch (error) {
             console.error('Error downloading file:', error);
+            setDownloadState('error');
+
+            // Reset state after 2 seconds
+            setTimeout(() => {
+                setDownloadState('idle');
+            }, 2000);
+
             Alert.alert('Error', 'Gagal mengunduh file.');
         } finally {
             setIsDownloading(false);
         }
     };
+
+    // Helper function to handle file sharing
+    const handleFileSharing = async (base64Data: string, filename: string, notificationId: string) => {
+        try {
+            setDownloadState('downloading');
+
+            // Save file temporarily
+            const fileUri = FileSystem.cacheDirectory + filename;
+            await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+                encoding: FileSystem.EncodingType.Base64
+            });
+
+            // Share the file
+            await Sharing.shareAsync(fileUri, {
+                mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                dialogTitle: 'Export Data Sensor',
+                UTI: 'org.openxmlformats.spreadsheetml.sheet'
+            });
+
+            // Update notification
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Unduhan Selesai",
+                    body: `File ${filename} berhasil diunduh. Ketuk untuk membuka file.`,
+                    data: {
+                        filepath: fileUri,
+                        tempFilepath: fileUri
+                    },
+                },
+                trigger: null,
+                identifier: notificationId.toString(),
+            });
+
+            setDownloadState('completed');
+
+            // Reset state after 2 seconds
+            setTimeout(() => {
+                setDownloadState('idle');
+            }, 2000);
+        } catch (error) {
+            console.error('Error sharing file:', error);
+            setDownloadState('error');
+
+            // Reset state after 2 seconds
+            setTimeout(() => {
+                setDownloadState('idle');
+            }, 2000);
+
+            throw new Error('Gagal membagikan file');
+        }
+    };
+
+    // Handle notification response
+    useEffect(() => {
+        const subscription = Notifications.addNotificationResponseReceivedListener(async (response) => {
+            const { filepath, tempFilepath } = response.notification.request.content.data || {};
+            const fileToOpen = tempFilepath || filepath;
+
+            if (fileToOpen) {
+                try {
+                    if (Platform.OS === 'android' && filepath && filepath.startsWith('content://')) {
+                        // For Android content URIs, use the temporary file for sharing
+                        await Sharing.shareAsync(tempFilepath, {
+                            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            dialogTitle: 'Export Data Sensor',
+                            UTI: 'org.openxmlformats.spreadsheetml.sheet'
+                        });
+                    } else {
+                        // Otherwise use the file path directly
+                        await Sharing.shareAsync(fileToOpen, {
+                            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            dialogTitle: 'Export Data Sensor',
+                            UTI: 'org.openxmlformats.spreadsheetml.sheet'
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error opening file:', error);
+                    Alert.alert(
+                        'Error',
+                        'Tidak dapat membuka file. Silakan buka file secara manual dari folder penyimpanan.',
+                        [{ text: 'OK', style: 'default' }]
+                    );
+                }
+            }
+        });
+
+        return () => {
+            subscription.remove();
+        };
+    }, []);
 
     const blobToBase64 = (blob: Blob): Promise<string> => {
         return new Promise((resolve, reject) => {
@@ -259,34 +537,9 @@ const DetailLocationScreen = () => {
                         >
                             <TouchableOpacity
                                 onPress={handleDownload}
-                                disabled={isDownloading}
-                            // style={styles.downloadButton}
+                                disabled={isDownloading || downloadState !== 'idle'}
                             >
-                                <LinearGradient
-                                    colors={isDownloading ? ['#60a5fa', '#3b82f6'] : ['#3b82f6', '#2563eb']}
-                                    style={styles.gradientButton}
-                                >
-                                    <MotiView
-                                        animate={{
-                                            translateY: isDownloading ? [-4, 4, -4] : 0,
-                                            rotate: isDownloading ? '0deg' : '0deg'
-                                        }}
-                                        transition={{
-                                            loop: isDownloading,
-                                            type: 'timing',
-                                            duration: 1000
-                                        }}
-                                    >
-                                        <Feather
-                                            name={isDownloading ? "download-cloud" : "download"}
-                                            size={20}
-                                            color="white"
-                                        />
-                                    </MotiView>
-                                    <Text className="text-white font-semibold ml-2">
-                                        {isDownloading ? 'Mengunduh...' : 'Unduh Data Excel'}
-                                    </Text>
-                                </LinearGradient>
+                                <DownloadAnimation downloadState={downloadState} />
                             </TouchableOpacity>
                         </MotiView>
                     )}

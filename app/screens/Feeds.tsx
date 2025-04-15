@@ -1,5 +1,5 @@
 import React, { useEffect, useState, memo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Modal, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Modal, Pressable, Alert, Platform } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import moment from 'moment';
 import { Button, ButtonText } from '@/components/ui/button';
@@ -9,7 +9,11 @@ import { port } from '@/constants/https';
 import { useDebouncedCallback } from 'use-debounce';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
+import { MotiView } from 'moti';
+import * as XLSX from 'xlsx';
+import type { WorkBook, WorkSheet } from 'xlsx';
 
 interface DataPoint {
     value: number;
@@ -169,6 +173,177 @@ const timeRangeOptions: { label: string; value: TimeRange }[] = [
     { label: '1 Tahun', value: '1y' },
 ];
 
+// Setup notifications
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+    }),
+});
+
+// Define download state type
+type DownloadState = 'idle' | 'preparing' | 'downloading' | 'completed' | 'error';
+
+// Download Animation Component
+const DownloadAnimation = ({ downloadState }: { downloadState: DownloadState }) => {
+    const states = {
+        idle: {
+            scale: 1,
+            translateY: 0,
+            opacity: 1,
+            backgroundColor: '#edf4ff'
+        },
+        preparing: {
+            scale: 1.05,
+            translateY: -2,
+            opacity: 1,
+            backgroundColor: '#e3f2fd'
+        },
+        downloading: {
+            scale: 1.05,
+            translateY: -2,
+            opacity: 1,
+            backgroundColor: '#bbdefb'
+        },
+        completed: {
+            scale: 1.1,
+            translateY: -4,
+            opacity: 1,
+            backgroundColor: '#2196f3'
+        },
+        error: {
+            scale: 1,
+            translateY: 0,
+            opacity: 1,
+            backgroundColor: '#ffcdd2'
+        }
+    };
+
+    const currentState = states[downloadState] || states.idle;
+
+    return (
+        <MotiView
+            style={styles.downloadAnimationContainer}
+            from={states.idle}
+            animate={currentState}
+            transition={{
+                type: 'timing',
+                duration: 300,
+            }}
+        >
+            <HStack space="sm" style={styles.downloadAnimationContent}>
+                {downloadState === 'idle' && (
+                    <Ionicons name="download-outline" size={16} color="#333" />
+                )}
+                {downloadState === 'preparing' && (
+                    <MotiView
+                        from={{ rotate: '0deg' }}
+                        animate={{ rotate: '360deg' }}
+                        transition={{
+                            loop: true,
+                            repeatReverse: false,
+                            duration: 1000,
+                        }}
+                    >
+                        <Ionicons name="sync-outline" size={16} color="#333" />
+                    </MotiView>
+                )}
+                {downloadState === 'downloading' && (
+                    <MotiView
+                        from={{ opacity: 0.5 }}
+                        animate={{ opacity: 1 }}
+                        transition={{
+                            loop: true,
+                            duration: 500,
+                        }}
+                    >
+                        <Ionicons name="cloud-download-outline" size={16} color="#333" />
+                    </MotiView>
+                )}
+                {downloadState === 'completed' && (
+                    <MotiView
+                        from={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{
+                            type: 'spring',
+                            stiffness: 200,
+                            damping: 15
+                        }}
+                    >
+                        <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
+                    </MotiView>
+                )}
+                {downloadState === 'error' && (
+                    <MotiView
+                        from={{ rotate: '0deg' }}
+                        animate={{ rotate: '10deg' }}
+                        transition={{
+                            loop: true,
+                            repeatReverse: true,
+                            duration: 100,
+                        }}
+                    >
+                        <Ionicons name="alert-circle-outline" size={16} color="#d32f2f" />
+                    </MotiView>
+                )}
+                <Text style={[
+                    styles.downloadAnimationText,
+                    downloadState === 'completed' && styles.downloadAnimationTextCompleted
+                ]}>
+                    {downloadState === 'idle' && 'Download'}
+                    {downloadState === 'preparing' && 'Mempersiapkan Data...'}
+                    {downloadState === 'downloading' && 'Mengunduh...'}
+                    {downloadState === 'completed' && 'Download Berhasil!'}
+                    {downloadState === 'error' && 'Gagal Mengunduh'}
+                </Text>
+            </HStack>
+        </MotiView>
+    );
+};
+
+const convertToExcel = async (sensorData: Array<{
+    title: string;
+    as: string;
+    data: any[];
+}>): Promise<string> => {
+    // Create a new workbook
+    const wb: WorkBook = XLSX.utils.book_new();
+
+    // Add headers
+    const headers = ['Timestamp', ...sensorData.map(sensor => sensor.title)];
+    const ws: WorkSheet = XLSX.utils.aoa_to_sheet([headers]);
+
+    // Collect all timestamps and sort them
+    const allTimestamps = new Set<string>();
+    sensorData.forEach(sensor => {
+        sensor.data.forEach(item => {
+            allTimestamps.add(item.timestamp);
+        });
+    });
+    const sortedTimestamps = Array.from(allTimestamps).sort();
+
+    // Add data rows
+    const rows = sortedTimestamps.map(timestamp => {
+        const row = [timestamp];
+        sensorData.forEach(sensor => {
+            const dataPoint = sensor.data.find(item => item.timestamp === timestamp);
+            row.push(dataPoint ? dataPoint[sensor.as] : '');
+        });
+        return row;
+    });
+
+    // Add rows to worksheet
+    XLSX.utils.sheet_add_aoa(ws, rows, { origin: 'A2' });
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, 'Sensor Data');
+
+    // Convert to base64
+    const base64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+    return base64;
+};
+
 const FeedsScreen: React.FC = () => {
     const [chartData, setChartData] = useState<ChartData[]>(chartConfigs);
     const [globalPage, setGlobalPage] = useState(1);  // Global page to sync all charts
@@ -179,6 +354,7 @@ const FeedsScreen: React.FC = () => {
     const [isExporting, setIsExporting] = useState(false);
     const [visibleCharts, setVisibleCharts] = useState<number[]>([0, 1]);
     const scrollViewRef = useRef<ScrollView>(null);
+    const [downloadState, setDownloadState] = useState<DownloadState>('idle');
 
     // Reduce limit for first load to improve initial render speed
     const initialLimit = 100;
@@ -453,10 +629,19 @@ const FeedsScreen: React.FC = () => {
         </View>
     );
 
-    // Export data to Excel
-    const exportToExcel = async () => {
+    const downloadExcel = async () => {
         try {
             setIsExporting(true);
+            setDownloadState('preparing');
+
+            // Create a notification ID for tracking
+            const notificationId = await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Mengunduh Data Sensor",
+                    body: "Sedang mempersiapkan data...",
+                },
+                trigger: null,
+            });
 
             // Fetch all data for each sensor without pagination
             const allSensorData = await Promise.all(
@@ -466,10 +651,7 @@ const FeedsScreen: React.FC = () => {
                     let hasMoreData = true;
 
                     while (hasMoreData) {
-                        // Build the API URL with the appropriate parameters
-                        let apiUrl = `${chart.url}?page=${currentPage}&limit=1000`; // Use larger limit for export
-
-                        // Add time range parameter if not "ALL"
+                        let apiUrl = `${chart.url}?page=${currentPage}&limit=1000`;
                         if (selectedTimeRange !== 'ALL') {
                             apiUrl += `&range=${selectedTimeRange}`;
                         }
@@ -494,55 +676,211 @@ const FeedsScreen: React.FC = () => {
                 })
             );
 
-            // Create CSV content
-            let csvContent = 'Tanggal,';
-            allSensorData.forEach(sensor => {
-                csvContent += `${sensor.title},`;
-            });
-            csvContent = csvContent.slice(0, -1) + '\n';
+            // Convert data to Excel format
+            const base64Data: string = await convertToExcel(allSensorData);
 
-            // Get all unique timestamps
-            const timestamps = new Set<string>();
-            allSensorData.forEach(sensor => {
-                sensor.data.forEach((item: any) => timestamps.add(item.tanggal));
-            });
+            // Generate filename with timestamp
+            const filename = `water_sensor_data_${moment().format('YYYY-MM-DD_HH-mm-ss')}.xlsx`;
 
-            // Sort timestamps
-            const sortedTimestamps = Array.from(timestamps).sort((a, b) =>
-                moment(a).valueOf() - moment(b).valueOf()
-            );
-
-            // Add data rows
-            sortedTimestamps.forEach(timestamp => {
-                const formattedDate = moment(timestamp).format('DD-MM-YYYY HH:mm:ss');
-                csvContent += `${formattedDate},`;
-
-                allSensorData.forEach(sensor => {
-                    const point = sensor.data.find((item: any) => item.tanggal === timestamp);
-                    csvContent += `${point ? point[sensor.as] : ''},`;
-                });
-
-                csvContent = csvContent.slice(0, -1) + '\n';
+            // Update notification to show downloading
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Mengunduh Data Sensor",
+                    body: "Sedang menyimpan file...",
+                },
+                trigger: null,
+                identifier: notificationId.toString(),
             });
 
-            // Save file
-            const filename = `water_sensor_data_${moment().format('YYYY-MM-DD_HH-mm-ss')}.csv`;
-            const filepath = `${FileSystem.cacheDirectory}${filename}`;
-            await FileSystem.writeAsStringAsync(filepath, csvContent);
+            setDownloadState('downloading');
 
-            // Share file
-            await Sharing.shareAsync(filepath, {
-                mimeType: 'text/csv',
-                dialogTitle: 'Export Data Sensor',
-                UTI: 'public.comma-separated-values-text'
-            });
+            if (Platform.OS === 'android') {
+                try {
+                    // Request directory permissions for Android
+                    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+
+                    if (permissions.granted) {
+                        // Create file in the selected directory
+                        const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+                            permissions.directoryUri,
+                            filename,
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                        );
+
+                        // Write the file content directly
+                        await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+                            encoding: FileSystem.EncodingType.Base64
+                        });
+
+                        // Create a temporary copy in cache for sharing
+                        const tempFileUri = FileSystem.cacheDirectory + filename;
+                        await FileSystem.writeAsStringAsync(tempFileUri, base64Data, {
+                            encoding: FileSystem.EncodingType.Base64
+                        });
+
+                        // Update notification to show completion
+                        await Notifications.scheduleNotificationAsync({
+                            content: {
+                                title: "Unduhan Selesai",
+                                body: `File ${filename} berhasil disimpan. Ketuk untuk membuka file.`,
+                                data: {
+                                    filepath: fileUri,
+                                    tempFilepath: tempFileUri
+                                },
+                            },
+                            trigger: null,
+                            identifier: notificationId.toString(),
+                        });
+
+                        setDownloadState('completed');
+
+                        // Reset state after 2 seconds
+                        setTimeout(() => {
+                            setDownloadState('idle');
+                        }, 2000);
+
+                        Alert.alert(
+                            'Download Berhasil',
+                            `File telah berhasil disimpan di folder yang dipilih.`,
+                            [{ text: 'OK', style: 'default' }]
+                        );
+                    } else {
+                        await handleFileSharing(base64Data, filename, notificationId);
+                    }
+                } catch (error) {
+                    console.error('Error saving file on Android:', error);
+                    setDownloadState('error');
+                    setTimeout(() => {
+                        setDownloadState('idle');
+                    }, 2000);
+                    await handleFileSharing(base64Data, filename, notificationId);
+                }
+            } else {
+                await handleFileSharing(base64Data, filename, notificationId);
+            }
         } catch (error) {
-            console.error('Error exporting data:', error);
-            Alert.alert('Export Error', 'Failed to export data. Please try again.');
+            console.error('Error downloading data:', error);
+            setDownloadState('error');
+            setTimeout(() => {
+                setDownloadState('idle');
+            }, 2000);
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Error",
+                    body: "Gagal mengunduh data. Silakan coba lagi.",
+                },
+                trigger: null,
+            });
+            Alert.alert('Download Error', 'Gagal mengunduh data. Silakan coba lagi.');
         } finally {
             setIsExporting(false);
         }
     };
+
+    // Helper function to handle file sharing
+    const handleFileSharing = async (base64Data: string, filename: string, notificationId: string) => {
+        try {
+            setDownloadState('downloading');
+            const fileUri = FileSystem.cacheDirectory + filename;
+            await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+                encoding: FileSystem.EncodingType.Base64
+            });
+
+            await Sharing.shareAsync(fileUri, {
+                mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                dialogTitle: 'Export Data Sensor',
+                UTI: 'org.openxmlformats.spreadsheetml.sheet'
+            });
+
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Unduhan Selesai",
+                    body: `File ${filename} berhasil diunduh. Ketuk untuk membuka file.`,
+                    data: {
+                        filepath: fileUri,
+                        tempFilepath: fileUri
+                    },
+                },
+                trigger: null,
+                identifier: notificationId.toString(),
+            });
+
+            setDownloadState('completed');
+            setTimeout(() => {
+                setDownloadState('idle');
+            }, 2000);
+
+            Alert.alert(
+                'Download Berhasil',
+                `File telah berhasil diunduh.`,
+                [{ text: 'OK', style: 'default' }]
+            );
+        } catch (error) {
+            console.error('Error sharing file:', error);
+            setDownloadState('error');
+            setTimeout(() => {
+                setDownloadState('idle');
+            }, 2000);
+            throw new Error('Gagal membagikan file');
+        }
+    };
+
+    // Handle notification response
+    useEffect(() => {
+        const subscription = Notifications.addNotificationResponseReceivedListener(async (response) => {
+            const { filepath } = response.notification.request.content.data;
+            if (filepath) {
+                try {
+                    if (Platform.OS === 'android') {
+                        // For Android, we need to handle content URIs differently
+                        if (filepath.startsWith('content://')) {
+                            // Create a temporary copy of the file in cache directory
+                            const filename = filepath.split('/').pop();
+                            const tempFileUri = FileSystem.cacheDirectory + filename;
+
+                            // Copy the file from content URI to cache
+                            await FileSystem.copyAsync({
+                                from: filepath,
+                                to: tempFileUri
+                            });
+
+                            // Share the temporary file
+                            await Sharing.shareAsync(tempFileUri, {
+                                mimeType: 'text/csv',
+                                dialogTitle: 'Export Data Sensor',
+                                UTI: 'public.comma-separated-values-text'
+                            });
+                        } else {
+                            // If it's already a file URI, share directly
+                            await Sharing.shareAsync(filepath, {
+                                mimeType: 'text/csv',
+                                dialogTitle: 'Export Data Sensor',
+                                UTI: 'public.comma-separated-values-text'
+                            });
+                        }
+                    } else {
+                        // For iOS, share directly
+                        await Sharing.shareAsync(filepath, {
+                            mimeType: 'text/csv',
+                            dialogTitle: 'Export Data Sensor',
+                            UTI: 'public.comma-separated-values-text'
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error opening file:', error);
+                    Alert.alert(
+                        'Error',
+                        'Tidak dapat membuka file. Silakan buka file secara manual dari folder penyimpanan.',
+                        [{ text: 'OK', style: 'default' }]
+                    );
+                }
+            }
+        });
+
+        return () => {
+            subscription.remove();
+        };
+    }, []);
 
     // Update chart data when time range changes
     useEffect(() => {
@@ -592,17 +930,12 @@ const FeedsScreen: React.FC = () => {
                     </HStack>
                 </Button>
 
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onPress={exportToExcel}
+                <TouchableOpacity
+                    onPress={downloadExcel}
                     disabled={isExporting}
                 >
-                    <HStack space="sm">
-                        <Ionicons name="download-outline" size={16} color="#000" />
-                        <ButtonText>{isExporting ? 'Exporting...' : 'Export'}</ButtonText>
-                    </HStack>
-                </Button>
+                    <DownloadAnimation downloadState={downloadState} />
+                </TouchableOpacity>
             </View>
 
             <ScrollView
@@ -921,6 +1254,28 @@ const styles = StyleSheet.create({
     errorInfo: {
         marginLeft: 8,
         padding: 2,
+    },
+    downloadAnimationContainer: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minWidth: 120,
+    },
+    downloadAnimationContent: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    downloadAnimationText: {
+        fontSize: 14,
+        color: '#333',
+        fontWeight: '500',
+    },
+    downloadAnimationTextCompleted: {
+        color: '#fff',
     },
 });
 
