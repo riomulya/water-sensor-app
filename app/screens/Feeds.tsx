@@ -1,5 +1,5 @@
 import React, { useEffect, useState, memo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Modal, Pressable, Alert } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import moment from 'moment';
 import { Button, ButtonText } from '@/components/ui/button';
@@ -28,6 +28,8 @@ interface ChartData {
     page: number;
     loading: boolean;
     totalPage: number;  // Track the total pages for each chart
+    hasError: boolean;  // Track if this chart has an error
+    errorMessage: string; // Store error message
 }
 
 const chartConfigs: ChartData[] = [
@@ -40,7 +42,9 @@ const chartConfigs: ChartData[] = [
         data: [],
         page: 1,
         loading: false,
-        totalPage: 1
+        totalPage: 1,
+        hasError: false,
+        errorMessage: ''
     },
     {
         title: 'Acceleration X',
@@ -51,7 +55,9 @@ const chartConfigs: ChartData[] = [
         data: [],
         page: 1,
         loading: false,
-        totalPage: 1
+        totalPage: 1,
+        hasError: false,
+        errorMessage: ''
     },
     {
         title: 'Acceleration Y',
@@ -62,7 +68,9 @@ const chartConfigs: ChartData[] = [
         data: [],
         page: 1,
         loading: false,
-        totalPage: 1
+        totalPage: 1,
+        hasError: false,
+        errorMessage: ''
     },
     {
         title: 'Acceleration Z',
@@ -73,7 +81,9 @@ const chartConfigs: ChartData[] = [
         data: [],
         page: 1,
         loading: false,
-        totalPage: 1
+        totalPage: 1,
+        hasError: false,
+        errorMessage: ''
     },
     {
         title: 'Temperature',
@@ -84,7 +94,9 @@ const chartConfigs: ChartData[] = [
         data: [],
         page: 1,
         loading: false,
-        totalPage: 1
+        totalPage: 1,
+        hasError: false,
+        errorMessage: ''
     },
     {
         title: 'Turbidity',
@@ -95,7 +107,9 @@ const chartConfigs: ChartData[] = [
         data: [],
         page: 1,
         loading: false,
-        totalPage: 1
+        totalPage: 1,
+        hasError: false,
+        errorMessage: ''
     },
 ];
 
@@ -103,6 +117,7 @@ const chartConfigs: ChartData[] = [
 const createDataPoint = (item: any, as: string): DataPoint => {
     try {
         const value = parseFloat(item[as]);
+        // Parse date correctly from ISO format (API returns format like "2025-03-24T13:05:00.000Z")
         const date = moment(item.tanggal);
 
         if (isNaN(value)) {
@@ -115,11 +130,11 @@ const createDataPoint = (item: any, as: string): DataPoint => {
 
         return {
             value: value,
-            dataPointText: value.toString(),
+            dataPointText: value.toFixed(2),
             label: date.format('DD-MM-YYYY HH:mm:ss'),
             labelComponent: () => (
                 <Text style={[styles.italicLabel, { transform: [{ rotate: '-60deg' }] }]}>
-                    {date.format('DD/MM HH:mm')}
+                    {date.format('DD/MM/YYYY HH:mm:ss')}
                 </Text>
             )
         };
@@ -137,7 +152,7 @@ const createDataPoint = (item: any, as: string): DataPoint => {
 // Memoized chart component to prevent unnecessary re-renders
 const MemoizedLineChart = memo(LineChart);
 
-type TimeRange = 'ALL' | '1h' | '3h' | '7h' | '1d' | '2d' | '3d' | '7d';
+type TimeRange = 'ALL' | '1h' | '3h' | '7h' | '1d' | '2d' | '3d' | '7d' | '1m' | '3m' | '6m' | '1y';
 
 const timeRangeOptions: { label: string; value: TimeRange }[] = [
     { label: 'Semua', value: 'ALL' },
@@ -148,6 +163,10 @@ const timeRangeOptions: { label: string; value: TimeRange }[] = [
     { label: '2 Hari', value: '2d' },
     { label: '3 Hari', value: '3d' },
     { label: '7 Hari', value: '7d' },
+    { label: '1 Bulan', value: '1m' },
+    { label: '3 Bulan', value: '3m' },
+    { label: '6 Bulan', value: '6m' },
+    { label: '1 Tahun', value: '1y' },
 ];
 
 const FeedsScreen: React.FC = () => {
@@ -155,7 +174,7 @@ const FeedsScreen: React.FC = () => {
     const [globalPage, setGlobalPage] = useState(1);  // Global page to sync all charts
     const [isRefreshing, setIsRefreshing] = useState(false);  // State to manage refresh control
     const [isDataLoaded, setIsDataLoaded] = useState(false);  // Track initial data load
-    const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRange>('1h');
+    const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRange>('ALL');
     const [showTimeRangeModal, setShowTimeRangeModal] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const [visibleCharts, setVisibleCharts] = useState<number[]>([0, 1]);
@@ -199,62 +218,22 @@ const FeedsScreen: React.FC = () => {
         });
     }, []);
 
-    // Calculate time range based on selection
-    const getTimeRange = useCallback((range: TimeRange) => {
-        const now = moment();
-        switch (range) {
-            case '1h': return now.clone().subtract(1, 'hours');
-            case '3h': return now.clone().subtract(3, 'hours');
-            case '7h': return now.clone().subtract(7, 'hours');
-            case '1d': return now.clone().subtract(1, 'days');
-            case '2d': return now.clone().subtract(2, 'days');
-            case '3d': return now.clone().subtract(3, 'days');
-            case '7d': return now.clone().subtract(7, 'days');
-            default: return now.clone().subtract(1, 'hours');
-        }
-    }, []);
-
-    // Filter data based on time range from the latest timestamp
-    const filterDataByTimeRange = useCallback((data: DataPoint[], range: TimeRange, latestTimestamp: moment.Moment) => {
-        if (range === 'ALL') return data;
-
-        const startTime = getTimeRangeFromLatest(range, latestTimestamp);
-        console.log('Filtering data from:', startTime.format('DD-MM-YYYY HH:mm:ss'));
-
-        const filteredData = data.filter(point => {
-            try {
-                const pointTime = moment(point.label, 'DD-MM-YYYY HH:mm:ss');
-                const isInRange = pointTime.isSameOrAfter(startTime) && pointTime.isSameOrBefore(latestTimestamp);
-                return isInRange;
-            } catch (error) {
-                console.error('Error parsing date:', point.label, error);
-                return false;
-            }
-        });
-
-        console.log('Filtered data length:', filteredData.length);
-        return filteredData;
-    }, []);
-
-    // Calculate time range based on selection from the latest timestamp
-    const getTimeRangeFromLatest = useCallback((range: TimeRange, latestTimestamp: moment.Moment) => {
-        switch (range) {
-            case '1h': return latestTimestamp.clone().subtract(1, 'hours');
-            case '3h': return latestTimestamp.clone().subtract(3, 'hours');
-            case '7h': return latestTimestamp.clone().subtract(7, 'hours');
-            case '1d': return latestTimestamp.clone().subtract(1, 'days');
-            case '2d': return latestTimestamp.clone().subtract(2, 'days');
-            case '3d': return latestTimestamp.clone().subtract(3, 'days');
-            case '7d': return latestTimestamp.clone().subtract(7, 'days');
-            default: return latestTimestamp.clone().subtract(1, 'hours');
-        }
-    }, []);
-
     // Fetch data for a specific chart
     const fetchData = async (url: string, as: string, page: number) => {
         try {
             console.log('Fetching data for:', url, 'page:', page);
-            const response = await fetch(`${url}?page=${page}&limit=${limit}`);
+
+            // Build the API URL with the appropriate parameters
+            let apiUrl = `${url}?page=${page}&limit=${limit}`;
+
+            // Add time range parameter if not "ALL"
+            if (selectedTimeRange !== 'ALL') {
+                apiUrl += `&range=${selectedTimeRange}`;
+            }
+
+            console.log('API URL:', apiUrl);
+
+            const response = await fetch(apiUrl);
             const json = await response.json();
 
             if (json.success) {
@@ -269,35 +248,32 @@ const FeedsScreen: React.FC = () => {
                     createDataPoint(item, as)
                 );
 
-                // If time range is 'ALL', return all data
-                if (selectedTimeRange === 'ALL') {
-                    return {
-                        formattedData: windowData(formattedData),
-                        totalPage: json.totalPage,
-                        hasMore: page < json.totalPage
-                    };
-                }
-
-                // Get the latest timestamp from the data
-                const latestTimestamp = moment(sortedData[0]?.tanggal);
-                console.log('Latest timestamp:', latestTimestamp.format('DD-MM-YYYY HH:mm:ss'));
-
-                // Filter data based on selected time range from the latest timestamp
-                const filteredData = filterDataByTimeRange(formattedData, selectedTimeRange, latestTimestamp);
-
-                // Window the data for better performance
-                const optimizedData = windowData(filteredData);
-                console.log('Optimized data points:', optimizedData.length);
                 return {
-                    formattedData: optimizedData,
+                    formattedData: windowData(formattedData),
                     totalPage: json.totalPage,
-                    hasMore: false // Set hasMore to false since we don't want to load more pages for time range
+                    hasMore: page < json.totalPage,
+                    hasError: false,
+                    errorMessage: ''
+                };
+            } else {
+                console.warn('API error:', json.message);
+                return {
+                    formattedData: [],
+                    totalPage: 0,
+                    hasMore: false,
+                    hasError: true,
+                    errorMessage: json.message || 'Error fetching data'
                 };
             }
-            return { formattedData: [], totalPage: 1, hasMore: false };
         } catch (error) {
             console.error('Error fetching data:', error);
-            return { formattedData: [], totalPage: 1, hasMore: false };
+            return {
+                formattedData: [],
+                totalPage: 0,
+                hasMore: false,
+                hasError: true,
+                errorMessage: error instanceof Error ? error.message : 'Network error'
+            };
         }
     };
 
@@ -305,12 +281,19 @@ const FeedsScreen: React.FC = () => {
     const fetchAllData = async () => {
         try {
             // First set all charts to loading
-            setChartData(prev => prev.map(chart => ({ ...chart, loading: true })));
+            setChartData(prev => prev.map(chart => ({ ...chart, loading: true, hasError: false, errorMessage: '' })));
 
             const updatedChartData = await Promise.all(
                 chartData.map(async (chart) => {
-                    const { formattedData, totalPage } = await fetchData(chart.url, chart.as, chart.page);
-                    return { ...chart, data: formattedData, loading: false, totalPage };
+                    const { formattedData, totalPage, hasError, errorMessage } = await fetchData(chart.url, chart.as, chart.page);
+                    return {
+                        ...chart,
+                        data: formattedData,
+                        loading: false,
+                        totalPage: totalPage || 1,
+                        hasError,
+                        errorMessage
+                    };
                 })
             );
 
@@ -319,7 +302,12 @@ const FeedsScreen: React.FC = () => {
         } catch (error) {
             console.error('Error fetching data:', error);
             setChartData((prevData) =>
-                prevData.map((prevChart) => ({ ...prevChart, loading: false }))
+                prevData.map((prevChart) => ({
+                    ...prevChart,
+                    loading: false,
+                    hasError: true,
+                    errorMessage: error instanceof Error ? error.message : 'Network error'
+                }))
             );
         }
     };
@@ -362,11 +350,7 @@ const FeedsScreen: React.FC = () => {
 
     // Handle pagination change for a specific chart
     const handlePageChange = useCallback(async (chartIndex: number, direction: 'next' | 'prev' | 'first' | 'last') => {
-        // If time range is not 'ALL', disable pagination
-        if (selectedTimeRange !== 'ALL') {
-            return;
-        }
-
+        // All time ranges now support pagination (handled by server)
         const updatedChartData = [...chartData];
         const chart = updatedChartData[chartIndex];
         let newPage = chart.page;
@@ -393,7 +377,12 @@ const FeedsScreen: React.FC = () => {
     // Refresh all data and reset pages
     const refreshData = useDebouncedCallback(async () => {
         setIsRefreshing(true);
-        const resetPagesChartData = chartData.map((chart) => ({ ...chart, page: 1 }));
+        const resetPagesChartData = chartData.map((chart) => ({
+            ...chart,
+            page: 1,
+            hasError: false,
+            errorMessage: ''
+        }));
         setChartData(resetPagesChartData);
         await fetchAllData();
         setIsRefreshing(false);
@@ -414,12 +403,12 @@ const FeedsScreen: React.FC = () => {
                 newGlobalPage = 1;
                 break;
             case 'last':
-                newGlobalPage = Math.min(...chartData.map(chart => chart.totalPage));  // Get the minimum total page
+                newGlobalPage = Math.min(...chartData.map(chart => chart.totalPage || 1));  // Get the minimum total page
                 break;
         }
 
         // Update global page only if it is valid (greater than 0 and less than or equal to totalPage)
-        const minTotalPage = Math.min(...chartData.map(chart => chart.totalPage));  // Get the minimum total page
+        const minTotalPage = Math.min(...chartData.map(chart => chart.totalPage || 1));  // Get the minimum total page
         if (newGlobalPage > 0 && newGlobalPage <= minTotalPage) {  // Use minTotalPage instead of chartData[0].totalPage
             setGlobalPage(newGlobalPage);  // Update the global page state
 
@@ -449,6 +438,14 @@ const FeedsScreen: React.FC = () => {
         </Button>
     ));
 
+    // Empty state when no data is found
+    const EmptyStateView = ({ message }: { message: string }) => (
+        <View style={styles.emptyStateContainer}>
+            <Ionicons name="alert-circle-outline" size={48} color="#999" />
+            <Text style={styles.emptyStateText}>{message}</Text>
+        </View>
+    );
+
     // Add loading skeleton
     const ChartSkeleton = () => (
         <View style={styles.loadingContainer}>
@@ -461,31 +458,70 @@ const FeedsScreen: React.FC = () => {
         try {
             setIsExporting(true);
 
+            // Fetch all data for each sensor without pagination
+            const allSensorData = await Promise.all(
+                chartData.map(async (chart) => {
+                    let allData: any[] = [];
+                    let currentPage = 1;
+                    let hasMoreData = true;
+
+                    while (hasMoreData) {
+                        // Build the API URL with the appropriate parameters
+                        let apiUrl = `${chart.url}?page=${currentPage}&limit=1000`; // Use larger limit for export
+
+                        // Add time range parameter if not "ALL"
+                        if (selectedTimeRange !== 'ALL') {
+                            apiUrl += `&range=${selectedTimeRange}`;
+                        }
+
+                        const response = await fetch(apiUrl);
+                        const json = await response.json();
+
+                        if (json.success && json.data.length > 0) {
+                            allData = [...allData, ...json.data];
+                            currentPage++;
+                            hasMoreData = currentPage <= json.totalPage;
+                        } else {
+                            hasMoreData = false;
+                        }
+                    }
+
+                    return {
+                        title: chart.title,
+                        as: chart.as,
+                        data: allData
+                    };
+                })
+            );
+
             // Create CSV content
             let csvContent = 'Tanggal,';
-            chartData.forEach(chart => {
-                csvContent += `${chart.title},`;
+            allSensorData.forEach(sensor => {
+                csvContent += `${sensor.title},`;
             });
             csvContent = csvContent.slice(0, -1) + '\n';
 
             // Get all unique timestamps
             const timestamps = new Set<string>();
-            chartData.forEach(chart => {
-                chart.data.forEach(point => timestamps.add(point.label));
+            allSensorData.forEach(sensor => {
+                sensor.data.forEach((item: any) => timestamps.add(item.tanggal));
             });
 
             // Sort timestamps
             const sortedTimestamps = Array.from(timestamps).sort((a, b) =>
-                moment(a, 'DD-MM-YYYY HH:mm:ss').valueOf() - moment(b, 'DD-MM-YYYY HH:mm:ss').valueOf()
+                moment(a).valueOf() - moment(b).valueOf()
             );
 
             // Add data rows
             sortedTimestamps.forEach(timestamp => {
-                csvContent += `${timestamp},`;
-                chartData.forEach(chart => {
-                    const point = chart.data.find(p => p.label === timestamp);
-                    csvContent += `${point ? point.value : ''},`;
+                const formattedDate = moment(timestamp).format('DD-MM-YYYY HH:mm:ss');
+                csvContent += `${formattedDate},`;
+
+                allSensorData.forEach(sensor => {
+                    const point = sensor.data.find((item: any) => item.tanggal === timestamp);
+                    csvContent += `${point ? point[sensor.as] : ''},`;
                 });
+
                 csvContent = csvContent.slice(0, -1) + '\n';
             });
 
@@ -502,6 +538,7 @@ const FeedsScreen: React.FC = () => {
             });
         } catch (error) {
             console.error('Error exporting data:', error);
+            Alert.alert('Export Error', 'Failed to export data. Please try again.');
         } finally {
             setIsExporting(false);
         }
@@ -510,9 +547,35 @@ const FeedsScreen: React.FC = () => {
     // Update chart data when time range changes
     useEffect(() => {
         if (isDataLoaded) {
+            // Reset pages when time range changes
+            const resetPagesChartData = chartData.map((chart) => ({
+                ...chart,
+                page: 1,
+                hasError: false,
+                errorMessage: ''
+            }));
+            setChartData(resetPagesChartData);
+            setGlobalPage(1);
             fetchAllData(); // Fetch new data when time range changes
         }
     }, [selectedTimeRange]);
+
+    // Update handler for time range change
+    const handleTimeRangeChange = async (range: TimeRange) => {
+        setSelectedTimeRange(range);
+        setShowTimeRangeModal(false);
+
+        // No need for special handling as we're using server-side filtering now
+        // Just reset pagination and fetch data
+        setGlobalPage(1);
+        const resetPagesChartData = chartData.map((chart) => ({
+            ...chart,
+            page: 1,
+            hasError: false,
+            errorMessage: ''
+        }));
+        setChartData(resetPagesChartData);
+    };
 
     return (
         <View style={styles.container}>
@@ -551,12 +614,27 @@ const FeedsScreen: React.FC = () => {
             >
                 {chartData.map((chart, index) => (
                     <View style={styles.chartContainer} key={index}>
-                        <Text style={styles.title}>{chart.title}</Text>
+                        <HStack style={styles.chartHeader}>
+                            <Text style={styles.title}>{chart.title}</Text>
+                            {chart.hasError && (
+                                <TouchableOpacity
+                                    onPress={() => Alert.alert('Error', chart.errorMessage)}
+                                    style={styles.errorInfo}
+                                >
+                                    <Ionicons name="alert-circle" size={18} color="#ff6b6b" />
+                                </TouchableOpacity>
+                            )}
+                        </HStack>
+
                         {chart.loading ? (
                             <ChartSkeleton />
+                        ) : chart.hasError ? (
+                            <EmptyStateView message={chart.errorMessage || 'Data tidak tersedia'} />
+                        ) : chart.data.length === 0 ? (
+                            <EmptyStateView message="Data tidak ditemukan" />
                         ) : visibleCharts.includes(index) ? (
                             <MemoizedLineChart
-                                key={`${index}-${chart.page}`}  // Add page to key to force proper re-render
+                                key={`${index}-${chart.page}-${selectedTimeRange}`}  // Added timeRange to key for proper re-render
                                 focusEnabled={false}  // Disable focus animation for performance
                                 isAnimated={false}  // Disable animations for large datasets
                                 data={chart.data}
@@ -564,7 +642,6 @@ const FeedsScreen: React.FC = () => {
                                 spacing={50}
                                 thickness={5} // Reduce line thickness
                                 color={chart.color}
-                                // hideDataPoints={chart.data.length > 30} // Hide data points for large datasets
                                 dataPointsColor={'black'}
                                 dataPointLabelWidth={20}
                                 dataPointsRadius={3} // Smaller data points
@@ -602,36 +679,36 @@ const FeedsScreen: React.FC = () => {
                         )}
 
                         {/* Pagination for individual chart */}
-                        <View style={styles.pagination}>
-                            <PaginationButton
-                                onPress={() => handlePageChange(index, 'first')}
-                                disabled={chart.page <= 1}
-                                text="First"
-                            />
+                        {!chart.hasError && chart.data.length > 0 && (
+                            <View style={styles.pagination}>
+                                <PaginationButton
+                                    onPress={() => handlePageChange(index, 'first')}
+                                    disabled={chart.page <= 1}
+                                    text="First"
+                                />
 
-                            <PaginationButton
-                                onPress={() => handlePageChange(index, 'prev')}
-                                disabled={chart.page <= 1}
-                                text="Prev"
-                            />
+                                <PaginationButton
+                                    onPress={() => handlePageChange(index, 'prev')}
+                                    disabled={chart.page <= 1}
+                                    text="Prev"
+                                />
 
-                            <Text>{`Page ${chart.page} of ${chart.totalPage}`}</Text>
-                            <PaginationButton
-                                onPress={() => handlePageChange(index, 'next')}
-                                disabled={globalPage >= chart.totalPage}
-                                text="Next"
-                            />
+                                <Text>{`Page ${chart.page} of ${chart.totalPage || 1}`}</Text>
+                                <PaginationButton
+                                    onPress={() => handlePageChange(index, 'next')}
+                                    disabled={chart.page >= chart.totalPage}
+                                    text="Next"
+                                />
 
-                            <PaginationButton
-                                onPress={() => handlePageChange(index, 'last')}
-                                disabled={globalPage >= chart.totalPage}
-                                text="Last"
-                            />
-
-                        </View>
+                                <PaginationButton
+                                    onPress={() => handlePageChange(index, 'last')}
+                                    disabled={chart.page >= chart.totalPage}
+                                    text="Last"
+                                />
+                            </View>
+                        )}
                     </View >
-                ))
-                }
+                ))}
 
                 {/* Global Pagination */}
                 <View style={styles.globalPagination}>
@@ -687,10 +764,7 @@ const FeedsScreen: React.FC = () => {
                                         styles.timeRangeOption,
                                         selectedTimeRange === option.value && styles.timeRangeOptionSelected
                                     ]}
-                                    onPress={() => {
-                                        setSelectedTimeRange(option.value);
-                                        setShowTimeRangeModal(false);
-                                    }}
+                                    onPress={() => handleTimeRangeChange(option.value)}
                                 >
                                     <Text style={[
                                         styles.timeRangeOptionText,
@@ -712,6 +786,7 @@ const FeedsScreen: React.FC = () => {
                     </View>
                 </View>
             </Modal>
+            <View style={{ height: 100 }}></View>
         </View>
     );
 };
@@ -738,6 +813,12 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginBottom: 10,
         alignSelf: 'center',
+    },
+    chartHeader: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 5,
     },
     pagination: {
         flexDirection: 'row',
@@ -823,6 +904,23 @@ const styles = StyleSheet.create({
     modalCloseButton: {
         marginTop: 20,
         alignSelf: 'center',
+    },
+    emptyStateContainer: {
+        height: 200,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f9f9f9',
+        borderRadius: 8,
+    },
+    emptyStateText: {
+        marginTop: 10,
+        color: '#666',
+        textAlign: 'center',
+        fontSize: 14,
+    },
+    errorInfo: {
+        marginLeft: 8,
+        padding: 2,
     },
 });
 

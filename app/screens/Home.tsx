@@ -47,6 +47,7 @@ import { Divider } from '@/components/ui/divider';
 import { AnimatePresence, MotiView } from 'moti';
 // import { NotificationComponent } from '@/components/notification/NotificationComponent';
 import { useForegroundService } from '@/hooks/useForegroundService';
+import { useForm, Controller } from "react-hook-form";
 
 // Notifications.setNotificationHandler({
 //     handleNotification: async () => ({
@@ -261,6 +262,14 @@ const HomeScreen = () => {
     const GEOFENCE_TASK = 'geofence-monitoring';
 
     const { isServiceRunning, startService, stopService } = useForegroundService(sensorData);
+
+    // Tambahkan setup react-hook-form
+    const { control, handleSubmit, setValue, formState: { errors }, reset } = useForm({
+        defaultValues: {
+            nama_sungai: '',
+            address: ''
+        }
+    });
 
     useEffect(() => {
         if (!socketRef.current) {
@@ -483,12 +492,38 @@ const HomeScreen = () => {
         return Math.floor(1000000 + Math.random() * 9000000); // 7-digit random number
     };
 
+    // Pertahankan logic yang sudah ada, hanya ubah cara akses value
+    useEffect(() => {
+        if (dialogContent.address) {
+            setValue('address', dialogContent.address);
+        }
+        // Reset nama_sungai saat dialog terbuka
+        setValue('nama_sungai', '');
+    }, [dialogContent.address, showAddressDialog]);
+
+    // Modifikasi handleSaveLocation
     const handleSaveLocation = async () => {
+        // Validasi nama sungai terlebih dahulu
+        if (!control._formValues.nama_sungai || control._formValues.nama_sungai.trim() === '') {
+            toast.show({
+                placement: 'top',
+                render: () => (
+                    <Toast action="error">
+                        <ToastTitle>Nama Lokasi Dibutuhkan</ToastTitle>
+                        <ToastDescription>Silakan isi nama lokasi sungai</ToastDescription>
+                    </Toast>
+                )
+            });
+            riverNameInputRef.current?.focus();
+            return;
+        }
+
         try {
+            const formValues = control._formValues;
             const postData = {
                 id_lokasi: generateLocationId(),
-                nama_sungai: dialogContent.nama_sungai,
-                alamat: dialogContent.address,
+                nama_sungai: formValues.nama_sungai,
+                alamat: formValues.address || dialogContent.address,
                 lat: Number(dialogContent.latitude),
                 lon: Number(dialogContent.longitude),
                 tanggal: new Date().toISOString()
@@ -517,7 +552,25 @@ const HomeScreen = () => {
                 longitude: postData.lon
             });
 
-            // Pastikan ini dipanggil
+            // Tambahkan toast sukses
+            toast.show({
+                placement: 'top',
+                duration: 3000,
+                render: ({ id }) => (
+                    <Toast nativeID={"toast-" + id} action="success" variant="solid">
+                        <ToastTitle>Berhasil</ToastTitle>
+                        <ToastDescription>Lokasi monitoring berhasil ditambahkan</ToastDescription>
+                    </Toast>
+                ),
+            });
+
+            // Reset form setelah sukses
+            reset({
+                nama_sungai: '',
+                address: ''
+            });
+
+            // Tutup dialog
             setShowAddressDialog(false);
 
             // Setelah menyimpan, kirim lokasi ke server
@@ -537,11 +590,28 @@ const HomeScreen = () => {
             }
         } catch (error) {
             console.error('Error:', error);
-            Alert.alert(
-                'Error Lokasi',
-                (error as Error).message || 'Terjadi kesalahan saat menyimpan lokasi'
-            );
+
+            // Ganti alert dengan toast error yang lebih baik
+            toast.show({
+                placement: 'top',
+                duration: 4000,
+                render: ({ id }) => (
+                    <Toast nativeID={"toast-" + id} action="error" variant="solid">
+                        <ToastTitle>Gagal Menyimpan</ToastTitle>
+                        <ToastDescription>{(error as Error).message || 'Terjadi kesalahan saat menyimpan lokasi'}</ToastDescription>
+                    </Toast>
+                ),
+            });
         }
+    };
+
+    // Tambahkan fungsi untuk menutup dan me-reset form
+    const handleCloseAddressDialog = () => {
+        reset({
+            nama_sungai: '',
+            address: ''
+        });
+        setShowAddressDialog(false);
     };
 
     // Update delete handler
@@ -1167,7 +1237,7 @@ const HomeScreen = () => {
             </Modal>
             <Modal
                 isOpen={showAddressDialog}
-                onClose={() => setShowAddressDialog(false)}
+                onClose={handleCloseAddressDialog}
                 size="md"
             >
                 <ModalBackdrop />
@@ -1184,7 +1254,7 @@ const HomeScreen = () => {
                                 </Text>
                             </View>
                         </View>
-                        <ModalCloseButton onPress={() => setShowAddressDialog(false)}>
+                        <ModalCloseButton onPress={handleCloseAddressDialog}>
                             <Icon
                                 as={CloseIcon}
                                 size="md"
@@ -1198,30 +1268,52 @@ const HomeScreen = () => {
                                 <Text className="text-sm text-typography-600 mb-1.5">
                                     Nama Lokasi <Text className="text-red-500">*</Text>
                                 </Text>
-                                <TextInput
-                                    ref={riverNameInputRef}
-                                    style={styles.inputImproved}
-                                    placeholder="Contoh: Kali Ciliwung Depok"
-                                    placeholderTextColor="#94a3b8"
-                                    value={dialogContent.nama_sungai}
-                                    onChangeText={(text) => setDialogContent(prev => ({
-                                        ...prev,
-                                        nama_sungai: text
-                                    }))}
-                                    autoFocus
+                                <Controller
+                                    control={control}
+                                    name="nama_sungai"
+                                    rules={{ required: "Nama lokasi harus diisi" }}
+                                    render={({ field: { onChange, onBlur, value } }) => (
+                                        <View>
+                                            <TextInput
+                                                ref={riverNameInputRef}
+                                                style={[
+                                                    styles.inputImproved,
+                                                    errors.nama_sungai ? { borderColor: '#ef4444', borderWidth: 1.5 } : {}
+                                                ]}
+                                                placeholder="Contoh: Kali Ciliwung Depok"
+                                                placeholderTextColor="#94a3b8"
+                                                onBlur={onBlur}
+                                                onChangeText={onChange}
+                                                value={value}
+                                                autoFocus
+                                            />
+                                            {errors.nama_sungai && (
+                                                <Text className="text-red-500 text-xs mt-1 ml-1">
+                                                    {errors.nama_sungai.message}
+                                                </Text>
+                                            )}
+                                        </View>
+                                    )}
                                 />
                             </View>
 
                             <View>
                                 <Text className="text-sm text-typography-600 mb-1.5">Alamat Lengkap</Text>
-                                <TextInput
-                                    style={[styles.inputImproved, styles.multilineInput]}
-                                    value={dialogContent.address}
-                                    onChangeText={(text) => setDialogContent(prev => ({ ...prev, address: text }))}
-                                    placeholder="Alamat akan otomatis terisi dari koordinat peta"
-                                    placeholderTextColor="#94a3b8"
-                                    multiline={true}
-                                    numberOfLines={4}
+                                <Controller
+                                    control={control}
+                                    name="address"
+                                    render={({ field: { onChange, onBlur, value } }) => (
+                                        <TextInput
+                                            style={[styles.inputImproved, styles.multilineInput]}
+                                            onBlur={onBlur}
+                                            onChangeText={onChange}
+                                            value={value}
+                                            placeholder="Alamat akan otomatis terisi dari koordinat peta"
+                                            placeholderTextColor="#94a3b8"
+                                            multiline={true}
+                                            numberOfLines={4}
+                                        />
+                                    )}
                                 />
                             </View>
 
@@ -1245,14 +1337,14 @@ const HomeScreen = () => {
                         <View style={styles.footerButtonContainer}>
                             <Button
                                 variant="outline"
-                                onPress={() => setShowAddressDialog(false)}
+                                onPress={handleCloseAddressDialog}
                                 size="sm"
                                 className="flex-1"
                             >
                                 <ButtonText>Batal</ButtonText>
                             </Button>
                             <Button
-                                onPress={handleSaveLocation}
+                                onPress={handleSubmit(handleSaveLocation)}
                                 size="sm"
                                 className="flex-1 bg-emerald-600"
                             >
