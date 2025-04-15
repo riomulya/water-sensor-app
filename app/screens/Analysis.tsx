@@ -1,4 +1,4 @@
-import { View, StyleSheet, ScrollView, TextInput, Modal, Button, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput, Modal, Button, Pressable, Dimensions } from 'react-native';
 import React, { useState, useEffect } from 'react';
 import { InputField } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -119,7 +119,10 @@ const AnalysisScreen = () => {
                 </View>
             </MotiView>
 
-            <ScrollView contentContainerStyle={styles.scrollViewContainer}>
+            <ScrollView
+                contentContainerStyle={styles.scrollViewContainer}
+                showsVerticalScrollIndicator={false}
+            >
                 {filteredData.map((item, index) => (
                     <MotiView
                         key={item.id}
@@ -132,6 +135,7 @@ const AnalysisScreen = () => {
                             <Pressable
                                 onPress={() => handleCardPress(item.id)}
                                 style={styles.pressable}
+                                android_ripple={{ color: '#f1f5f9', borderless: false, radius: 16 }}
                             >
                                 <MotiView
                                     animate={{ translateX: isPressed ? 2 : 0 }}
@@ -157,7 +161,7 @@ const AnalysisScreen = () => {
 
                                         <View style={styles.textContainer}>
                                             <Heading
-                                                numberOfLines={1}
+                                                numberOfLines={2}
                                                 ellipsizeMode="tail"
                                                 style={styles.title}
                                             >
@@ -172,8 +176,6 @@ const AnalysisScreen = () => {
                                                     style={styles.rowIcon}
                                                 />
                                                 <Text
-                                                    numberOfLines={1}
-                                                    ellipsizeMode="tail"
                                                     style={styles.locationText}
                                                 >
                                                     {item.location}
@@ -188,8 +190,6 @@ const AnalysisScreen = () => {
                                                     style={styles.rowIcon}
                                                 />
                                                 <Text
-                                                    numberOfLines={1}
-                                                    ellipsizeMode="tail"
                                                     style={styles.dateText}
                                                 >
                                                     {item.date}
@@ -204,9 +204,13 @@ const AnalysisScreen = () => {
                                             >
                                                 <Text style={styles.ctaText}>
                                                     Lihat Detail Analisis
-
                                                 </Text>
-
+                                                <Ionicons
+                                                    name="chevron-forward"
+                                                    size={16}
+                                                    color="#4f46e5"
+                                                    style={styles.ctaIcon}
+                                                />
                                             </MotiView>
                                         </View>
                                     </View>
@@ -215,6 +219,17 @@ const AnalysisScreen = () => {
                         </Card>
                     </MotiView>
                 ))}
+                {filteredData.length === 0 && (
+                    <MotiView
+                        from={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ type: 'spring' }}
+                        style={styles.emptyContainer}
+                    >
+                        <Ionicons name="water-outline" size={60} color="#d1d5db" />
+                        <Text style={styles.emptyText}>Tidak ada data ditemukan</Text>
+                    </MotiView>
+                )}
             </ScrollView>
             <View style={{ height: 100 }}></View>
         </LinearGradient>
@@ -223,27 +238,34 @@ const AnalysisScreen = () => {
 
 export default AnalysisScreen;
 
+const { width } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
     container: {
         flex: 1,
         paddingTop: 24,
     },
     searchContainer: {
-        marginHorizontal: 20,
-        marginBottom: 16,
+        position: 'absolute',
+        top: 16,
+        left: 20,
+        right: 20,
+        zIndex: 10,
         backgroundColor: 'white',
-        borderRadius: 12,
-        elevation: 2,
+        borderRadius: 16,
+        elevation: 4,
         shadowColor: '#1e40af',
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+        borderWidth: 1,
+        borderColor: 'rgba(226, 232, 240, 0.6)',
     },
     searchInner: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingVertical: 14,
     },
     inputField: {
         flex: 1,
@@ -270,18 +292,23 @@ const styles = StyleSheet.create({
     card: {
         backgroundColor: 'white',
         borderRadius: 16,
-        padding: 16,
+        padding: 0,
         shadowColor: '#1e40af',
-        shadowOpacity: 0.03,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 4 },
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(226, 232, 240, 0.7)',
     },
     pressable: {
         borderRadius: 16,
+        overflow: 'hidden',
     },
     cardContent: {
         flexDirection: 'row',
         alignItems: 'center',
+        padding: 16,
     },
     iconWrapper: {
         width: 56,
@@ -289,6 +316,11 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         overflow: 'hidden',
         marginRight: 16,
+        elevation: 2,
+        shadowColor: '#1e40af',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
     },
     gradientIcon: {
         flex: 1,
@@ -306,15 +338,15 @@ const styles = StyleSheet.create({
     },
     title: {
         color: '#1e293b',
-        fontSize: 16,
+        fontSize: 17,
         fontWeight: '700',
-        marginBottom: 8,
+        marginBottom: 10,
         letterSpacing: -0.3,
     },
     infoRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 6,
+        marginBottom: 8,
     },
     rowIcon: {
         width: 20,
@@ -322,38 +354,51 @@ const styles = StyleSheet.create({
     },
     locationText: {
         color: '#475569',
-        fontSize: 13,
+        fontSize: 14,
         flex: 1,
         marginRight: 8,
+        lineHeight: 20,
     },
     dateText: {
         color: '#64748b',
-        fontSize: 12.5,
+        fontSize: 13,
         flex: 1,
+        lineHeight: 19,
     },
     ctaContainer: {
         marginTop: 12,
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderRadius: 10,
         alignSelf: 'flex-start',
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     ctaText: {
         color: '#4f46e5',
         fontWeight: '600',
-        fontSize: 13,
+        fontSize: 14,
         letterSpacing: -0.2,
     },
     ctaIcon: {
         marginLeft: 6,
-        marginTop: 2,
     },
     scrollViewContainer: {
-        paddingTop: 80, // Memberikan padding di atas untuk mencegah konten tertutup oleh search bar
-        paddingBottom: 20, // Menambahkan ruang bawah agar lebih nyaman scrollnya
+        paddingTop: 80,
+        paddingBottom: 20,
     },
     map: {
         width: '100%',
         height: '100%',
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 100,
+    },
+    emptyText: {
+        fontSize: 16,
+        color: '#94a3b8',
+        marginTop: 12,
     },
 });
