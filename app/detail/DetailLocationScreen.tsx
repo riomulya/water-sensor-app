@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Dimensions, Platform } from 'react-native';
 import { Heading } from '@/components/ui/heading';
 import { Text } from '@/components/ui/text';
@@ -37,6 +37,12 @@ interface CombinedData {
     nilai_temperature: number;
     nilai_turbidity: number;
     nilai_speed: number | null;
+}
+
+// Enhanced combined data with formatted date
+interface EnhancedCombinedData extends CombinedData {
+    formattedDate: string;
+    rowNumber: number;
 }
 
 // Define download state type
@@ -153,6 +159,130 @@ const DownloadAnimation = ({ downloadState }: { downloadState: DownloadState }) 
     );
 };
 
+// New loading animation component
+const LoadingOverlay = ({ isVisible }: { isVisible: boolean }) => {
+    return (
+        <AnimatePresence>
+            {isVisible && (
+                <MotiView
+                    from={{ opacity: 0 }}
+                    animate={{ opacity: 0.9 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ type: 'timing', duration: 300 }}
+                    style={styles.loadingOverlay}
+                >
+                    <MotiView
+                        from={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: 'spring', damping: 12 }}
+                        style={styles.loadingCard}
+                    >
+                        <MotiView
+                            from={{ rotate: '0deg' }}
+                            animate={{ rotate: '360deg' }}
+                            transition={{
+                                loop: true,
+                                repeatReverse: false,
+                                duration: 1000,
+                                type: 'timing',
+                                easing: Easing.linear,
+                            }}
+                            style={{ marginBottom: 16 }}
+                        >
+                            <Feather name="refresh-cw" size={30} color="#3b82f6" />
+                        </MotiView>
+                        <MotiText
+                            from={{ opacity: 0, translateY: 5 }}
+                            animate={{ opacity: 1, translateY: 0 }}
+                            transition={{ type: 'timing', duration: 300 }}
+                            className="text-slate-700 font-medium"
+                        >
+                            Memuat data...
+                        </MotiText>
+                    </MotiView>
+                </MotiView>
+            )}
+        </AnimatePresence>
+    );
+};
+
+// Row animation component
+const AnimatedTableRow = ({
+    item,
+    index,
+    isNewDataSet
+}: {
+    item: EnhancedCombinedData,
+    index: number,
+    isNewDataSet: boolean
+}) => {
+    return (
+        <MotiView
+            from={{
+                opacity: 0,
+                scale: 0.95,
+                translateX: isNewDataSet ? 10 : 0
+            }}
+            animate={{
+                opacity: 1,
+                scale: 1,
+                translateX: 0
+            }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{
+                delay: isNewDataSet ? index * 5 : index * 10,
+                type: 'spring',
+                damping: 12
+            }}
+        >
+            <DataTable.Row style={[
+                styles.dataRow,
+                index % 2 === 0 && { backgroundColor: '#f8fafc' }
+            ]}>
+                <DataTable.Cell style={styles.numberCell}>
+                    {item.rowNumber}
+                </DataTable.Cell>
+                <DataTable.Cell style={[styles.dataCell, { width: 200 }]}>
+                    <Text className="text-slate-600 text-sm">
+                        {item.formattedDate}
+                    </Text>
+                </DataTable.Cell>
+                <DataTable.Cell numeric style={[styles.dataCell, { width: 80 }]}>
+                    <Text style={{
+                        color: item.nilai_ph < 6 ? '#ef4444' : '#10b981',
+                        fontWeight: '600'
+                    }}>
+                        {item.nilai_ph.toFixed(2)}
+                    </Text>
+                </DataTable.Cell>
+                <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
+                    <Text style={{
+                        color: item.nilai_temperature > 30 ? '#ef4444' : '#3b82f6',
+                        fontWeight: '600'
+                    }}>
+                        {item.nilai_temperature.toFixed(2)}°C
+                    </Text>
+                </DataTable.Cell>
+                <DataTable.Cell numeric style={[styles.dataCell, { width: 120 }]}>
+                    {item.nilai_turbidity.toFixed(2)} NTU
+                </DataTable.Cell>
+                <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
+                    {item.nilai_speed?.toFixed(2) ?? '0.00'} m/s
+                </DataTable.Cell>
+                <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
+                    {item.nilai_accel_x.toFixed(2)}
+                </DataTable.Cell>
+                <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
+                    {item.nilai_accel_y.toFixed(2)}
+                </DataTable.Cell>
+                <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
+                    {item.nilai_accel_z.toFixed(2)}
+                </DataTable.Cell>
+            </DataTable.Row>
+        </MotiView>
+    );
+};
+
 const DetailLocationScreen = () => {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
@@ -166,6 +296,10 @@ const DetailLocationScreen = () => {
     const [page, setPage] = useState(0);
     const numberOfItemsPerPageList = [10, 20, 50, 100];
     const [downloadState, setDownloadState] = useState<DownloadState>('idle');
+
+    // Add loading transition state
+    const [isLoadingTransition, setIsLoadingTransition] = useState(false);
+    const [isNewDataSet, setIsNewDataSet] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -422,6 +556,56 @@ const DetailLocationScreen = () => {
         });
     };
 
+    // Memoize the data transformation
+    const transformedData = useMemo(() => {
+        return allCombinedData.map((item, index) => ({
+            ...item,
+            formattedDate: new Date(item.tanggal).toLocaleString('id-ID', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+            }),
+            rowNumber: (page * itemsPerPage) + index + 1
+        })) as EnhancedCombinedData[];
+    }, [allCombinedData, page, itemsPerPage]);
+
+    // Enhanced pagination handlers
+    const handlePageChange = useCallback((newPage: number) => {
+        setIsLoadingTransition(true);
+        setIsNewDataSet(false);
+
+        // Small delay to show loading animation
+        setTimeout(() => {
+            setPage(newPage);
+
+            // Hide loading after data is fetched (simulating network delay)
+            setTimeout(() => {
+                setIsLoadingTransition(false);
+            }, 400);
+        }, 300);
+    }, []);
+
+    const handleItemsPerPageChange = useCallback((newItemsPerPage: number) => {
+        setIsLoadingTransition(true);
+        setIsNewDataSet(true);
+
+        // Small delay to show loading animation
+        setTimeout(() => {
+            setItemsPerPage(newItemsPerPage);
+            setPage(0); // Reset to first page when changing items per page
+
+            // Hide loading after data is fetched (simulating network delay)
+            setTimeout(() => {
+                setIsLoadingTransition(false);
+            }, 500);
+        }, 300);
+    }, []);
+
     // Animasi untuk tabel
     const tableAnimation = useAnimationState({
         from: { opacity: 0, translateY: 20 },
@@ -450,8 +634,6 @@ const DetailLocationScreen = () => {
                         <TouchableOpacity onPress={handleBack}>
                             <MotiView
                                 animate={{ scale: 1 }}
-
-                                // whileHover={{ scale: 0.95 }}
                                 transition={{ type: 'spring' }}
                             >
                                 <Feather name="arrow-left" size={28} color="#2563eb" />
@@ -459,7 +641,6 @@ const DetailLocationScreen = () => {
                         </TouchableOpacity>
 
                         <MotiText
-                            // style={styles.title}
                             from={{ scale: 0.8, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             transition={{ delay: 200 }}
@@ -504,7 +685,6 @@ const DetailLocationScreen = () => {
                                     minute: '2-digit',
                                     second: '2-digit',
                                     hour12: false,
-
                                 })}
                             </Text>
                         </MotiView>
@@ -565,7 +745,10 @@ const DetailLocationScreen = () => {
                         </MotiView>
                     )}
                     {!loading && allCombinedData.length > 0 && (
-                        <MotiView state={tableAnimation} style={styles.tableWrapper}>
+                        <MotiView
+                            state={tableAnimation}
+                            style={styles.tableWrapper}
+                        >
                             <ScrollView
                                 horizontal
                                 style={styles.horizontalScroll}
@@ -575,13 +758,13 @@ const DetailLocationScreen = () => {
                                 <DataTable style={styles.dataTable}>
                                     <DataTable.Header>
                                         <DataTable.Title style={styles.numberCell}>No</DataTable.Title>
-                                        <DataTable.Title style={[styles.headerCell, { width: 120 }]}>
+                                        <DataTable.Title style={[styles.headerCell, { width: 200 }]}>
                                             <MotiText
                                                 from={{ scale: 0.9 }}
                                                 animate={{ scale: 1 }}
                                                 transition={{ loop: true, type: 'timing', duration: 2000 }}
                                             >
-                                                Tanggal
+                                                Tanggal & Waktu
                                             </MotiText>
                                         </DataTable.Title>
                                         <DataTable.Title numeric style={[styles.headerCell, { width: 80 }]}>pH</DataTable.Title>
@@ -594,81 +777,39 @@ const DetailLocationScreen = () => {
                                     </DataTable.Header>
 
                                     <AnimatePresence>
-                                        {allCombinedData.map((item, index) => (
-                                            <MotiView
-                                                key={index}
-                                                from={{ opacity: 0, scale: 0.95 }}
-                                                animate={{ opacity: 1, scale: 1 }}
-                                                exit={{ opacity: 0, scale: 0.8 }}
-                                                transition={{ delay: index * 30, type: 'spring', damping: 12 }}
-                                            >
-                                                <DataTable.Row style={[
-                                                    styles.dataRow,
-                                                    index % 2 === 0 && { backgroundColor: '#f8fafc' }
-                                                ]}>
-                                                    <DataTable.Cell style={styles.numberCell}>
-                                                        {(page * itemsPerPage) + index + 1}
-                                                    </DataTable.Cell>
-                                                    <DataTable.Cell style={[styles.dataCell, { width: 120 }]}>
-                                                        <Text className="text-slate-600 text-sm">
-                                                            {new Date(item.tanggal).toLocaleDateString('id-ID')}
-                                                        </Text>
-                                                    </DataTable.Cell>
-                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 80 }]}>
-                                                        <Text style={{
-                                                            color: item.nilai_ph < 6 ? '#ef4444' : '#10b981',
-                                                            fontWeight: '600'
-                                                        }}>
-                                                            {item.nilai_ph.toFixed(2)}
-                                                        </Text>
-                                                    </DataTable.Cell>
-                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
-                                                        <Text style={{
-                                                            color: item.nilai_temperature > 30 ? '#ef4444' : '#3b82f6',
-                                                            fontWeight: '600'
-                                                        }}></Text>
-                                                        {item.nilai_temperature.toFixed(2)}°C
-                                                    </DataTable.Cell>
-                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 120 }]}>
-                                                        {item.nilai_turbidity.toFixed(2)} NTU
-                                                    </DataTable.Cell>
-                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
-                                                        {item.nilai_speed?.toFixed(2) ?? '0.00'} m/s
-                                                    </DataTable.Cell>
-                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
-                                                        {item.nilai_accel_x.toFixed(2)}
-                                                    </DataTable.Cell>
-                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
-                                                        {item.nilai_accel_y.toFixed(2)}
-                                                    </DataTable.Cell>
-                                                    <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
-                                                        {item.nilai_accel_z.toFixed(2)}
-                                                    </DataTable.Cell>
-                                                </DataTable.Row>
-                                            </MotiView>
+                                        {transformedData.map((item, index) => (
+                                            <AnimatedTableRow
+                                                key={`row-${item.rowNumber}-${item.tanggal}`}
+                                                item={item}
+                                                index={index}
+                                                isNewDataSet={isNewDataSet}
+                                            />
                                         ))}
                                     </AnimatePresence>
                                 </DataTable>
                             </ScrollView>
 
-                            {/* Pagination di luar ScrollView */}
                             <DataTable.Pagination
                                 page={page}
                                 numberOfPages={Math.ceil(totalItems / itemsPerPage)}
-                                onPageChange={setPage}
+                                onPageChange={handlePageChange}
                                 label={`${page * itemsPerPage + 1}-${Math.min(
                                     (page + 1) * itemsPerPage,
                                     totalItems
-                                )} of ${totalItems}`}
+                                )} dari ${totalItems}`}
                                 numberOfItemsPerPageList={numberOfItemsPerPageList}
                                 numberOfItemsPerPage={itemsPerPage}
-                                onItemsPerPageChange={setItemsPerPage}
+                                onItemsPerPageChange={handleItemsPerPageChange}
                                 showFastPaginationControls
                                 selectPageDropdownLabel={'Baris per halaman'}
                                 style={styles.pagination}
                             />
                         </MotiView>
                     )}
+
+                    {/* Loading overlay for transitions */}
+                    <LoadingOverlay isVisible={isLoadingTransition} />
+
                     {!loading && allCombinedData.length === 0 && (
                         <MotiView
                             style={styles.emptyContainer}
@@ -739,6 +880,7 @@ const styles = StyleSheet.create({
     tableWrapper: {
         flex: 1,
         minHeight: Dimensions.get('window').height * 0.6, // Minimum 60% dari tinggi layar
+        position: 'relative',
     },
     tableHeader: {
         backgroundColor: '#3b82f6',
@@ -789,7 +931,10 @@ const styles = StyleSheet.create({
     dataTable: {
         flex: 1,
         minWidth: Dimensions.get('window').width * 1.5,
-        minHeight: Dimensions.get('window').height * 0.6, // Ganti dengan nilai fixed
+        minHeight: Dimensions.get('window').height * 0.6,
+        backgroundColor: 'white',
+        borderRadius: 12,
+        elevation: 2,
     },
     headerCell: {
         paddingVertical: 12,
@@ -812,6 +957,29 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: '#e2e8f0',
         paddingVertical: 8,
+    },
+    loadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+    },
+    loadingCard: {
+        backgroundColor: 'white',
+        padding: 24,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 5,
     },
 });
 
