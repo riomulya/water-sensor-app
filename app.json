@@ -99,10 +99,7 @@
             "vibrate": true,
             "importance": "high",
             "visibility": "public"
-          },
-          "sounds": [
-            "./assets/notification-sound.wav"
-          ]
+          }
         }
       ],
       [
