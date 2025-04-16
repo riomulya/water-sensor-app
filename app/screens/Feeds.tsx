@@ -1074,51 +1074,55 @@ const FeedsScreen: React.FC = () => {
                                     <ButtonText>Last All</ButtonText>
                                 </TouchableOpacity>
                             </Button>
+
+                            <Modal
+                                visible={showTimeRangeModal}
+                                transparent={true}
+                                animationType="fade"
+                                onRequestClose={() => setShowTimeRangeModal(false)}
+                            >
+                                <View style={styles.modalContainer}>
+                                    <View style={styles.modalOverlay}>
+                                        <View style={styles.modalContent}>
+                                            <Text style={styles.modalTitle}>Pilih Rentang Waktu</Text>
+                                            <View style={styles.timeRangeOptions}>
+                                                {timeRangeOptions.map((option) => (
+                                                    <Pressable
+                                                        key={option.value}
+                                                        style={[
+                                                            styles.timeRangeOption,
+                                                            selectedTimeRange === option.value && styles.timeRangeOptionSelected
+                                                        ]}
+                                                        onPress={() => handleTimeRangeChange(option.value)}
+                                                    >
+                                                        <Text style={[
+                                                            styles.timeRangeOptionText,
+                                                            selectedTimeRange === option.value && styles.timeRangeOptionTextSelected
+                                                        ]}>
+                                                            {option.label}
+                                                        </Text>
+                                                    </Pressable>
+                                                ))}
+                                            </View>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onPress={() => setShowTimeRangeModal(false)}
+                                                style={styles.modalCloseButton}
+                                            >
+                                                <ButtonText>Tutup</ButtonText>
+                                            </Button>
+                                        </View>
+                                    </View>
+                                </View>
+                            </Modal>
                         </VStack>
                     </HStack>
                 </View>
             </ScrollView>
 
             {/* Time Range Modal */}
-            <Modal
-                visible={showTimeRangeModal}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowTimeRangeModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Pilih Rentang Waktu</Text>
-                        <View style={styles.timeRangeOptions}>
-                            {timeRangeOptions.map((option) => (
-                                <Pressable
-                                    key={option.value}
-                                    style={[
-                                        styles.timeRangeOption,
-                                        selectedTimeRange === option.value && styles.timeRangeOptionSelected
-                                    ]}
-                                    onPress={() => handleTimeRangeChange(option.value)}
-                                >
-                                    <Text style={[
-                                        styles.timeRangeOptionText,
-                                        selectedTimeRange === option.value && styles.timeRangeOptionTextSelected
-                                    ]}>
-                                        {option.label}
-                                    </Text>
-                                </Pressable>
-                            ))}
-                        </View>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onPress={() => setShowTimeRangeModal(false)}
-                            style={styles.modalCloseButton}
-                        >
-                            <ButtonText>Tutup</ButtonText>
-                        </Button>
-                    </View>
-                </View>
-            </Modal>
+
             <View style={{ height: 100 }}></View>
         </View>
     );
@@ -1191,18 +1195,32 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#eee',
     },
-    modalOverlay: {
+    modalContainer: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    modalOverlay: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: '100%',
     },
     modalContent: {
         backgroundColor: '#fff',
         borderRadius: 15,
         padding: 20,
         width: '80%',
-        maxWidth: 400,
+        maxWidth: 350,
+        alignSelf: 'center',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
     },
     modalTitle: {
         fontSize: 18,
