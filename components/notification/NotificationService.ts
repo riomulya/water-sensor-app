@@ -179,7 +179,7 @@ export const showBackgroundNotification = async (sensorData: Partial<SensorData>
                 badge: 1,
                 android: {
                     channelId: 'sensor_monitoring',
-                    priority: Notifications.AndroidNotificationPriority.MAX,
+                    priority: Notifications.AndroidNotificationPriority.LOW,
                     color: getOverallWaterQualityColor(sanitizedData),
                     ongoing: true,
                     sticky: true,
@@ -274,7 +274,7 @@ export const updateBackgroundNotification = async (sensorData: Partial<SensorDat
                 badge: 1,
                 android: {
                     channelId: 'sensor_monitoring',
-                    priority: Notifications.AndroidNotificationPriority.MAX,
+                    priority: Notifications.AndroidNotificationPriority.LOW,
                     color: getOverallWaterQualityColor(sanitizedData),
                     ongoing: true,
                     sticky: true,
@@ -433,7 +433,7 @@ Speed: ${speed} m/s`,
                 priority: 'max',
                 android: {
                     channelId: 'sensor_monitoring',
-                    priority: Notifications.AndroidNotificationPriority.HIGH,
+                    priority: Notifications.AndroidNotificationPriority.LOW,
                     color: '#1E88E5',
                     importance: Notifications.AndroidImportance.HIGH,
                     vibrate: [0, 250, 250, 250],
@@ -585,7 +585,7 @@ const showWarningNotification = async (sensorData: SensorData, warningMessage: s
                 badge: 1,
                 android: {
                     channelId: 'sensor_monitoring',
-                    priority: Notifications.AndroidNotificationPriority.MAX,
+                    priority: Notifications.AndroidNotificationPriority.LOW,
                     color: '#FF9800', // Orange for warnings
                     sticky: true,
                     smallIcon: 'ic_warning', // Ganti dengan icon warning yang ada di resources
@@ -634,7 +634,7 @@ const showNormalConditionNotification = async (sensorData: SensorData) => {
                 badge: 1,
                 android: {
                     channelId: 'sensor_monitoring',
-                    priority: Notifications.AndroidNotificationPriority.HIGH,
+                    priority: Notifications.AndroidNotificationPriority.LOW,
                     color: '#4CAF50', // Green for normal conditions
                     smallIcon: 'ic_check_circle',
                     style: {
