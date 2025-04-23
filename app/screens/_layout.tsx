@@ -25,6 +25,7 @@ function ScreensLayout() {
                 <BottomTab.Screen name="Analysis" component={AnalysisScreen} options={{ headerShown: false }} />
                 <BottomTab.Screen name="About" component={AboutScreen} options={{ headerShown: false }} />
             </BottomTab.Navigator>
+
         </GestureHandlerRootView >
     )
 }

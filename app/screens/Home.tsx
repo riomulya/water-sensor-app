@@ -845,6 +845,17 @@ const HomeScreen = () => {
 
     return (
         <>
+            {/* Tambahkan CustomDrawer dengan style spesifik untuk memastikan di depan semua komponen */}
+            <View style={{
+                position: 'absolute',
+                width: '100%',
+                height: '100%',
+                zIndex: 9999,
+                elevation: 9999,
+                pointerEvents: drawerOpen ? 'auto' : 'none'
+            }}>
+                <CustomDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
+            </View>
             <SafeAreaView style={styles.container}>
                 {isFetchingAddress && (
                     <View style={styles.loadingOverlay}>
@@ -866,17 +877,7 @@ const HomeScreen = () => {
                 />
             </SafeAreaView>
 
-            {/* Tambahkan CustomDrawer dengan style spesifik untuk memastikan di depan semua komponen */}
-            <View style={{
-                position: 'absolute',
-                width: '100%',
-                height: '100%',
-                zIndex: 9999,
-                elevation: 9999,
-                pointerEvents: drawerOpen ? 'auto' : 'none'
-            }}>
-                <CustomDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
-            </View>
+
 
             <Fab
                 size="sm"

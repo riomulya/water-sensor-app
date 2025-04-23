@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -45,9 +45,11 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
     const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const toast = useToast();
+    const [visible, setVisible] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
+            setVisible(true);
             Animated.parallel([
                 Animated.timing(slideAnim, {
                     toValue: 0,
@@ -72,9 +74,15 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
                     duration: 300,
                     useNativeDriver: true,
                 }),
-            ]).start();
+            ]).start(() => {
+                setVisible(false);
+            });
         }
     }, [isOpen, slideAnim, fadeAnim]);
+
+    const handleBackdropPress = () => {
+        onClose();
+    };
 
     const handleLogout = async () => {
         try {
@@ -160,14 +168,15 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
         );
     };
 
-    // Fix: Remove check for _value which is not accessible
-    if (!isOpen) {
+    // Don't return null immediately when drawer is closed
+    // This allows the closing animation to complete
+    if (!visible && !isOpen) {
         return null;
     }
 
     const drawerContent = (
         <View style={styles.container}>
-            <TouchableWithoutFeedback onPress={onClose}>
+            <TouchableWithoutFeedback onPress={handleBackdropPress}>
                 <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]} />
             </TouchableWithoutFeedback>
 
