@@ -115,6 +115,19 @@ const chartConfigs: ChartData[] = [
         hasError: false,
         errorMessage: ''
     },
+    {
+        title: 'Speed',
+        as: 'nilai_speed',
+        url: `${port}data_speed`,
+        color: '#2196f3',
+        maxValue: 20,
+        data: [],
+        page: 1,
+        loading: false,
+        totalPage: 1,
+        hasError: false,
+        errorMessage: ''
+    },
 ];
 
 // Optimize DataPoint creation with memoization

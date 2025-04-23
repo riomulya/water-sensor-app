@@ -292,7 +292,7 @@ export default function App() {
         </MotiView>
 
         {/* Button */}
-        <Pressable onPress={() => { router.replace('./screens/Login'); }}>
+        <Pressable onPress={() => { router.replace('./auth/Login'); }}>
           <MotiView
             from={{ scale: 0 }}
             animate={{ scale: 1 }}

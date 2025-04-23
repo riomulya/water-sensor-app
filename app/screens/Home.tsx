@@ -842,7 +842,7 @@ const HomeScreen = () => {
     const handleLogout = async () => {
         try {
             await logout();
-            router.replace('/screens/Login');
+            router.replace('/auth/Login');
         } catch (error) {
             toast.show({
                 placement: 'top',
@@ -895,6 +895,16 @@ const HomeScreen = () => {
                 }}
             >
                 <AntDesign name="team" size={35} color="#ea5757" />
+            </Fab>
+
+            <Fab
+                placement="bottom right"
+                style={{ backgroundColor: 'white', bottom: 200, right: 25, zIndex: 0 }}
+                onPress={handleLogout}
+            >
+                <AntDesign name="logout" size={35} color="#ea5757" />
+
+                {/* <FabIcon icon="logout" color="white" /> */}
             </Fab>
 
             <BottomSheet snapToIndex={bottomSheetOpen ? 0 : 1} onOpen={() => setBottomSheetOpen(true)} onClose={() => setBottomSheetOpen(false)}>
@@ -1155,12 +1165,11 @@ const HomeScreen = () => {
                         position: 'absolute', // FAB menjadi elemen absolut di layar
                         bottom: 120,           // Jarak dari bagian bawah layar
                         right: 25,            // Jarak dari sisi kanan layar
-                        zIndex: 0,           // Memastikan FAB berada di atas elemen lain
-                        elevation: 0,
+                        zIndex: 0
                     }}
                 >
                     <BottomSheetTrigger>
-                        <AntDesign name="piechart" size={35} color="#ea5757" />
+                        <AntDesign name="piechart" size={35} color="#ea5757" style={{ zIndex: 0 }} />
                     </BottomSheetTrigger>
                 </Fab>
 
@@ -1378,15 +1387,7 @@ const HomeScreen = () => {
                 isRunning={isServiceRunning}
                 sensorData={sensorData}
             /> */}
-            <Fab
-                placement="top right"
-                style={{ backgroundColor: '#ff3333', top: 10, right: 10 }}
-                onPress={handleLogout}
-            >
-                <AntDesign name="logout" size={35} color="#ea5757" />
 
-                {/* <FabIcon icon="logout" color="white" /> */}
-            </Fab>
         </>
     );
 };
