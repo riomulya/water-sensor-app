@@ -26,6 +26,10 @@ function ScreensLayout() {
                     headerShown: false // Nonaktifkan header global
                 }}
             >
+                <Stack.Screen
+                    name="Home"
+                    options={{ headerShown: false }}
+                />
                 <BottomTab.Navigator id={undefined} tabBar={TabBar}>
                     <BottomTab.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
                     <BottomTab.Screen name="Feeds" component={FeedsScreen} options={{ headerShown: false }} />

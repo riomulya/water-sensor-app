@@ -17,7 +17,7 @@ import { TextInput } from 'react-native-paper';
 import { AntDesign, MaterialIcons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { loginUser, checkAuthStatus } from '@/controllers/auth';
+import { loginUser, registerUser, guestLogin, checkAuthStatus } from '@/controllers/auth';
 import { MotiView, AnimatePresence } from 'moti';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -40,7 +40,7 @@ const LoginScreen = () => {
         password: '',
         confirmPassword: ''
     });
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [checkingAuth, setCheckingAuth] = useState(true);
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -67,7 +67,7 @@ const LoginScreen = () => {
     // Local implementation of guestLogin
     const guestLogin = async () => {
         try {
-            const response = await fetch(`${port}/api/auth/guest`, {
+            const response = await fetch(`${port}auth/guest`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -181,10 +181,33 @@ const LoginScreen = () => {
         setLoading(true);
         try {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+            console.log('Starting guest login...');
+            // Try to ping the server first to check connectivity
+            try {
+                const pingResponse = await fetch(`${port}`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'text/plain' }
+                });
+                console.log('Server ping status:', pingResponse.status);
+            } catch (pingError) {
+                console.error('Server ping failed:', pingError);
+                Alert.alert(
+                    'Koneksi Server Gagal',
+                    'Tidak dapat terhubung ke server. Periksa koneksi Anda dan coba lagi.'
+                );
+                setLoading(false);
+                return;
+            }
+
             await guestLogin();
             router.replace('/screens/Home');
         } catch (error: any) {
-            Alert.alert('Akses Tamu Gagal', error.message);
+            console.error('Guest login complete error detail:', error);
+            Alert.alert(
+                'Akses Tamu Gagal',
+                error.message || 'Gagal mengakses sebagai tamu. Coba lagi nanti.'
+            );
         } finally {
             setLoading(false);
         }

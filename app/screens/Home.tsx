@@ -48,6 +48,8 @@ import { AnimatePresence, MotiView } from 'moti';
 // import { NotificationComponent } from '@/components/notification/NotificationComponent';
 import { useForegroundService } from '@/hooks/useForegroundService';
 import { useForm, Controller } from "react-hook-form";
+import { logout } from '@/controllers/auth';
+import { router } from 'expo-router';
 
 // Notifications.setNotificationHandler({
 //     handleNotification: async () => ({
@@ -837,6 +839,23 @@ const HomeScreen = () => {
         }
     }, [mqttData, sensorData]);
 
+    const handleLogout = async () => {
+        try {
+            await logout();
+            router.replace('/screens/Login');
+        } catch (error) {
+            toast.show({
+                placement: 'top',
+                render: () => (
+                    <Toast action="error">
+                        <ToastTitle>Logout Gagal</ToastTitle>
+                        <ToastDescription>Terjadi kesalahan saat logout</ToastDescription>
+                    </Toast>
+                )
+            });
+        }
+    };
+
     return (
         <>
             <SafeAreaView style={styles.container}>
@@ -1359,6 +1378,15 @@ const HomeScreen = () => {
                 isRunning={isServiceRunning}
                 sensorData={sensorData}
             /> */}
+            <Fab
+                placement="top right"
+                style={{ backgroundColor: '#ff3333', top: 10, right: 10 }}
+                onPress={handleLogout}
+            >
+                <AntDesign name="logout" size={35} color="#ea5757" />
+
+                {/* <FabIcon icon="logout" color="white" /> */}
+            </Fab>
         </>
     );
 };
