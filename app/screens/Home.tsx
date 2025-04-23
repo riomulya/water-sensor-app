@@ -50,6 +50,7 @@ import { useForegroundService } from '@/hooks/useForegroundService';
 import { useForm, Controller } from "react-hook-form";
 import { logout } from '@/controllers/auth';
 import { router } from 'expo-router';
+import CustomDrawer from '../../components/CustomDrawer';
 
 // Notifications.setNotificationHandler({
 //     handleNotification: async () => ({
@@ -839,22 +840,8 @@ const HomeScreen = () => {
         }
     }, [mqttData, sensorData]);
 
-    const handleLogout = async () => {
-        try {
-            await logout();
-            router.replace('/auth/Login');
-        } catch (error) {
-            toast.show({
-                placement: 'top',
-                render: () => (
-                    <Toast action="error">
-                        <ToastTitle>Logout Gagal</ToastTitle>
-                        <ToastDescription>Terjadi kesalahan saat logout</ToastDescription>
-                    </Toast>
-                )
-            });
-        }
-    };
+    // Tambahkan state untuk drawer
+    const [drawerOpen, setDrawerOpen] = useState(false);
 
     return (
         <>
@@ -879,6 +866,18 @@ const HomeScreen = () => {
                 />
             </SafeAreaView>
 
+            {/* Tambahkan CustomDrawer dengan style spesifik untuk memastikan di depan semua komponen */}
+            <View style={{
+                position: 'absolute',
+                width: '100%',
+                height: '100%',
+                zIndex: 9999,
+                elevation: 9999,
+                pointerEvents: drawerOpen ? 'auto' : 'none'
+            }}>
+                <CustomDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
+            </View>
+
             <Fab
                 size="sm"
                 isHovered={false}
@@ -897,14 +896,13 @@ const HomeScreen = () => {
                 <AntDesign name="team" size={35} color="#ea5757" />
             </Fab>
 
+            {/* Menu Button */}
             <Fab
                 placement="bottom right"
                 style={{ backgroundColor: 'white', bottom: 200, right: 25, zIndex: 0 }}
-                onPress={handleLogout}
+                onPress={() => setDrawerOpen(true)}
             >
-                <AntDesign name="logout" size={35} color="#ea5757" />
-
-                {/* <FabIcon icon="logout" color="white" /> */}
+                <AntDesign name="menuunfold" size={35} color="#ea5757" />
             </Fab>
 
             <BottomSheet snapToIndex={bottomSheetOpen ? 0 : 1} onOpen={() => setBottomSheetOpen(true)} onClose={() => setBottomSheetOpen(false)}>
@@ -1141,16 +1139,13 @@ const HomeScreen = () => {
                                                 />
                                             )}
                                         </BottomSheetContent>
-
                                     </BottomSheetScrollView>
                                 </SafeAreaView>
                             </MotiView>
                         )}
                     </AnimatePresence>
-                    {/* </BottomSheetItem> */}
-                    {/* </BottomSheetContent> */}
                 </BottomSheetPortal>
-            </BottomSheet >
+            </BottomSheet>
 
             <BottomSheet>
                 <Fab

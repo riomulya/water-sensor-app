@@ -38,7 +38,7 @@ const faqData = [
     },
 ];
 
-const Faq = () => {
+const About = () => {
     const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
     return (
@@ -191,4 +191,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default Faq;
+export default About;
