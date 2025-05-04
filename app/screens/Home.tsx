@@ -51,6 +51,7 @@ import { useForm, Controller } from "react-hook-form";
 import { logout } from '@/controllers/auth';
 import { router } from 'expo-router';
 import CustomDrawer from '../../components/CustomDrawer';
+import { Switch } from '@/components/ui/switch';
 
 // Notifications.setNotificationHandler({
 //     handleNotification: async () => ({
@@ -202,6 +203,7 @@ const HomeScreen = () => {
     const [address, setAddress] = useState<string | null>(null); // Untuk menyimpan alamat lengkap
     const [mqttData, setMqttData] = useState<any>(null);
     const [bottomSheetOpen, setBottomSheetOpen] = useState<boolean>(false);
+    const [activeTab, setActiveTab] = useState<'location' | 'sensor'>('location');
     const [sensorData, setSensorData] = useState<SensorData>({
         accel_x: 0,
         accel_y: 0,
@@ -846,16 +848,6 @@ const HomeScreen = () => {
     return (
         <>
             {/* Tambahkan CustomDrawer dengan style spesifik untuk memastikan di depan semua komponen */}
-            <View style={{
-                position: 'absolute',
-                width: '100%',
-                height: '100%',
-                zIndex: 9999,
-                elevation: 9999,
-                pointerEvents: drawerOpen ? 'auto' : 'none'
-            }}>
-                <CustomDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
-            </View>
             <SafeAreaView style={styles.container}>
                 {isFetchingAddress && (
                     <View style={styles.loadingOverlay}>
@@ -889,7 +881,7 @@ const HomeScreen = () => {
                 style={{
                     backgroundColor: 'white',
                     position: 'absolute',
-                    bottom: 200,
+                    bottom: 120,
                     left: 25,
                     zIndex: 0,
                 }}
@@ -897,15 +889,7 @@ const HomeScreen = () => {
                 <AntDesign name="team" size={35} color="#ea5757" />
             </Fab>
 
-            {/* Menu Button */}
-            <Fab
-                placement="bottom right"
-                style={{ backgroundColor: 'white', bottom: 200, right: 25, zIndex: 0 }}
-                onPress={() => setDrawerOpen(true)}
-            >
-                <AntDesign name="menuunfold" size={35} color="#ea5757" />
-            </Fab>
-
+            {/* Combined Bottom Sheet */}
             <BottomSheet snapToIndex={bottomSheetOpen ? 0 : 1} onOpen={() => setBottomSheetOpen(true)} onClose={() => setBottomSheetOpen(false)}>
                 <Fab
                     size="sm"
@@ -913,37 +897,23 @@ const HomeScreen = () => {
                     isDisabled={false}
                     isPressed={true}
                     onPress={() => setBottomSheetOpen(true)}
-                    placement='bottom left'
-                    style={{
-                        backgroundColor: 'white',
-                        position: 'absolute', // FAB menjadi elemen absolut di layar
-                        bottom: 120,           // Jarak dari bagian bawah layar
-                        left: 25,            // Jarak dari sisi kiri layar
-                        zIndex: 0,           // Memastikan FAB berada di atas elemen lain
-                        elevation: 0,
-                    }}
+                    placement='bottom right'
+                    style={{ backgroundColor: 'white', bottom: 120, right: 25, zIndex: 0 }}
                 >
                     <BottomSheetTrigger>
-                        <AntDesign name="enviromento" size={35} color="#ea5757" />
+                        <AntDesign name={activeTab === 'location' ? "enviromento" : "piechart"} size={35} color="#ea5757" />
                     </BottomSheetTrigger>
                 </Fab>
 
                 <BottomSheetPortal
-                    // ref={bottomSheetRef}
-                    snapPoints={["30%", "55%", "100%"]}
-                    // defaultIsOpen={bottomSheetOpen}
+                    snapPoints={["30%", "70%", "100%"]}
                     snapToIndex={bottomSheetOpen ? 1 : 0}
                     onClose={() => setBottomSheetOpen(false)}
-                    // onOpen={() => setBottomSheetOpen(true)}
-
                     enablePanDownToClose={true}
-
                     backdropComponent={BottomSheetBackdrop}
                     handleComponent={BottomSheetDragIndicator}
                     style={{ zIndex: 1000, elevation: 1000 }}
                 >
-                    {/* <BottomSheetContent> */}
-                    {/* <BottomSheetItem> */}
                     <AnimatePresence>
                         {bottomSheetOpen && (
                             <MotiView
@@ -966,178 +936,253 @@ const HomeScreen = () => {
                                 style={{ flex: 1 }}
                             >
                                 <SafeAreaView style={{ flex: 1, zIndex: 1000, elevation: 1000 }}>
+                                    {/* Toggle Switch */}
+                                    <View style={styles.toggleContainer}>
+                                        <View style={styles.toggleBackground}>
+                                            <MotiView
+                                                animate={{
+                                                    translateX: activeTab === 'location' ? 0 : '100%',
+                                                }}
+                                                transition={{
+                                                    type: 'timing',
+                                                    duration: 300,
+                                                }}
+                                                style={styles.activeTabIndicator}
+                                            />
+                                        </View>
+                                        <TouchableOpacity
+                                            style={[styles.toggleTab, activeTab === 'location' ? styles.activeToggleTab : null]}
+                                            onPress={() => setActiveTab('location')}
+                                            activeOpacity={0.7}
+                                        >
+                                            <MotiView
+                                                animate={{
+                                                    scale: activeTab === 'location' ? 1 : 0.9,
+                                                }}
+                                                transition={{ type: 'timing', duration: 200 }}
+                                                style={styles.toggleButton}
+                                            >
+                                                <AntDesign
+                                                    name="enviromento"
+                                                    size={20}
+                                                    color={activeTab === 'location' ? "#ea5757" : "#64748b"}
+                                                />
+                                                <Text
+                                                    style={[
+                                                        styles.toggleText,
+                                                        activeTab === 'location' ? styles.activeToggleText : null
+                                                    ]}
+                                                >
+                                                    Lokasi Monitoring
+                                                </Text>
+                                            </MotiView>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.toggleTab, activeTab === 'sensor' ? styles.activeToggleTab : null]}
+                                            onPress={() => setActiveTab('sensor')}
+                                            activeOpacity={0.7}
+                                        >
+                                            <MotiView
+                                                animate={{
+                                                    scale: activeTab === 'sensor' ? 1 : 0.9,
+                                                }}
+                                                transition={{ type: 'timing', duration: 200 }}
+                                                style={styles.toggleButton}
+                                            >
+                                                <AntDesign
+                                                    name="dashboard"
+                                                    size={20}
+                                                    color={activeTab === 'sensor' ? "#ea5757" : "#64748b"}
+                                                />
+                                                <Text
+                                                    style={[
+                                                        styles.toggleText,
+                                                        activeTab === 'sensor' ? styles.activeToggleText : null
+                                                    ]}
+                                                >
+                                                    Data Sensor
+                                                </Text>
+                                            </MotiView>
+                                        </TouchableOpacity>
+                                    </View>
+
                                     <BottomSheetScrollView nestedScrollEnabled={true} style={{ zIndex: 1000, elevation: 1000 }}>
                                         <BottomSheetContent>
-                                            <View style={styles.searchContainer}>
-                                                <TextInput
-                                                    placeholder="Cari lokasi..."
-                                                    placeholderTextColor="#94a3b8"
-                                                    style={styles.searchInput}
-                                                    onChangeText={(text) => setSearchQuery(text)}
-                                                    value={searchQuery}
-                                                />
-                                                <AntDesign name="search1" size={20} color="#64748b" style={styles.searchIcon} />
-                                            </View>
-                                            {!savedLocation ? (
-                                                <Center className="py-8">
-                                                    <Text size="sm" className=" text-red-700">
-                                                        Belum ada lokasi monitoring terpasang
-                                                    </Text>
-                                                    <Text size="sm" className=" text-red-700">
-                                                        Silahkan tambahkan lokasi monitoring terlebih dahulu
-                                                    </Text>
-                                                </Center>
-                                            ) : (
-                                                <View style={styles.locationCard}>
-                                                    <View style={styles.locationHeader}>
-                                                        <AntDesign name="enviromento" size={24} color="#3b82f6" />
-                                                        <Text style={styles.locationTitle} className='text-emerald-300'>
-                                                            {savedLocation.nama_sungai || "Lokasi Sungai"} <Text className='text-blue-600'> (Lokasi Monitoring) </Text>
-                                                        </Text>
+                                            {activeTab === 'location' ? (
+                                                <>
+                                                    <View style={styles.searchContainer}>
+                                                        <TextInput
+                                                            placeholder="Cari lokasi..."
+                                                            placeholderTextColor="#94a3b8"
+                                                            style={styles.searchInput}
+                                                            onChangeText={(text) => setSearchQuery(text)}
+                                                            value={searchQuery}
+                                                        />
+                                                        <AntDesign name="search1" size={20} color="#64748b" style={styles.searchIcon} />
                                                     </View>
-
-                                                    <View style={styles.locationDetail}>
-                                                        <AntDesign name="infocirlceo" size={14} color="#64748b" />
-                                                        <Text style={styles.detailText}>{savedLocation.address}</Text>
-                                                    </View>
-
-                                                    <View style={styles.coordinateBadge}>
-                                                        <AntDesign name="earth" size={14} color="#64748b" />
-                                                        <HStack className=" flex-col ms-3">
-                                                            <Text style={styles.coordinateText}>
-                                                                Latitude : {savedLocation?.latitude?.toFixed?.(6) ?? 'N/A'}
+                                                    {!savedLocation ? (
+                                                        <Center className="py-8">
+                                                            <Text size="sm" className=" text-red-700">
+                                                                Belum ada lokasi monitoring terpasang
                                                             </Text>
-                                                            <Text style={styles.coordinateText}>
-                                                                Longitude : {savedLocation?.longitude?.toFixed?.(6) ?? 'N/A'}
+                                                            <Text size="sm" className=" text-red-700">
+                                                                Silahkan tambahkan lokasi monitoring terlebih dahulu
                                                             </Text>
-                                                        </HStack>
-                                                    </View>
-
-                                                    <HStack className="gap-2 mt-4">
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onPress={handleDeleteLocation}
-                                                            className="flex-1 mt-3"
-                                                        >
-                                                            <ButtonText>Hapus Lokasi</ButtonText>
-                                                        </Button>
-                                                        <BottomSheetItem
-                                                            className='flex-1'
-                                                            closeOnSelect
-                                                            onPress={() => {
-                                                                if (savedLocation) {
-                                                                    mapRef.current?.zoomToLocation(
-                                                                        savedLocation.latitude,
-                                                                        savedLocation.longitude
-                                                                    );
-                                                                    // handleClose();
-                                                                    // setBottomSheetOpen(false);
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Button
-                                                                size="sm"
-                                                                // onPress={() => {
-                                                                //     if (savedLocation) {
-                                                                //         mapRef.current?.zoomToLocation(
-                                                                //             savedLocation.latitude,
-                                                                //             savedLocation.longitude
-                                                                //         );
-                                                                //         // handleClose();
-                                                                //         setBottomSheetOpen(false);
-                                                                //     }
-                                                                // }}
-                                                                disabled={true}
-                                                                className="flex-1 bg-emerald-500"
-                                                            >
-                                                                <ButtonText>Lihat Lokasi</ButtonText>
-                                                            </Button>
-                                                        </BottomSheetItem>
-                                                    </HStack>
-                                                </View>
-                                            )}
-                                            {isLoadingLocations ? (
-                                                <Center className="py-8">
-                                                    <ActivityIndicator size="large" color="#3b82f6" />
-                                                    <Text className="mt-2 text-typography-500">Memuat daftar lokasi...</Text>
-                                                </Center>
-                                            ) : locationsError ? (
-                                                <Center className="py-8">
-                                                    <AntDesign name="warning" size={24} color="#ef4444" />
-                                                    <Text className="mt-2 text-danger-500">{locationsError}</Text>
-                                                </Center>
-                                            ) : (
-                                                <FlatList
-                                                    data={filteredLocations.filter(loc => loc.id_lokasi !== savedLocation?.id_lokasi)}
-                                                    ListHeaderComponent={<Text className="text-blue-600 text-center pb-3">
-                                                        <Divider className='bg-emerald-300 my-2' />
-                                                        Lokasi Lainnya </Text>}
-                                                    ListFooterComponent={<View style={{
-                                                        height: 150,
-                                                    }}></View>}
-                                                    scrollEnabled={false}
-                                                    keyExtractor={(item) => item.id_lokasi.toString()}
-                                                    renderItem={({ item }) => (
+                                                        </Center>
+                                                    ) : (
                                                         <View style={styles.locationCard}>
-                                                            <View style={styles.cardHeader}>
-                                                                <AntDesign name="enviromento" size={20} color="#3b82f6" />
-                                                                <Text style={styles.locationName}>{item.nama_sungai}</Text>
+                                                            <View style={styles.locationHeader}>
+                                                                <AntDesign name="enviromento" size={24} color="#3b82f6" />
+                                                                <Text style={styles.locationTitle} className='text-emerald-300'>
+                                                                    {savedLocation.nama_sungai || "Lokasi Sungai"} <Text className='text-blue-600'> (Lokasi Monitoring) </Text>
+                                                                </Text>
                                                             </View>
+
                                                             <View style={styles.locationDetail}>
                                                                 <AntDesign name="infocirlceo" size={14} color="#64748b" />
-                                                                <Text style={styles.detailText}>{item.address}</Text>
+                                                                <Text style={styles.detailText}>{savedLocation.address}</Text>
                                                             </View>
+
                                                             <View style={styles.coordinateBadge}>
-                                                                <AntDesign name="pushpino" size={14} color="#64748b" />
+                                                                <AntDesign name="earth" size={14} color="#64748b" />
                                                                 <HStack className=" flex-col ms-3">
                                                                     <Text style={styles.coordinateText}>
-                                                                        Latitude : {item?.latitude?.toFixed?.(6) ?? 'N/A'}
+                                                                        Latitude : {savedLocation?.latitude?.toFixed?.(6) ?? 'N/A'}
                                                                     </Text>
                                                                     <Text style={styles.coordinateText}>
-                                                                        Longitude : {item?.longitude?.toFixed?.(6) ?? 'N/A'}
+                                                                        Longitude : {savedLocation?.longitude?.toFixed?.(6) ?? 'N/A'}
                                                                     </Text>
                                                                 </HStack>
                                                             </View>
-                                                            <HStack className="">
+
+                                                            <HStack className="gap-2 mt-4">
                                                                 <Button
                                                                     variant="outline"
                                                                     size="sm"
+                                                                    onPress={handleDeleteLocation}
                                                                     className="flex-1 mt-3"
-                                                                    onPress={() => handleSelectExistingLocation(item)}
                                                                 >
-                                                                    <ButtonText>Set sebagai Monitoring</ButtonText>
+                                                                    <ButtonText>Hapus Lokasi</ButtonText>
                                                                 </Button>
                                                                 <BottomSheetItem
                                                                     className='flex-1'
                                                                     closeOnSelect
                                                                     onPress={() => {
-                                                                        if (item) {
+                                                                        if (savedLocation) {
                                                                             mapRef.current?.zoomToLocation(
-                                                                                item.latitude,
-                                                                                item.longitude
+                                                                                savedLocation.latitude,
+                                                                                savedLocation.longitude
                                                                             );
-                                                                            // handleClose();
-                                                                            // setBottomSheetOpen(false);
                                                                         }
                                                                     }}
                                                                 >
                                                                     <Button
                                                                         size="sm"
-                                                                        variant="outline"
-                                                                        className="flex-1 text-center w-auto"
                                                                         disabled={true}
+                                                                        className="flex-1 bg-emerald-500"
                                                                     >
-
-                                                                        <ButtonText className='text-center flex-1'>Lihat di Peta</ButtonText>
+                                                                        <ButtonText>Lihat Lokasi</ButtonText>
                                                                     </Button>
                                                                 </BottomSheetItem>
-
                                                             </HStack>
                                                         </View>
                                                     )}
-                                                    contentContainerStyle={styles.listContent}
-                                                />
+                                                    {isLoadingLocations ? (
+                                                        <Center className="py-8">
+                                                            <ActivityIndicator size="large" color="#3b82f6" />
+                                                            <Text className="mt-2 text-typography-500">Memuat daftar lokasi...</Text>
+                                                        </Center>
+                                                    ) : locationsError ? (
+                                                        <Center className="py-8">
+                                                            <AntDesign name="warning" size={24} color="#ef4444" />
+                                                            <Text className="mt-2 text-danger-500">{locationsError}</Text>
+                                                        </Center>
+                                                    ) : (
+                                                        <FlatList
+                                                            data={filteredLocations.filter(loc => loc.id_lokasi !== savedLocation?.id_lokasi)}
+                                                            ListHeaderComponent={<Text className="text-blue-600 text-center pb-3">
+                                                                <Divider className='bg-emerald-300 my-2' />
+                                                                Lokasi Lainnya </Text>}
+                                                            ListFooterComponent={<View style={{
+                                                                height: 150,
+                                                            }}></View>}
+                                                            scrollEnabled={false}
+                                                            keyExtractor={(item) => item.id_lokasi.toString()}
+                                                            renderItem={({ item }) => (
+                                                                <View style={styles.locationCard}>
+                                                                    <View style={styles.cardHeader}>
+                                                                        <AntDesign name="enviromento" size={20} color="#3b82f6" />
+                                                                        <Text style={styles.locationName}>{item.nama_sungai}</Text>
+                                                                    </View>
+                                                                    <View style={styles.locationDetail}>
+                                                                        <AntDesign name="infocirlceo" size={14} color="#64748b" />
+                                                                        <Text style={styles.detailText}>{item.address}</Text>
+                                                                    </View>
+                                                                    <View style={styles.coordinateBadge}>
+                                                                        <AntDesign name="pushpino" size={14} color="#64748b" />
+                                                                        <HStack className=" flex-col ms-3">
+                                                                            <Text style={styles.coordinateText}>
+                                                                                Latitude : {item?.latitude?.toFixed?.(6) ?? 'N/A'}
+                                                                            </Text>
+                                                                            <Text style={styles.coordinateText}>
+                                                                                Longitude : {item?.longitude?.toFixed?.(6) ?? 'N/A'}
+                                                                            </Text>
+                                                                        </HStack>
+                                                                    </View>
+                                                                    <HStack className="">
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            className="flex-1 mt-3"
+                                                                            onPress={() => handleSelectExistingLocation(item)}
+                                                                        >
+                                                                            <ButtonText>Set sebagai Monitoring</ButtonText>
+                                                                        </Button>
+                                                                        <BottomSheetItem
+                                                                            className='flex-1'
+                                                                            closeOnSelect
+                                                                            onPress={() => {
+                                                                                if (item) {
+                                                                                    mapRef.current?.zoomToLocation(
+                                                                                        item.latitude,
+                                                                                        item.longitude
+                                                                                    );
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="outline"
+                                                                                className="flex-1 text-center w-auto"
+                                                                                disabled={true}
+                                                                            >
+
+                                                                                <ButtonText className='text-center flex-1'>Lihat di Peta</ButtonText>
+                                                                            </Button>
+                                                                        </BottomSheetItem>
+
+                                                                    </HStack>
+                                                                </View>
+                                                            )}
+                                                            contentContainerStyle={styles.listContent}
+                                                        />
+                                                    )}
+                                                </>
+                                            ) : (
+                                                /* Sensor Data View */
+                                                <>
+                                                    <RealTimeClock />
+                                                    <FlatList
+                                                        scrollEnabled={false}
+                                                        data={sensorConfigs}
+                                                        renderItem={renderSpeedometer}
+                                                        keyExtractor={item => item.id}
+                                                        numColumns={2}
+                                                        contentContainerStyle={styles.listContent}
+                                                        columnWrapperStyle={{ justifyContent: 'space-between' }}
+                                                    />
+                                                    <View style={{ height: 100 }}></View>
+                                                </>
                                             )}
                                         </BottomSheetContent>
                                     </BottomSheetScrollView>
@@ -1148,77 +1193,6 @@ const HomeScreen = () => {
                 </BottomSheetPortal>
             </BottomSheet>
 
-            <BottomSheet>
-                <Fab
-                    size="sm"
-                    isHovered={false}
-                    isDisabled={false}
-                    isPressed={true}
-                    // 
-                    placement='bottom right'
-                    style={{
-                        backgroundColor: 'white',
-                        position: 'absolute', // FAB menjadi elemen absolut di layar
-                        bottom: 120,           // Jarak dari bagian bawah layar
-                        right: 25,            // Jarak dari sisi kanan layar
-                        zIndex: 0
-                    }}
-                >
-                    <BottomSheetTrigger>
-                        <AntDesign name="piechart" size={35} color="#ea5757" style={{ zIndex: 0 }} />
-                    </BottomSheetTrigger>
-                </Fab>
-
-                <BottomSheetPortal
-                    snapPoints={["50%", "70%", "100%"]}
-                    backdropComponent={BottomSheetBackdrop}
-                    handleComponent={BottomSheetDragIndicator}
-                >
-                    <AnimatePresence>
-
-                        <MotiView
-                            from={{
-                                opacity: 0,
-                                scale: 0.9,
-                                translateY: 50
-                            }}
-                            animate={{
-                                opacity: 1,
-                                scale: 1,
-                                translateY: 0
-                            }}
-                            exit={{
-                                opacity: 0,
-                                scale: 0.9,
-                                translateY: 50
-                            }}
-                            transition={{ type: 'timing', duration: 300 }}
-                            style={{ flex: 1 }}
-                        >
-                            <SafeAreaView style={{ flex: 1 }}>
-                                <BottomSheetScrollView nestedScrollEnabled>
-                                    {/* <RealTimeClock /> */}
-
-                                    <FlatList
-                                        scrollEnabled={false}
-                                        // nestedScrollEnabled={true}
-                                        data={sensorConfigs}
-                                        renderItem={renderSpeedometer}
-                                        keyExtractor={item => item.id}
-                                        numColumns={2}
-                                        ListHeaderComponent={<RealTimeClock />}
-                                        // ListFooterComponent={<RealTimeClock />}
-                                        contentContainerStyle={styles.listContent}
-                                        columnWrapperStyle={{ justifyContent: 'space-between' }}
-                                    />
-                                    <View style={{ height: 100 }}></View>
-                                </BottomSheetScrollView>
-                            </SafeAreaView>
-                        </MotiView>
-
-                    </AnimatePresence>
-                </BottomSheetPortal>
-            </BottomSheet >
             <Modal
                 isOpen={showExitModal}
                 onClose={() => setShowExitModal(false)}
@@ -1635,5 +1609,64 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#1e293b',
+    },
+    toggleContainer: {
+        flexDirection: 'row',
+        marginHorizontal: 16,
+        marginVertical: 12,
+        height: 50,
+        position: 'relative',
+        zIndex: 10,
+    },
+    toggleBackground: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: '#f1f5f9',
+        borderRadius: 30,
+        overflow: 'hidden',
+    },
+    activeTabIndicator: {
+        position: 'absolute',
+        top: 4,
+        left: 4,
+        width: '48%',
+        height: 42,
+        backgroundColor: 'white',
+        borderRadius: 25,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 1.5,
+        elevation: 2,
+    },
+    toggleTab: {
+        flex: 1,
+        borderRadius: 25,
+        paddingVertical: 12,
+        zIndex: 2,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    activeToggleTab: {
+        // Empty as we're using the animated indicator instead
+    },
+    toggleButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        width: '100%',
+    },
+    toggleText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#64748b',
+    },
+    activeToggleText: {
+        color: '#ea5757',
+        fontWeight: '600',
     },
 });
