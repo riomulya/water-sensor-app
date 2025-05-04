@@ -12,11 +12,12 @@ import {
     Platform,
     TouchableWithoutFeedback
 } from 'react-native';
-import { router } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { AntDesign, MaterialCommunityIcons, Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import { logout } from '@/controllers/auth';
 import { useToast } from "@/components/ui/toast";
 import { Toast, ToastTitle, ToastDescription } from "@/components/ui/toast";
+import { goToLocations } from '@/utils/navigationHelper';
 
 const { width } = Dimensions.get('window');
 const DRAWER_WIDTH = width * 0.75;
@@ -102,6 +103,18 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
         }
     };
 
+    const handleNavigateToLocations = () => {
+        onClose();
+        try {
+            setTimeout(() => {
+                // @ts-ignore - Ignoring TypeScript errors for navigation paths
+                router.push('locations');
+            }, 300);
+        } catch (error) {
+            console.error('Navigation error:', error);
+        }
+    };
+
     const menuItems: MenuItem[] = [
         {
             icon: <Ionicons name="home-outline" size={22} color="#3b82f6" />,
@@ -114,23 +127,18 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
             label: "Data Sensor",
             onPress: () => {
                 onClose();
-                // router.push('/sensors'); // When route exists
             }
         },
         {
             icon: <MaterialIcons name="location-on" size={22} color="#64748b" />,
             label: "Lokasi",
-            onPress: () => {
-                onClose();
-                // router.push('/locations'); // When route exists
-            }
+            onPress: handleNavigateToLocations
         },
         {
             icon: <Feather name="bar-chart-2" size={22} color="#64748b" />,
             label: "Statistik",
             onPress: () => {
                 onClose();
-                // router.push('/statistics'); // When route exists
             }
         },
         {
@@ -138,7 +146,6 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
             label: "Notifikasi",
             onPress: () => {
                 onClose();
-                // router.push('/notifications'); // When route exists
             }
         },
         {
@@ -146,7 +153,6 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
             label: "Pengaturan",
             onPress: () => {
                 onClose();
-                // router.push('/settings'); // When route exists
             }
         }
     ];
@@ -200,7 +206,13 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
                         <AntDesign name="close" size={24} color="#64748b" />
                     </TouchableOpacity>
                 </View>
-
+                <View style={styles.divider} />
+                <View style={styles.footer}>
+                    <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                        <AntDesign name="logout" size={20} color="#ef4444" />
+                        <Text style={styles.logoutText}>Logout</Text>
+                    </TouchableOpacity>
+                </View>
                 <View style={styles.divider} />
 
                 <ScrollView
@@ -211,14 +223,6 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
                         {menuItems.map(renderMenuItem)}
                     </View>
                 </ScrollView>
-
-                <View style={styles.footer}>
-                    <View style={styles.divider} />
-                    <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                        <AntDesign name="logout" size={20} color="#ef4444" />
-                        <Text style={styles.logoutText}>Logout</Text>
-                    </TouchableOpacity>
-                </View>
             </Animated.View>
         </View>
     );
@@ -354,7 +358,6 @@ const styles = StyleSheet.create({
     logoutButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 16,
         padding: 12,
         borderRadius: 8,
         borderWidth: 1,
