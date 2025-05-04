@@ -17,7 +17,7 @@ import { TextInput } from 'react-native-paper';
 import { AntDesign, MaterialIcons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { loginUser, registerUser, guestLogin, checkAuthStatus } from '@/controllers/auth';
+import { loginUser, checkAuthStatus, createGuestUser } from '@/controllers/auth';
 import { MotiView, AnimatePresence } from 'moti';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -27,23 +27,17 @@ const { width } = Dimensions.get('window');
 
 interface FormData {
     identifier: string;
-    email: string;
     password: string;
-    confirmPassword: string;
 }
 
 const LoginScreen = () => {
-    const [isLogin, setIsLogin] = useState(false);
     const [formData, setFormData] = useState<FormData>({
         identifier: '',
-        email: '',
         password: '',
-        confirmPassword: ''
     });
     const [loading, setLoading] = useState(false);
     const [checkingAuth, setCheckingAuth] = useState(true);
     const [showPassword, setShowPassword] = useState(false);
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     // Check if user is already logged in
     useEffect(() => {
@@ -64,11 +58,49 @@ const LoginScreen = () => {
         checkUserAuth();
     }, []);
 
+    // Local implementation of login
+    const performLogin = async (identifier: string, password: string) => {
+        try {
+            const response = await fetch(`${port}login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ identifier, password }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Login failed');
+            }
+
+            // Save user data including username, email, and role
+            await AsyncStorage.setItem('userToken', data.token);
+
+            // Save complete user data for the drawer
+            const userData = {
+                id: data.user.id,
+                username: data.user.username,
+                email: data.user.email || null,
+                role: data.user.role,
+            };
+
+            await AsyncStorage.setItem('userData', JSON.stringify(userData));
+
+            console.log('User logged in successfully:', userData);
+            return data;
+        } catch (error) {
+            console.error('Login error:', error);
+            throw error;
+        }
+    };
+
     // Local implementation of guestLogin
     const guestLogin = async () => {
         try {
-            const response = await fetch(`${port}auth/guest`, {
-                method: 'POST',
+            const response = await fetch(`${port}guest`, {
+                method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
                 }
@@ -77,99 +109,58 @@ const LoginScreen = () => {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.message || 'Guest login failed');
+                throw new Error(data.error || 'Guest login failed');
             }
 
+            // For guest login, store the token
             await AsyncStorage.setItem('userToken', data.token);
-            await AsyncStorage.setItem('userData', JSON.stringify({ role: 'guest' }));
+
+            // Create default guest user data
+            const userData = {
+                id: -1,
+                username: 'Guest User',
+                email: 'guest@watersensor.app',
+                role: 'guest',
+            };
+
+            await AsyncStorage.setItem('userData', JSON.stringify(userData));
+
+            console.log('Guest logged in successfully:', userData);
             return data;
         } catch (error) {
+            console.error('Guest login error:', error);
             throw new Error((error as Error).message || 'Error accessing as guest');
-        }
-    };
-
-    // Local implementation of registerUser
-    const registerUser = async (userData: {
-        username: string;
-        email?: string;
-        password: string;
-    }) => {
-        try {
-            const response = await fetch(`${port}/api/auth/register`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(userData),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Registration failed');
-            }
-
-            await AsyncStorage.setItem('userToken', data.token);
-            await AsyncStorage.setItem('userData', JSON.stringify(data.user));
-            return data;
-        } catch (error) {
-            throw new Error((error as Error).message || 'Error during registration');
         }
     };
 
     // Form validation
     const validateForm = (): boolean => {
-        if (isLogin) {
-            if (!formData.identifier.trim()) {
-                Alert.alert('Validasi Gagal', 'Username atau email harus diisi');
-                return false;
-            }
-            if (!formData.password) {
-                Alert.alert('Validasi Gagal', 'Password harus diisi');
-                return false;
-            }
-        } else {
-            if (!formData.identifier.trim()) {
-                Alert.alert('Validasi Gagal', 'Username harus diisi');
-                return false;
-            }
-            if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
-                Alert.alert('Validasi Gagal', 'Format email tidak valid');
-                return false;
-            }
-            if (!formData.password || formData.password.length < 6) {
-                Alert.alert('Validasi Gagal', 'Password minimal 6 karakter');
-                return false;
-            }
-            if (formData.password !== formData.confirmPassword) {
-                Alert.alert('Validasi Gagal', 'Password tidak sama');
-                return false;
-            }
+        if (!formData.identifier.trim()) {
+            Alert.alert('Validasi Gagal', 'Username atau email harus diisi');
+            return false;
+        }
+        if (!formData.password) {
+            Alert.alert('Validasi Gagal', 'Password harus diisi');
+            return false;
         }
         return true;
     };
 
-    const handleAuth = async () => {
+    const handleLogin = async () => {
         if (!validateForm()) return;
 
         setLoading(true);
         try {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-            if (isLogin) {
-                await loginUser(formData.identifier, formData.password);
-            } else {
-                await registerUser({
-                    username: formData.identifier,
-                    email: formData.email,
-                    password: formData.password
-                });
-            }
+            // Use our custom login function instead
+            await performLogin(formData.identifier, formData.password);
+
             router.replace('/screens/Home');
         } catch (error: any) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             Alert.alert(
-                isLogin ? 'Login Gagal' : 'Registrasi Gagal',
+                'Login Gagal',
                 error.message || 'Terjadi kesalahan, silakan coba lagi'
             );
         } finally {
@@ -183,24 +174,10 @@ const LoginScreen = () => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
             console.log('Starting guest login...');
-            // Try to ping the server first to check connectivity
-            try {
-                const pingResponse = await fetch(`${port}`, {
-                    method: 'GET',
-                    headers: { 'Accept': 'text/plain' }
-                });
-                console.log('Server ping status:', pingResponse.status);
-            } catch (pingError) {
-                console.error('Server ping failed:', pingError);
-                Alert.alert(
-                    'Koneksi Server Gagal',
-                    'Tidak dapat terhubung ke server. Periksa koneksi Anda dan coba lagi.'
-                );
-                setLoading(false);
-                return;
-            }
 
+            // Use our custom guest login function
             await guestLogin();
+
             router.replace('/screens/Home');
         } catch (error: any) {
             console.error('Guest login complete error detail:', error);
@@ -211,18 +188,6 @@ const LoginScreen = () => {
         } finally {
             setLoading(false);
         }
-    };
-
-    const toggleAuthMode = () => {
-        Haptics.selectionAsync();
-        setIsLogin(!isLogin);
-        // Reset form data
-        setFormData({
-            identifier: '',
-            email: '',
-            password: '',
-            confirmPassword: ''
-        });
     };
 
     if (checkingAuth) {
@@ -266,34 +231,15 @@ const LoginScreen = () => {
                         style={styles.authContainer}
                     >
                         <Text style={styles.title}>
-                            {isLogin ? 'Selamat Datang Kembali' : 'Buat Akun Baru'}
+                            Selamat Datang Kembali
                         </Text>
                         <Text style={styles.subtitle}>
-                            {isLogin
-                                ? 'Silakan login untuk melanjutkan monitoring'
-                                : 'Daftar untuk memulai monitoring kualitas air'}
+                            Silakan login untuk melanjutkan monitoring
                         </Text>
-
-                        <View style={styles.toggleContainer}>
-                            <TouchableOpacity
-                                style={[styles.toggleButton, isLogin && styles.activeToggle]}
-                                onPress={() => setIsLogin(true)}
-                            >
-                                <Text style={[styles.toggleText, isLogin && styles.activeToggleText]}>Login</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.toggleButton, !isLogin && styles.activeToggle]}
-                                onPress={() => setIsLogin(false)}
-                            >
-                                <Text style={[styles.toggleText, !isLogin && styles.activeToggleText]}>Daftar</Text>
-                            </TouchableOpacity>
-                        </View>
 
                         <View style={styles.formContainer}>
                             <AnimatePresence>
                                 <MotiView
-                                    key={isLogin ? 'login' : 'register'}
                                     from={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
                                     exit={{ opacity: 0 }}
@@ -301,7 +247,7 @@ const LoginScreen = () => {
                                 >
                                     {/* Username/Identifier Input */}
                                     <TextInput
-                                        label={isLogin ? 'Username atau Email' : 'Username'}
+                                        label="Username atau Email"
                                         mode="outlined"
                                         style={styles.input}
                                         value={formData.identifier}
@@ -310,21 +256,6 @@ const LoginScreen = () => {
                                         left={<TextInput.Icon icon="account" color="#FF6B6B" />}
                                         autoCapitalize="none"
                                     />
-
-                                    {/* Email Input (Register only) */}
-                                    {!isLogin && (
-                                        <TextInput
-                                            label="Email (Opsional)"
-                                            mode="outlined"
-                                            style={styles.input}
-                                            keyboardType="email-address"
-                                            value={formData.email}
-                                            onChangeText={(text) => setFormData({ ...formData, email: text })}
-                                            theme={{ colors: { primary: '#FF6B6B' } }}
-                                            left={<TextInput.Icon icon="email" color="#FF6B6B" />}
-                                            autoCapitalize="none"
-                                        />
-                                    )}
 
                                     {/* Password Input */}
                                     <TextInput
@@ -344,34 +275,13 @@ const LoginScreen = () => {
                                             />
                                         }
                                     />
-
-                                    {/* Confirm Password Input (Register only) */}
-                                    {!isLogin && (
-                                        <TextInput
-                                            label="Konfirmasi Password"
-                                            mode="outlined"
-                                            secureTextEntry={!showConfirmPassword}
-                                            style={styles.input}
-                                            value={formData.confirmPassword}
-                                            onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
-                                            theme={{ colors: { primary: '#FF6B6B' } }}
-                                            left={<TextInput.Icon icon="lock-check" color="#FF6B6B" />}
-                                            right={
-                                                <TextInput.Icon
-                                                    icon={showConfirmPassword ? "eye-off" : "eye"}
-                                                    color="#FF6B6B"
-                                                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                                                />
-                                            }
-                                        />
-                                    )}
                                 </MotiView>
                             </AnimatePresence>
 
-                            {/* Auth Button */}
+                            {/* Login Button */}
                             <TouchableOpacity
                                 style={styles.authButton}
-                                onPress={handleAuth}
+                                onPress={handleLogin}
                                 disabled={loading}
                                 activeOpacity={0.8}
                             >
@@ -380,24 +290,11 @@ const LoginScreen = () => {
                                 ) : (
                                     <>
                                         <Text style={styles.buttonText}>
-                                            {isLogin ? 'Masuk' : 'Daftar Sekarang'}
+                                            Masuk
                                         </Text>
                                         <AntDesign name="arrowright" size={20} color="white" />
                                     </>
                                 )}
-                            </TouchableOpacity>
-
-                            {/* Switch between Login and Register */}
-                            <TouchableOpacity
-                                onPress={toggleAuthMode}
-                                style={styles.switchAuth}
-                            >
-                                <Text style={styles.switchText}>
-                                    {isLogin ? 'Belum punya akun? ' : 'Sudah punya akun? '}
-                                    <Text style={styles.switchTextBold}>
-                                        {isLogin ? 'Daftar sekarang' : 'Login'}
-                                    </Text>
-                                </Text>
                             </TouchableOpacity>
 
                             <View style={styles.dividerContainer}>
@@ -481,32 +378,6 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 25,
     },
-    toggleContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        marginBottom: 25,
-        backgroundColor: '#F7F7F7',
-        borderRadius: 15,
-        padding: 4,
-    },
-    toggleButton: {
-        paddingHorizontal: 25,
-        paddingVertical: 10,
-        borderRadius: 12,
-        width: '48%',
-        alignItems: 'center',
-    },
-    activeToggle: {
-        backgroundColor: '#FF6B6B',
-    },
-    toggleText: {
-        color: '#636E72',
-        fontWeight: '600',
-        fontSize: 15,
-    },
-    activeToggleText: {
-        color: 'white',
-    },
     formContainer: {
         marginBottom: 20,
     },
@@ -529,18 +400,6 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 16,
         fontWeight: '600',
-    },
-    switchAuth: {
-        alignItems: 'center',
-        marginTop: 20,
-    },
-    switchText: {
-        color: '#636E72',
-        fontSize: 14,
-    },
-    switchTextBold: {
-        color: '#FF6B6B',
-        fontWeight: '700',
     },
     dividerContainer: {
         flexDirection: 'row',

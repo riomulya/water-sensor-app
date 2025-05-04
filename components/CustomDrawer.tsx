@@ -14,10 +14,11 @@ import {
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { AntDesign, MaterialCommunityIcons, Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
-import { logout } from '@/controllers/auth';
 import { useToast } from "@/components/ui/toast";
 import { Toast, ToastTitle, ToastDescription } from "@/components/ui/toast";
 import { goToLocations } from '@/utils/navigationHelper';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+// import { useAuth } from '@/context/AuthContext'; // Commented out for testing
 
 const { width } = Dimensions.get('window');
 const DRAWER_WIDTH = width * 0.75;
@@ -32,6 +33,14 @@ interface MenuItem {
     label: string;
     onPress: () => void;
     isActive?: boolean;
+    adminOnly?: boolean;
+}
+
+interface UserData {
+    id: number;
+    username: string;
+    email: string | null;
+    role: string;
 }
 
 // Fungsi helper untuk menambahkan drawer langsung ke root view
@@ -47,6 +56,54 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const toast = useToast();
     const [visible, setVisible] = useState(false);
+    // const { user } = useAuth(); // Commented out for testing
+
+    // State untuk menyimpan data user dari AsyncStorage
+    const [userData, setUserData] = useState<UserData | null>(null);
+
+    // Load user data from AsyncStorage on component mount
+    useEffect(() => {
+        const loadUserData = async () => {
+            try {
+                const storedUserData = await AsyncStorage.getItem('userData');
+                if (storedUserData) {
+                    setUserData(JSON.parse(storedUserData));
+                } else {
+                    // Default to guest user if no data is found
+                    setUserData({
+                        id: -1,
+                        username: 'Guest User',
+                        email: 'guest@watersensor.app',
+                        role: 'guest',
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading user data:', error);
+                // Default to guest user if error occurs
+                setUserData({
+                    id: -1,
+                    username: 'Guest User',
+                    email: 'guest@watersensor.app',
+                    role: 'guest',
+                });
+            }
+        };
+
+        loadUserData();
+    }, [isOpen]);  // Reload user data each time drawer opens
+
+    const getInitials = (name: string | undefined) => {
+        if (!name) return 'WS';
+
+        // Split the name by spaces and get the first letter of each part
+        const parts = name.split(' ');
+        if (parts.length === 1) {
+            return name.charAt(0).toUpperCase();
+        }
+
+        // Get first letter of first name and first letter of last name
+        return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    };
 
     useEffect(() => {
         if (isOpen) {
@@ -85,30 +142,24 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
         onClose();
     };
 
-    const handleLogout = async () => {
-        try {
-            await logout();
-            onClose();
-            router.replace('/auth/Login');
-        } catch (error) {
-            toast.show({
-                placement: 'top',
-                render: () => (
-                    <Toast action="error">
-                        <ToastTitle>Logout Gagal</ToastTitle>
-                        <ToastDescription>Terjadi kesalahan saat logout</ToastDescription>
-                    </Toast>
-                )
-            });
-        }
-    };
-
     const handleNavigateToLocations = () => {
         onClose();
         try {
             setTimeout(() => {
                 // @ts-ignore - Ignoring TypeScript errors for navigation paths
                 router.push('locations');
+            }, 300);
+        } catch (error) {
+            console.error('Navigation error:', error);
+        }
+    };
+
+    const navigateToUserManagement = () => {
+        onClose();
+        try {
+            setTimeout(() => {
+                // @ts-ignore - Ignoring TypeScript errors for navigation paths
+                router.push('/admin/users');
             }, 300);
         } catch (error) {
             console.error('Navigation error:', error);
@@ -154,10 +205,21 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
             onPress: () => {
                 onClose();
             }
+        },
+        {
+            icon: <Ionicons name="people-outline" size={22} color="#64748b" />,
+            label: "Manajemen User",
+            onPress: navigateToUserManagement,
+            adminOnly: true
         }
     ];
 
     const renderMenuItem = (item: MenuItem, index: number) => {
+        // Skip admin-only items for non-admin users
+        if (item.adminOnly && (!userData || userData.role !== 'admin')) {
+            return null;
+        }
+
         return (
             <TouchableOpacity
                 key={index}
@@ -194,23 +256,47 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
             >
                 <View style={styles.header}>
                     <View style={styles.userInfo}>
-                        <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>WS</Text>
+                        <View style={[
+                            styles.avatar,
+                            {
+                                backgroundColor: userData?.role === 'admin'
+                                    ? '#ef4444'
+                                    : userData?.role === 'pengamat'
+                                        ? '#3b82f6'
+                                        : '#9ca3af'
+                            }
+                        ]}>
+                            <Text style={styles.avatarText}>
+                                {getInitials(userData?.username)}
+                            </Text>
                         </View>
                         <View style={styles.userText}>
-                            <Text style={styles.userName}>Water Sensor</Text>
-                            <Text style={styles.userEmail}>Monitoring App</Text>
+                            <Text style={styles.userName}>
+                                {userData?.username || 'Water Sensor'}
+                            </Text>
+                            <Text style={styles.userEmail}>
+                                {userData?.email || 'Monitoring App'}
+                            </Text>
+                            <View
+                                style={[
+                                    styles.roleBadge,
+                                    {
+                                        backgroundColor: userData?.role === 'admin'
+                                            ? '#ef4444'
+                                            : userData?.role === 'pengamat'
+                                                ? '#3b82f6'
+                                                : '#9ca3af'
+                                    }
+                                ]}
+                            >
+                                <Text style={styles.roleBadgeText}>
+                                    {userData?.role || 'guest'}
+                                </Text>
+                            </View>
                         </View>
                     </View>
                     <TouchableOpacity style={styles.closeButton} onPress={onClose}>
                         <AntDesign name="close" size={24} color="#64748b" />
-                    </TouchableOpacity>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.footer}>
-                    <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                        <AntDesign name="logout" size={20} color="#ef4444" />
-                        <Text style={styles.logoutText}>Logout</Text>
                     </TouchableOpacity>
                 </View>
                 <View style={styles.divider} />
@@ -318,6 +404,7 @@ const styles = StyleSheet.create({
     },
     scrollView: {
         flex: 1,
+        marginTop: 16,
     },
     menuItems: {
         paddingTop: 12,
@@ -352,22 +439,19 @@ const styles = StyleSheet.create({
         borderRadius: 3,
         backgroundColor: '#3b82f6',
     },
-    footer: {
-        padding: 16,
+    roleBadge: {
+        backgroundColor: '#3b82f6',
+        borderRadius: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        marginTop: 4,
+        alignSelf: 'flex-start',
     },
-    logoutButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#fee2e2',
-    },
-    logoutText: {
-        marginLeft: 12,
-        fontSize: 16,
-        color: '#ef4444',
-        fontWeight: '500',
+    roleBadgeText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
     },
 });
 

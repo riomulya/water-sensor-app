@@ -174,6 +174,41 @@ export const guestLogin = async (): Promise<AuthResponse> => {
     }
 };
 
+// Function to create a temporary guest user without saving to database
+export const createGuestUser = async (): Promise<AuthResponse> => {
+    try {
+        // Generate a random guest ID
+        const guestId = Math.floor(Math.random() * 10000);
+        const timestamp = new Date().toISOString();
+
+        // Create a temporary guest user object
+        const guestUser = {
+            id: guestId,
+            username: `guest_${guestId}`,
+            role: 'guest',
+            last_login: timestamp,
+            created_at: timestamp
+        };
+
+        // Create a dummy token (in a real app, you'd have a proper token generation)
+        const guestToken = `guest_token_${Date.now()}_${guestId}`;
+
+        // Store in AsyncStorage
+        await AsyncStorage.setItem('userToken', guestToken);
+        await AsyncStorage.setItem('userData', JSON.stringify(guestUser));
+
+        // Return response similar to a server response
+        return {
+            success: true,
+            token: guestToken,
+            user: guestUser as any
+        };
+    } catch (error) {
+        console.error('Create guest user error:', error);
+        throw new Error((error as Error).message || 'Terjadi kesalahan saat membuat akun tamu');
+    }
+};
+
 export const checkAuthStatus = async (): Promise<{ isLoggedIn: boolean; token?: string; user?: any }> => {
     try {
         const token = await AsyncStorage.getItem('userToken');
