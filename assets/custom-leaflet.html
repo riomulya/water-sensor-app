@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Leaflet Map</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+
+        .leaflet-control-zoom {
+            margin-top: 60px !important;
+            right: 10px !important;
+            left: auto !important;
+        }
+
+        .leaflet-touch .leaflet-control-zoom {
+            right: 1px !important;
+            left: auto !important;
+        }
+
+        .leaflet-touch .leaflet-bar a {
+            width: 36px !important;
+            height: 36px !important;
+            line-height: 36px !important;
+            font-size: 18px !important;
+        }
+
+        .leaflet-container {
+            touch-action: none !important;
+        }
+
+        .search-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 60px;
+            z-index: 1000;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        .clear-button {
+            padding: 10px;
+            color: #777;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            background: white;
+            border-radius: 0 0 4px 4px;
+            box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+            display: none;
+            z-index: 1010;
+        }
+
+        .search-result-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+
+        .search-result-item:hover {
+            background-color: #f0f0f0;
+        }
+
+        .leaflet-top.leaflet-left {
+            left: auto !important;
+            right: 10px !important;
+        }
+
+        /* Style untuk marker */
+        .pulse-marker-icon {
+            background: transparent;
+            border: none;
+        }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+        integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
+        crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
+        integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
+        crossorigin=""></script>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div class="search-container">
+        <input type="text" class="search-input" placeholder="Cari lokasi..." id="search-input">
+        <div class="clear-button" id="clear-search">×</div>
+        <div class="search-results" id="search-results"></div>
+    </div>
+    <script>
+        // Function to send message to React Native
+        function sendMessageToRN(message) {
+            console.log("Mengirim pesan ke RN:", message);
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify(message));
+            }
+        }
+
+        // Initialize the map
+        const map = L.map('map', {
+            zoomControl: true,
+            attributionControl: true,
+            dragging: true,
+            touchZoom: true,
+            doubleClickZoom: true,
+            boxZoom: true,
+            keyboard: true,
+            scrollWheelZoom: true,
+            inertia: true
+        }).setView([-6.200000, 106.816666], 13);
+
+        // Add the base tile layer (OpenStreetMap)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Create a marker (will be updated later)
+        let marker = L.marker([-6.200000, 106.816666]).addTo(map);
+
+        // Search functionality
+        const searchInput = document.getElementById('search-input');
+        const searchResults = document.getElementById('search-results');
+
+        // Function to search for locations using Nominatim API
+        function searchLocation(query) {
+            if (!query || query.length < 3) {
+                searchResults.style.display = 'none';
+                return;
+            }
+
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=id`)
+                .then(response => response.json())
+                .then(data => {
+                    searchResults.innerHTML = '';
+
+                    if (data.length === 0) {
+                        const noResult = document.createElement('div');
+                        noResult.className = 'search-result-item';
+                        noResult.textContent = 'Tidak ada hasil ditemukan';
+                        searchResults.appendChild(noResult);
+                    } else {
+                        data.forEach(result => {
+                            const item = document.createElement('div');
+                            item.className = 'search-result-item';
+                            item.textContent = result.display_name;
+                            item.addEventListener('click', () => {
+                                const lat = parseFloat(result.lat);
+                                const lng = parseFloat(result.lon);
+
+                                // Update marker and view with pulse effect
+                                marker = createPulsingMarker([lat, lng]);
+                                map.flyTo([lat, lng], 16, {
+                                    duration: 0.5
+                                });
+
+                                // Send coordinates to React Native
+                                sendMessageToRN({
+                                    event: 'onMapClicked',
+                                    payload: {
+                                        latlng: {
+                                            lat: lat,
+                                            lng: lng
+                                        }
+                                    }
+                                });
+
+                                // Clear search
+                                searchInput.value = '';
+                                searchResults.style.display = 'none';
+                            });
+                            searchResults.appendChild(item);
+                        });
+                    }
+
+                    searchResults.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error searching locations:', error);
+                    searchResults.innerHTML = '';
+                    const errorItem = document.createElement('div');
+                    errorItem.className = 'search-result-item';
+                    errorItem.textContent = 'Error mencari lokasi';
+                    searchResults.appendChild(errorItem);
+                    searchResults.style.display = 'block';
+                });
+        }
+
+        // Add search input event listeners
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.trim();
+            if (query.length >= 3) {
+                searchLocation(query);
+            } else {
+                searchResults.style.display = 'none';
+            }
+        });
+
+        searchInput.addEventListener('focus', () => {
+            const query = searchInput.value.trim();
+            if (query.length >= 3) {
+                searchLocation(query);
+            }
+        });
+
+        // Close search results when clicking outside
+        document.addEventListener('click', (event) => {
+            if (!searchInput.contains(event.target) && !searchResults.contains(event.target)) {
+                searchResults.style.display = 'none';
+            }
+        });
+
+        // Function to create a marker with pulse effect
+        function createPulsingMarker(latlng) {
+            // Remove existing marker
+            if (marker) {
+                map.removeLayer(marker);
+            }
+
+            // Create a new icon with pulse effect
+            const pulseIcon = L.divIcon({
+                className: 'pulse-marker-icon',
+                html: '<div class="pulse-marker"></div>',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+
+            // Create a style element for the pulse animation
+            const style = document.createElement('style');
+            style.innerHTML = `
+                .pulse-marker {
+                    width: 20px;
+                    height: 20px;
+                    background: rgb(59, 130, 246);
+                    border-radius: 50%;
+                    position: relative;
+                }
+                
+                .pulse-marker:before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(59, 130, 246, 0.6);
+                    border-radius: 50%;
+                    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+                    animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+                }
+                
+                @keyframes pulse-ring {
+                    0% {
+                        transform: scale(0.5);
+                        opacity: 0.8;
+                    }
+                    80%, 100% {
+                        transform: scale(2.5);
+                        opacity: 0;
+                    }
+                }
+            `;
+            document.head.appendChild(style);
+
+            // Create the marker with the pulse icon
+            return L.marker(latlng, { icon: pulseIcon }).addTo(map);
+        }
+
+        // Handle map click events
+        map.on('click', function (e) {
+            console.log('Map clicked at', e.latlng);
+
+            // Update marker position with pulse effect
+            marker = createPulsingMarker(e.latlng);
+
+            // Send the coordinates to React Native
+            sendMessageToRN({
+                event: 'onMapClicked',
+                payload: {
+                    latlng: {
+                        lat: e.latlng.lat,
+                        lng: e.latlng.lng
+                    }
+                }
+            });
+        });
+
+        // Force the map to recalculate its size periodically
+        setInterval(function () {
+            map.invalidateSize();
+        }, 1000);
+
+        // Handle when map is fully loaded
+        map.whenReady(function () {
+            console.log('Map is ready and loaded');
+            sendMessageToRN({
+                event: 'onMapLoaded',
+                payload: {}
+            });
+
+            // Force an initial resize to ensure proper rendering
+            map.invalidateSize();
+
+            // Prevent vertical scrolling when interacting with the map
+            const mapElement = document.getElementById('map');
+
+            mapElement.addEventListener('touchstart', function (e) {
+                e.stopPropagation();
+            }, { passive: false });
+
+            mapElement.addEventListener('touchmove', function (e) {
+                e.stopPropagation();
+                e.preventDefault();
+            }, { passive: false });
+
+            mapElement.addEventListener('touchend', function (e) {
+                e.stopPropagation();
+            }, { passive: false });
+        });
+
+        // Function to receive messages from React Native
+        window.handleMessage = function (data) {
+            console.log('Menerima pesan dari RN:', data);
+            try {
+                const message = JSON.parse(data);
+
+                if (message.type === 'updateMarker') {
+                    // Update marker position with pulse effect
+                    const position = message.payload.position;
+                    marker = createPulsingMarker([position.lat, position.lng]);
+
+                    // Center the map with animation
+                    map.flyTo([position.lat, position.lng], 15, {
+                        duration: 0.5  // Speed up the animation
+                    });
+                } else if (message.type === 'setCenter') {
+                    // Center the map on given coordinates
+                    const position = message.payload;
+                    map.flyTo([position.lat, position.lng], 15, {
+                        duration: 0.5  // Speed up the animation
+                    });
+                }
+            } catch (error) {
+                console.error('Error handling message from RN:', error);
+            }
+        };
+
+        // Notify React Native that the map is ready
+        console.log('Initializing map...');
+        setTimeout(function () {
+            sendMessageToRN({
+                event: 'onMapReady',
+                payload: {}
+            });
+        }, 1000);
+
+        // Clear button event listener
+        document.getElementById('clear-search').addEventListener('click', () => {
+            searchInput.value = '';
+            searchResults.style.display = 'none';
+        });
+    </script>
+</body>
+
+</html>
