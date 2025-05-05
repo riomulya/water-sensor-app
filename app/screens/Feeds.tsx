@@ -1,5 +1,5 @@
-import React, { useEffect, useState, memo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Modal, Pressable, Alert, Platform } from 'react-native';
+import React, { useEffect, useState, memo, useCallback, useRef, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Modal, Pressable, Alert, Platform, TextInput, Dimensions, PanResponder, Animated } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import moment from 'moment';
 import { Button, ButtonText } from '@/components/ui/button';
@@ -34,6 +34,15 @@ interface ChartData {
     totalPage: number;  // Track the total pages for each chart
     hasError: boolean;  // Track if this chart has an error
     errorMessage: string; // Store error message
+}
+
+interface Location {
+    id_lokasi: string;
+    nama_sungai: string;
+    alamat: string;
+    lat: string;
+    lon: string;
+    tanggal: string;
 }
 
 const chartConfigs: ChartData[] = [
@@ -171,6 +180,7 @@ const MemoizedLineChart = memo(LineChart);
 
 type TimeRange = 'ALL' | '1h' | '3h' | '7h' | '1d' | '2d' | '3d' | '7d' | '1m' | '3m' | '6m' | '1y';
 
+// Time range options - sudah disesuaikan dengan format yang didukung oleh server
 const timeRangeOptions: { label: string; value: TimeRange }[] = [
     { label: 'Semua', value: 'ALL' },
     { label: '1 Jam', value: '1h' },
@@ -368,6 +378,20 @@ const FeedsScreen: React.FC = () => {
     const [visibleCharts, setVisibleCharts] = useState<number[]>([0, 1]);
     const scrollViewRef = useRef<ScrollView>(null);
     const [downloadState, setDownloadState] = useState<DownloadState>('idle');
+    const [locations, setLocations] = useState<Location[]>([]);
+    const [selectedLocation, setSelectedLocation] = useState<string>('');  // '' artinya semua
+    const [showLocationModal, setShowLocationModal] = useState(false);
+    const [locationSearchQuery, setLocationSearchQuery] = useState('');
+
+    // Tambahkan refs dan animasi untuk BottomSheet
+    const bottomSheetAnimation = useRef(new Animated.Value(0)).current;
+    const bottomSheetHeight = Dimensions.get('window').height * 0.75;
+    const panY = useRef(new Animated.Value(bottomSheetHeight)).current;
+
+    // Tambahkan state dan ref untuk scroll behavior
+    const [headerVisible, setHeaderVisible] = useState(true);
+    const lastScrollY = useRef(0);
+    const headerAnimation = useRef(new Animated.Value(0)).current;
 
     // Reduce limit for first load to improve initial render speed
     const initialLimit = 100;
@@ -412,56 +436,115 @@ const FeedsScreen: React.FC = () => {
         try {
             console.log('Fetching data for:', url, 'page:', page);
 
-            // Build the API URL with the appropriate parameters
-            let apiUrl = `${url}?page=${page}&limit=${limit}`;
+            let apiUrl = '';
+            const baseUrl = url.split('?')[0]; // Ambil URL dasar tanpa query params
 
-            // Add time range parameter if not "ALL"
-            if (selectedTimeRange !== 'ALL') {
-                apiUrl += `&range=${selectedTimeRange}`;
+            if (selectedLocation && selectedLocation !== 'all') {
+                // Untuk semua endpoint gunakan format yang sama, karena semua controller 
+                // telah diperbarui dengan format yang sama
+                apiUrl = `${baseUrl}/${selectedLocation}?page=${page}&limit=${limit}`;
+
+                // Tambahkan time range jika bukan ALL
+                if (selectedTimeRange !== 'ALL') {
+                    apiUrl += `&range=${selectedTimeRange}`;
+                }
+            } else {
+                // Jika tidak ada lokasi yang dipilih, gunakan endpoint dasar
+                apiUrl = `${baseUrl}?page=${page}&limit=${limit}`;
+
+                // Tambahkan time range jika bukan ALL
+                if (selectedTimeRange !== 'ALL') {
+                    apiUrl += `&range=${selectedTimeRange}`;
+                }
             }
 
             console.log('API URL:', apiUrl);
 
-            const response = await fetch(apiUrl);
-            const json = await response.json();
+            // Tambahkan timeout untuk request
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 detik timeout
 
-            if (json.success) {
-                console.log('Received data points:', json.data.length);
+            try {
+                const response = await fetch(apiUrl, {
+                    signal: controller.signal
+                });
 
-                // Sort data by timestamp in descending order (newest first)
-                const sortedData = [...json.data].sort((a, b) =>
-                    moment(b.tanggal).valueOf() - moment(a.tanggal).valueOf()
-                );
+                // Clear timeout setelah response diterima
+                clearTimeout(timeoutId);
 
-                const formattedData: DataPoint[] = sortedData.map((item: any) =>
-                    createDataPoint(item, as)
-                );
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`Request failed with status ${response.status}. Response: ${errorText}`);
 
-                return {
-                    formattedData: windowData(formattedData),
-                    totalPage: json.totalPage,
-                    hasMore: page < json.totalPage,
-                    hasError: false,
-                    errorMessage: ''
-                };
-            } else {
-                console.warn('API error:', json.message);
-                return {
-                    formattedData: [],
-                    totalPage: 0,
-                    hasMore: false,
-                    hasError: true,
-                    errorMessage: json.message || 'Error fetching data'
-                };
+                    // Pesan error yang lebih informatif
+                    let errorMessage = '';
+                    if (response.status === 404) {
+                        errorMessage = 'Data tidak ditemukan';
+                    } else if (response.status === 500) {
+                        errorMessage = 'Terjadi kesalahan pada server';
+                    } else {
+                        errorMessage = `Error ${response.status}: ${errorText || 'Unknown error'}`;
+                    }
+
+                    throw new Error(errorMessage);
+                }
+
+                const json = await response.json();
+
+                if (json.success) {
+                    console.log('Received data points:', json.data.length);
+
+                    // Sort data by timestamp in descending order (newest first)
+                    const sortedData = [...json.data].sort((a, b) =>
+                        moment(b.tanggal).valueOf() - moment(a.tanggal).valueOf()
+                    );
+
+                    const formattedData: DataPoint[] = sortedData.map((item: any) =>
+                        createDataPoint(item, as)
+                    );
+
+                    return {
+                        formattedData: windowData(formattedData),
+                        totalPage: json.totalPage,
+                        hasMore: page < json.totalPage,
+                        hasError: false,
+                        errorMessage: ''
+                    };
+                } else {
+                    console.warn('API error:', json.message);
+                    return {
+                        formattedData: [],
+                        totalPage: 0,
+                        hasMore: false,
+                        hasError: true,
+                        errorMessage: json.message || 'Error fetching data'
+                    };
+                }
+            } catch (fetchError) {
+                clearTimeout(timeoutId);
+                throw fetchError;
             }
         } catch (error) {
             console.error('Error fetching data:', error);
+
+            // Pesan error yang lebih user-friendly untuk tampilan, tapi tetap menyimpan detail teknis
+            let userMessage = 'Terjadi kesalahan saat mengambil data';
+            let technicalMessage = error instanceof Error ? error.message : 'Network error';
+
+            if (error instanceof Error) {
+                if (error.name === 'AbortError') {
+                    userMessage = 'Permintaan timeout, coba lagi nanti';
+                } else if (error.message.includes('Network request failed')) {
+                    userMessage = 'Koneksi jaringan gagal';
+                }
+            }
+
             return {
                 formattedData: [],
                 totalPage: 0,
                 hasMore: false,
                 hasError: true,
-                errorMessage: error instanceof Error ? error.message : 'Network error'
+                errorMessage: `${userMessage} (${technicalMessage})`
             };
         }
     };
@@ -474,29 +557,50 @@ const FeedsScreen: React.FC = () => {
 
             const updatedChartData = await Promise.all(
                 chartData.map(async (chart) => {
-                    const { formattedData, totalPage, hasError, errorMessage } = await fetchData(chart.url, chart.as, chart.page);
-                    return {
-                        ...chart,
-                        data: formattedData,
-                        loading: false,
-                        totalPage: totalPage || 1,
-                        hasError,
-                        errorMessage
-                    };
+                    try {
+                        const { formattedData, totalPage, hasError, errorMessage } = await fetchData(chart.url, chart.as, chart.page);
+                        return {
+                            ...chart,
+                            data: formattedData,
+                            loading: false,
+                            totalPage: totalPage || 1,
+                            hasError,
+                            errorMessage
+                        };
+                    } catch (chartError) {
+                        // Tangani error per chart
+                        console.error(`Error fetching data for ${chart.title}:`, chartError);
+                        return {
+                            ...chart,
+                            data: [],
+                            loading: false,
+                            hasError: true,
+                            errorMessage: chartError instanceof Error
+                                ? chartError.message
+                                : 'Terjadi kesalahan saat mengambil data'
+                        };
+                    }
                 })
             );
 
             setChartData(updatedChartData);
             setIsDataLoaded(true); // Mark data as loaded after first fetch
         } catch (error) {
-            console.error('Error fetching data:', error);
+            console.error('Error in fetchAllData:', error);
+
+            // Generate user friendly messages for each chart
             setChartData((prevData) =>
-                prevData.map((prevChart) => ({
-                    ...prevChart,
-                    loading: false,
-                    hasError: true,
-                    errorMessage: error instanceof Error ? error.message : 'Network error'
-                }))
+                prevData.map((prevChart) => {
+                    const userMessage = 'Gagal memuat data';
+                    const technicalMessage = error instanceof Error ? error.message : 'Network error';
+
+                    return {
+                        ...prevChart,
+                        loading: false,
+                        hasError: true,
+                        errorMessage: `${userMessage} (${technicalMessage})`
+                    };
+                })
             );
         }
     };
@@ -516,6 +620,26 @@ const FeedsScreen: React.FC = () => {
             fetchAllData();
         }
     }, [globalPage]);
+
+    // Add effect to handle parameter changes
+    useEffect(() => {
+        if (isDataLoaded) {
+            // Reset pages when any filter parameter changes
+            const resetPagesChartData = chartData.map((chart) => ({
+                ...chart,
+                page: 1,
+                hasError: false,
+                errorMessage: ''
+            }));
+            setChartData(resetPagesChartData);
+            setGlobalPage(1);
+
+            // Delay sedikit untuk memberikan waktu UI memperbarui state
+            setTimeout(() => {
+                fetchAllData();
+            }, 50);
+        }
+    }, [selectedTimeRange, selectedLocation]); // Combine filters into single effect
 
     // Handle scroll events to determine which charts are visible
     const handleScroll = useCallback((event: any) => {
@@ -627,13 +751,66 @@ const FeedsScreen: React.FC = () => {
         </Button>
     ));
 
-    // Empty state when no data is found
-    const EmptyStateView = ({ message }: { message: string }) => (
-        <View style={styles.emptyStateContainer}>
-            <Ionicons name="alert-circle-outline" size={48} color="#999" />
-            <Text style={styles.emptyStateText}>{message}</Text>
-        </View>
-    );
+    // Improved Empty state component with better user experience
+    const EmptyStateView = ({ message, technicalError = '', onRetry = null }) => {
+        // Pesan user-friendly berdasarkan error
+        const userFriendlyMessage = React.useMemo(() => {
+            if (message.includes('Network Error') || message.includes('Failed to fetch')) {
+                return 'Gagal terhubung ke server. Periksa koneksi internet Anda.';
+            }
+            else if (message.includes('404') || message.includes('tidak ditemukan')) {
+                return 'Data tidak tersedia untuk filter yang dipilih.';
+            }
+            else if (message.includes('500')) {
+                return 'Terjadi kesalahan pada server. Silakan coba lagi nanti.';
+            }
+            else if (message.includes('timeout') || message.includes('ETIMEDOUT')) {
+                return 'Koneksi timeout. Silakan coba lagi nanti.';
+            }
+            else if (message === '') {
+                return 'Data tidak tersedia';
+            }
+            return message;
+        }, [message]);
+
+        // State untuk menampilkan detail teknis
+        const [showTechnicalDetails, setShowTechnicalDetails] = React.useState(false);
+
+        return (
+            <View style={styles.emptyStateContainer}>
+                <Ionicons name="alert-circle-outline" size={48} color="#999" />
+                <Text style={styles.emptyStateText}>{userFriendlyMessage}</Text>
+
+                {technicalError && (
+                    <>
+                        <TouchableOpacity
+                            onPress={() => setShowTechnicalDetails(!showTechnicalDetails)}
+                            style={styles.showDetailsButton}
+                        >
+                            <Text style={styles.showDetailsText}>
+                                {showTechnicalDetails ? 'Sembunyikan Detail' : 'Lihat Detail Error'}
+                            </Text>
+                        </TouchableOpacity>
+
+                        {showTechnicalDetails && (
+                            <View style={styles.technicalErrorContainer}>
+                                <Text style={styles.technicalErrorText}>{technicalError}</Text>
+                            </View>
+                        )}
+                    </>
+                )}
+
+                {onRetry && (
+                    <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name="refresh-outline" size={16} color="#2196f3" />
+                            <Text style={styles.retryButtonText}> Coba Lagi</Text>
+                        </View>
+                    </TouchableOpacity>
+                )}
+            </View>
+        );
+    };
 
     // Add loading skeleton
     const ChartSkeleton = () => (
@@ -664,12 +841,32 @@ const FeedsScreen: React.FC = () => {
                     let hasMoreData = true;
 
                     while (hasMoreData) {
-                        let apiUrl = `${chart.url}?page=${currentPage}&limit=1000`;
-                        if (selectedTimeRange !== 'ALL') {
-                            apiUrl += `&range=${selectedTimeRange}`;
+                        let apiUrl = '';
+                        const baseUrl = chart.url.split('?')[0];
+
+                        if (selectedLocation && selectedLocation !== 'all') {
+                            // Untuk semua endpoint gunakan format yang sama
+                            apiUrl = `${baseUrl}/${selectedLocation}?page=${currentPage}&limit=1000`;
+
+                            // time range
+                            if (selectedTimeRange !== 'ALL') {
+                                apiUrl += `&range=${selectedTimeRange}`;
+                            }
+                        } else {
+                            // Jika tidak ada lokasi yang dipilih
+                            apiUrl = `${baseUrl}?page=${currentPage}&limit=1000`;
+
+                            // time range
+                            if (selectedTimeRange !== 'ALL') {
+                                apiUrl += `&range=${selectedTimeRange}`;
+                            }
                         }
 
                         const response = await fetch(apiUrl);
+                        if (!response.ok) {
+                            throw new Error(`API responded with status ${response.status}`);
+                        }
+
                         const json = await response.json();
 
                         if (json.success && json.data.length > 0) {
@@ -928,34 +1125,202 @@ const FeedsScreen: React.FC = () => {
         setChartData(resetPagesChartData);
     };
 
+    // 3) Fetch daftar lokasi sekali
+    useEffect(() => {
+        const fetchLocations = async () => {
+            try {
+                const response = await fetch(`${port}data_lokasi`);
+                const json = await response.json();
+                setLocations(json);
+            } catch (error) {
+                console.error('Error fetching locations:', error);
+            }
+        };
+        fetchLocations();
+    }, []);
+
+    // Buat PanResponder untuk BottomSheet
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onPanResponderMove: (_, gesture) => {
+                if (gesture.dy > 0) {
+                    panY.setValue(gesture.dy);
+                }
+            },
+            onPanResponderRelease: (_, gesture) => {
+                if (gesture.dy > bottomSheetHeight * 0.3) {
+                    // Swipe down more than 30% -> close
+                    closeLocationSheet();
+                } else {
+                    // Reset to opened position
+                    Animated.spring(panY, {
+                        toValue: 0,
+                        useNativeDriver: true,
+                    }).start();
+                }
+            },
+        })
+    ).current;
+
+    // Function untuk membuka BottomSheet
+    const openLocationSheet = () => {
+        setShowLocationModal(true);
+        setLocationSearchQuery('');
+        Animated.timing(bottomSheetAnimation, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+        }).start();
+        Animated.spring(panY, {
+            toValue: 0,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    // Function untuk menutup BottomSheet
+    const closeLocationSheet = () => {
+        Animated.timing(bottomSheetAnimation, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+        }).start(() => {
+            setShowLocationModal(false);
+        });
+        Animated.spring(panY, {
+            toValue: bottomSheetHeight,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    const handleLocationChange = (locationId: string) => {
+        setSelectedLocation(locationId);
+        closeLocationSheet();
+    };
+
+    useEffect(() => {
+        if (isDataLoaded) {
+            // reset halaman tiap chart
+            const resetPagesChartData = chartData.map((chart) => ({
+                ...chart,
+                page: 1,
+                hasError: false,
+                errorMessage: ''
+            }));
+            setChartData(resetPagesChartData);
+            setGlobalPage(1);
+            fetchAllData();
+        }
+    }, [selectedLocation]);
+
+    // Fungsi untuk memfilter lokasi berdasarkan search query
+    const filteredLocations = useMemo(() => {
+        if (!locationSearchQuery.trim()) return locations;
+        return locations.filter(loc =>
+            loc.nama_sungai.toLowerCase().includes(locationSearchQuery.toLowerCase()) ||
+            loc.alamat.toLowerCase().includes(locationSearchQuery.toLowerCase())
+        );
+    }, [locations, locationSearchQuery]);
+
+    // Handler untuk memanage scroll dan menampilkan/menyembunyikan header
+    const handleScrollHeader = useCallback((event: any) => {
+        const currentScrollY = event.nativeEvent.contentOffset.y;
+
+        // Deteksi arah scroll
+        if (currentScrollY <= 10) {
+            // Di paling atas atau hampir di atas, selalu tampilkan header
+            setHeaderVisible(true);
+            Animated.spring(headerAnimation, {
+                toValue: 0,
+                useNativeDriver: true,
+                tension: 80,
+                friction: 9
+            }).start();
+        } else if (currentScrollY > lastScrollY.current + 5) {
+            // Scroll ke bawah (dengan threshold 5px untuk menghindari jitter), sembunyikan header
+            if (headerVisible) {
+                setHeaderVisible(false);
+                Animated.spring(headerAnimation, {
+                    toValue: -110, // Angka negatif sesuai dengan tinggi header
+                    useNativeDriver: true,
+                    tension: 100,
+                    friction: 10
+                }).start();
+            }
+        } else if (currentScrollY < lastScrollY.current - 5) {
+            // Scroll ke atas (dengan threshold 5px), tampilkan header
+            if (!headerVisible) {
+                setHeaderVisible(true);
+                Animated.spring(headerAnimation, {
+                    toValue: 0,
+                    useNativeDriver: true,
+                    tension: 80,
+                    friction: 9
+                }).start();
+            }
+        }
+
+        // Simpan posisi scroll terakhir
+        lastScrollY.current = currentScrollY;
+
+        // Panggil original handler untuk visible charts
+        handleScroll(event);
+    }, [headerVisible]);
+
     return (
         <View style={styles.container}>
-            {/* Time Range Selector */}
-            <View style={styles.timeRangeContainer}>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onPress={() => setShowTimeRangeModal(true)}
-                >
-                    <HStack space="sm">
-                        <Ionicons name="time-outline" size={16} color="#000" />
-                        <ButtonText>{timeRangeOptions.find(opt => opt.value === selectedTimeRange)?.label}</ButtonText>
-                    </HStack>
-                </Button>
+            {/* Wrapper untuk tombol filter dengan animasi */}
+            <Animated.View
+                style={[
+                    styles.headerContainer,
+                    { transform: [{ translateY: headerAnimation }] }
+                ]}
+            >
+                <View style={styles.headerContentWrapper}>
+                    {/* Filter Time Range */}
+                    <View style={styles.timeRangeContainer}>
+                        <Button variant="outline" size="sm" onPress={() => setShowTimeRangeModal(true)}>
+                            <HStack space="sm">
+                                <Ionicons name="time-outline" size={16} color="#000" />
+                                <ButtonText>
+                                    {timeRangeOptions.find(opt => opt.value === selectedTimeRange)?.label}
+                                </ButtonText>
+                            </HStack>
+                        </Button>
 
-                <TouchableOpacity
-                    onPress={downloadExcel}
-                    disabled={isExporting}
-                >
-                    <DownloadAnimation downloadState={downloadState} />
-                </TouchableOpacity>
-            </View>
+                        {/* Download */}
+                        <TouchableOpacity onPress={downloadExcel} disabled={isExporting}>
+                            <DownloadAnimation downloadState={downloadState} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Filter Lokasi Button - di tengah */}
+                    <View style={styles.locationFilterContainer}>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onPress={openLocationSheet}
+                            style={styles.locationFilterButton}
+                        >
+                            <HStack space="sm">
+                                <Ionicons name="location-outline" size={16} color="#000" />
+                                <ButtonText>
+                                    {selectedLocation
+                                        ? (locations.find(loc => loc.id_lokasi === selectedLocation)?.nama_sungai || selectedLocation)
+                                        : 'Semua Lokasi'}
+                                </ButtonText>
+                            </HStack>
+                        </Button>
+                    </View>
+                </View>
+            </Animated.View>
 
             <ScrollView
                 ref={scrollViewRef}
                 style={styles.scrollView}
+                contentContainerStyle={styles.scrollViewContent}
                 refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshData} />}
-                onScroll={handleScroll}
+                onScroll={handleScrollHeader}
                 scrollEventThrottle={400}
             >
                 {chartData.map((chart, index) => (
@@ -975,7 +1340,46 @@ const FeedsScreen: React.FC = () => {
                         {chart.loading ? (
                             <ChartSkeleton />
                         ) : chart.hasError ? (
-                            <EmptyStateView message={chart.errorMessage || 'Data tidak tersedia'} />
+                            <EmptyStateView
+                                message={
+                                    chart.errorMessage.includes('tidak ditemukan') ?
+                                        'Data tidak tersedia' :
+                                        'Gagal memuat data'
+                                }
+                                technicalError={chart.errorMessage}
+                                onRetry={() => {
+                                    // Set chart to loading state
+                                    const updatedChartData = [...chartData];
+                                    updatedChartData[index].loading = true;
+                                    updatedChartData[index].hasError = false;
+                                    setChartData(updatedChartData);
+
+                                    // Fetch data for this specific chart
+                                    fetchData(chart.url, chart.as, chart.page)
+                                        .then(result => {
+                                            const updatedData = [...chartData];
+                                            updatedData[index] = {
+                                                ...updatedData[index],
+                                                data: result.formattedData,
+                                                loading: false,
+                                                totalPage: result.totalPage || 1,
+                                                hasError: result.hasError,
+                                                errorMessage: result.errorMessage
+                                            };
+                                            setChartData(updatedData);
+                                        })
+                                        .catch(error => {
+                                            const updatedData = [...chartData];
+                                            updatedData[index] = {
+                                                ...updatedData[index],
+                                                loading: false,
+                                                hasError: true,
+                                                errorMessage: error instanceof Error ? error.message : 'Terjadi kesalahan'
+                                            };
+                                            setChartData(updatedData);
+                                        });
+                                }}
+                            />
                         ) : chart.data.length === 0 ? (
                             <EmptyStateView message="Data tidak ditemukan" />
                         ) : visibleCharts.includes(index) ? (
@@ -1129,12 +1533,122 @@ const FeedsScreen: React.FC = () => {
                                     </View>
                                 </View>
                             </Modal>
+                            {/* BottomSheet Location Picker */}
+                            <Modal
+                                visible={showLocationModal}
+                                transparent
+                                animationType="none"
+                                onRequestClose={closeLocationSheet}
+                            >
+                                <Animated.View
+                                    style={[
+                                        styles.bottomSheetOverlay,
+                                        {
+                                            backgroundColor: bottomSheetAnimation.interpolate({
+                                                inputRange: [0, 1],
+                                                outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)'],
+                                            })
+                                        }
+                                    ]}
+                                    onTouchEnd={closeLocationSheet}
+                                >
+                                    <Animated.View
+                                        style={[
+                                            styles.bottomSheetContainer,
+                                            {
+                                                transform: [
+                                                    {
+                                                        translateY: panY.interpolate({
+                                                            inputRange: [0, bottomSheetHeight],
+                                                            outputRange: [0, bottomSheetHeight],
+                                                            extrapolate: 'clamp',
+                                                        })
+                                                    }
+                                                ]
+                                            }
+                                        ]}
+                                        onTouchEnd={(e) => e.stopPropagation()}
+                                    >
+                                        {/* Drag handle for BottomSheet */}
+                                        <View {...panResponder.panHandlers} style={styles.dragHandle}>
+                                            <View style={styles.dragIndicator} />
+                                        </View>
+
+                                        <Text style={styles.modalTitle}>Pilih Lokasi</Text>
+
+                                        {/* Search Input */}
+                                        <View style={styles.searchContainer}>
+                                            <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
+                                            <TextInput
+                                                style={styles.searchInput}
+                                                placeholder="Cari lokasi..."
+                                                value={locationSearchQuery}
+                                                onChangeText={setLocationSearchQuery}
+                                                clearButtonMode="while-editing"
+                                            />
+                                            {locationSearchQuery.length > 0 && (
+                                                <TouchableOpacity onPress={() => setLocationSearchQuery('')}>
+                                                    <Ionicons name="close-circle" size={20} color="#666" />
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+
+                                        <ScrollView style={styles.locationScrollView} contentContainerStyle={styles.locationOptionsContainer}>
+                                            {/* Semua Lokasi */}
+                                            <Pressable
+                                                style={[
+                                                    styles.locationOption,
+                                                    selectedLocation === '' && styles.locationOptionSelected
+                                                ]}
+                                                onPress={() => handleLocationChange('')}
+                                            >
+                                                <Text
+                                                    style={[
+                                                        styles.locationOptionText,
+                                                        selectedLocation === '' && styles.locationOptionTextSelected
+                                                    ]}
+                                                >
+                                                    Semua Lokasi
+                                                </Text>
+                                            </Pressable>
+                                            {/* List lokasi */}
+                                            {filteredLocations.map((loc) => (
+                                                <Pressable
+                                                    key={loc.id_lokasi}
+                                                    style={[
+                                                        styles.locationOption,
+                                                        selectedLocation === loc.id_lokasi && styles.locationOptionSelected
+                                                    ]}
+                                                    onPress={() => handleLocationChange(loc.id_lokasi)}
+                                                >
+                                                    <Text
+                                                        style={[
+                                                            styles.locationOptionText,
+                                                            selectedLocation === loc.id_lokasi && styles.locationOptionTextSelected
+                                                        ]}
+                                                    >
+                                                        {loc.nama_sungai}
+                                                    </Text>
+                                                    <Text style={styles.locationAddress}>
+                                                        {loc.alamat}
+                                                    </Text>
+                                                </Pressable>
+                                            ))}
+
+                                            {filteredLocations.length === 0 && (
+                                                <View style={styles.noResultContainer}>
+                                                    <Ionicons name="search-outline" size={40} color="#ccc" />
+                                                    <Text style={styles.noResultText}>Lokasi tidak ditemukan</Text>
+                                                </View>
+                                            )}
+                                        </ScrollView>
+                                    </Animated.View>
+                                </Animated.View>
+                            </Modal>
                         </VStack>
                     </HStack>
                 </View>
             </ScrollView>
-
-            {/* Time Range Modal */}
 
             <View style={{ height: 100 }}></View>
         </View>
@@ -1205,8 +1719,6 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 10,
         backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
     },
     modalContainer: {
         flex: 1,
@@ -1275,12 +1787,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: '#f9f9f9',
         borderRadius: 8,
+        padding: 15,
     },
     emptyStateText: {
         marginTop: 10,
         color: '#666',
         textAlign: 'center',
         fontSize: 14,
+        fontWeight: '500',
     },
     errorInfo: {
         marginLeft: 8,
@@ -1307,6 +1821,196 @@ const styles = StyleSheet.create({
     },
     downloadAnimationTextCompleted: {
         color: '#fff',
+    },
+    locationFilterContainer: {
+        padding: 10,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    locationFilterButton: {
+        alignSelf: 'center',
+    },
+    locationModalOverlay: {
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        width: '100%',
+        height: '100%',
+    },
+    locationModalContent: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        padding: 20,
+        width: '100%',
+        height: '75%',
+        alignSelf: 'center',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: -3,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+    },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f5f5f5',
+        paddingHorizontal: 10,
+        borderRadius: 10,
+        marginBottom: 15,
+        height: 45,
+    },
+    searchIcon: {
+        marginRight: 5,
+    },
+    searchInput: {
+        flex: 1,
+        height: 40,
+        paddingHorizontal: 8,
+    },
+    locationScrollView: {
+        flex: 1,
+        marginBottom: 15,
+    },
+    locationOptionsContainer: {
+        paddingBottom: 20,
+    },
+    locationOption: {
+        paddingVertical: 12,
+        paddingHorizontal: 15,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 10,
+        marginBottom: 8,
+        width: '100%',
+    },
+    locationOptionSelected: {
+        backgroundColor: '#007AFF',
+    },
+    locationOptionText: {
+        color: '#333',
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    locationOptionTextSelected: {
+        color: '#fff',
+    },
+    locationAddress: {
+        color: '#666',
+        fontSize: 12,
+        marginTop: 4,
+    },
+    noResultContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 30,
+    },
+    noResultText: {
+        marginTop: 10,
+        color: '#999',
+        fontSize: 16,
+    },
+    bottomSheetOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    bottomSheetContainer: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        padding: 20,
+        paddingTop: 12,
+        height: '75%',
+        width: '100%',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: -3,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+    },
+    dragHandle: {
+        width: '100%',
+        height: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 8,
+    },
+    dragIndicator: {
+        width: 40,
+        height: 5,
+        borderRadius: 3,
+        backgroundColor: '#DDD',
+    },
+    showDetailsButton: {
+        paddingHorizontal: 15,
+        paddingVertical: 8,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 20,
+        marginTop: 10,
+    },
+    showDetailsText: {
+        color: '#2196f3',
+        fontSize: 12,
+        fontWeight: '500',
+        textAlign: 'center',
+    },
+    technicalErrorContainer: {
+        padding: 10,
+        backgroundColor: '#f9f9f9',
+        borderRadius: 5,
+        marginTop: 10,
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+        width: '100%',
+        maxWidth: 300,
+    },
+    technicalErrorText: {
+        color: '#666',
+        fontSize: 12,
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
+    retryButton: {
+        paddingHorizontal: 15,
+        paddingVertical: 8,
+        backgroundColor: '#e3f2fd',
+        borderRadius: 20,
+        marginTop: 15,
+        borderWidth: 1,
+        borderColor: '#bbdefb',
+    },
+    retryButtonText: {
+        color: '#2196f3',
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    headerContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 3,
+    },
+    headerContentWrapper: {
+        width: '100%',
+    },
+    scrollViewContent: {
+        paddingTop: 110, // Sesuaikan dengan tinggi total header
     },
 });
 
