@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Dimensions, Platform, SafeAreaView, StatusBar } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Dimensions, Platform, SafeAreaView, StatusBar, FlatList, LogBox } from 'react-native';
 import { Heading } from '@/components/ui/heading';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { port } from '@/constants/https';
 import { DataTable } from 'react-native-paper';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { AntDesign, SimpleLineIcons } from '@expo/vector-icons';
+import { AntDesign, SimpleLineIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { MotiView, MotiText, AnimatePresence, useAnimationState } from 'moti'
 import { Easing } from 'react-native-reanimated'
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,6 +18,11 @@ import { Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import WebView from 'react-native-webview';
 import { Asset } from 'expo-asset';
+import * as ScreenOrientation from 'expo-screen-orientation';
+
+// useEffect(() => {
+LogBox.ignoreLogs(["VirtualizedLists should never be nested"])
+// }, [])
 
 interface ApiLocation {
     id_lokasi: number;
@@ -285,6 +290,78 @@ const AnimatedTableRow = ({
     );
 };
 
+const SensorListItem = ({ item }: { item: EnhancedCombinedData }) => {
+    return (
+        <MotiView
+            from={{ opacity: 0, translateY: 5 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 300, delay: 50 }}
+            style={styles.listItem}
+        >
+            <View style={styles.listItemHeader}>
+                <Text style={styles.listItemNumber}>{item.rowNumber}</Text>
+                <Text style={styles.listItemDate}>{item.formattedDate}</Text>
+            </View>
+            <View style={styles.listItemGrid}>
+                <View style={styles.listItemValue}>
+                    <Text style={styles.listItemLabel}>pH</Text>
+                    <Text style={{
+                        fontSize: 16,
+                        fontWeight: '600',
+                        color: item.nilai_ph < 6 ? '#ef4444' : '#10b981',
+                    }}>
+                        {item.nilai_ph.toFixed(2)}
+                    </Text>
+                </View>
+                <View style={styles.listItemValue}>
+                    <Text style={styles.listItemLabel}>Suhu</Text>
+                    <Text style={{
+                        fontSize: 16,
+                        fontWeight: '600',
+                        color: item.nilai_temperature > 30 ? '#ef4444' : '#3b82f6',
+                    }}>
+                        {item.nilai_temperature.toFixed(2)}°C
+                    </Text>
+                </View>
+                <View style={styles.listItemValue}>
+                    <Text style={styles.listItemLabel}>Turbidity</Text>
+                    <Text style={styles.listItemValueText}>
+                        {item.nilai_turbidity.toFixed(2)} NTU
+                    </Text>
+                </View>
+            </View>
+            <View style={styles.listItemGrid}>
+                <View style={styles.listItemValue}>
+                    <Text style={styles.listItemLabel}>Kecepatan</Text>
+                    <Text style={styles.listItemValueText}>
+                        {item.nilai_speed?.toFixed(2) ?? '0.00'} m/s
+                    </Text>
+                </View>
+                <View style={styles.listItemValue}>
+                    <Text style={styles.listItemLabel}>Accel X</Text>
+                    <Text style={styles.listItemValueText}>
+                        {item.nilai_accel_x.toFixed(2)}
+                    </Text>
+                </View>
+                <View style={styles.listItemValue}>
+                    <Text style={styles.listItemLabel}>Accel Y</Text>
+                    <Text style={styles.listItemValueText}>
+                        {item.nilai_accel_y.toFixed(2)}
+                    </Text>
+                </View>
+            </View>
+            <View style={[styles.listItemGrid, { justifyContent: 'flex-start' }]}>
+                <View style={styles.listItemValue}>
+                    <Text style={styles.listItemLabel}>Accel Z</Text>
+                    <Text style={styles.listItemValueText}>
+                        {item.nilai_accel_z.toFixed(2)}
+                    </Text>
+                </View>
+            </View>
+        </MotiView>
+    );
+};
+
 const DetailLocationScreen = () => {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
@@ -303,6 +380,11 @@ const DetailLocationScreen = () => {
     const [webViewContent, setWebViewContent] = useState<string | null>(null);
     const webViewRef = useRef<WebView | null>(null);
     const [isMapFullscreen, setIsMapFullscreen] = useState(false);
+    const [viewMode, setViewMode] = useState<'table' | 'list'>('list');
+    const flatListRef = useRef<FlatList>(null);
+
+    // Add state for screen orientation
+    const [isLandscape, setIsLandscape] = useState(false);
 
     // Add loading transition state
     const [isLoadingTransition, setIsLoadingTransition] = useState(false);
@@ -546,7 +628,19 @@ const DetailLocationScreen = () => {
     };
 
     const handleBack = () => {
-        router.back();
+        // Reset to portrait mode first if in landscape
+        if (isLandscape) {
+            try {
+                ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+            } catch (error) {
+                console.error('Error resetting orientation:', error);
+            }
+        }
+
+        // Use more reliable navigation approach
+        setTimeout(() => {
+            router.back();
+        }, 100);
     };
 
     const handleDownload = async () => {
@@ -767,7 +861,12 @@ const DetailLocationScreen = () => {
 
     // Memoize the data transformation
     const transformedData = useMemo(() => {
-        return allCombinedData.map((item, index) => ({
+        // Sort the data by timestamp (oldest to newest)
+        const sortedData = [...allCombinedData].sort((a, b) => {
+            return new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime();
+        });
+
+        return sortedData.map((item, index) => ({
             ...item,
             formattedDate: new Date(item.tanggal).toLocaleString('id-ID', {
                 weekday: 'long',
@@ -821,6 +920,214 @@ const DetailLocationScreen = () => {
         to: { opacity: 1, translateY: 0 },
     });
 
+    // Function to toggle screen orientation
+    const toggleOrientation = async () => {
+        try {
+            if (isLandscape) {
+                // Change to portrait
+                await ScreenOrientation.lockAsync(
+                    ScreenOrientation.OrientationLock.PORTRAIT_UP
+                );
+                setIsLandscape(false);
+            } else {
+                // Change to landscape
+                await ScreenOrientation.lockAsync(
+                    ScreenOrientation.OrientationLock.LANDSCAPE
+                );
+                setIsLandscape(true);
+            }
+        } catch (error) {
+            console.error('Error changing screen orientation:', error);
+            Alert.alert('Error', 'Failed to change screen orientation');
+        }
+    };
+
+    // Handle orientation changes
+    useEffect(() => {
+        // Temporarily disable automatic orientation handling
+        const getOrientation = async () => {
+            try {
+                const orientation = await ScreenOrientation.getOrientationAsync();
+                setIsLandscape(
+                    orientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+                    orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT
+                );
+            } catch (error) {
+                console.error('Error getting orientation:', error);
+            }
+        };
+
+        getOrientation();
+
+        // Don't add orientation change listener for now
+        // Let user manually control with the button only
+
+        return () => {
+            // Reset to portrait when component unmounts
+            try {
+                ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+            } catch (error) {
+                console.error('Error resetting orientation:', error);
+            }
+        };
+    }, []);
+
+    // Render item for FlatList
+    const renderItem = useCallback(({ item }: { item: EnhancedCombinedData }) => {
+        return <SensorListItem item={item} />;
+    }, []);
+
+    // Footer for FlatList with pagination
+    const renderFooter = useCallback(() => {
+        return (
+            <View style={styles.paginationContainer}>
+                <View style={styles.paginationControls}>
+                    <TouchableOpacity
+                        style={[styles.paginationButton, page === 0 && styles.paginationButtonDisabled]}
+                        onPress={() => handlePageChange(0)}
+                        disabled={page === 0}
+                    >
+                        <MaterialIcons name="first-page" size={24} color={page === 0 ? "#a0aec0" : "#3b82f6"} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.paginationButton, page === 0 && styles.paginationButtonDisabled]}
+                        onPress={() => handlePageChange(page - 1)}
+                        disabled={page === 0}
+                    >
+                        <MaterialIcons name="chevron-left" size={24} color={page === 0 ? "#a0aec0" : "#3b82f6"} />
+                    </TouchableOpacity>
+                    <Text style={styles.paginationText}>
+                        {`${page * itemsPerPage + 1}-${Math.min((page + 1) * itemsPerPage, totalItems)} dari ${totalItems}`}
+                    </Text>
+                    <TouchableOpacity
+                        style={[
+                            styles.paginationButton,
+                            page >= Math.ceil(totalItems / itemsPerPage) - 1 && styles.paginationButtonDisabled
+                        ]}
+                        onPress={() => handlePageChange(page + 1)}
+                        disabled={page >= Math.ceil(totalItems / itemsPerPage) - 1}
+                    >
+                        <MaterialIcons name="chevron-right" size={24} color={
+                            page >= Math.ceil(totalItems / itemsPerPage) - 1 ? "#a0aec0" : "#3b82f6"
+                        } />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[
+                            styles.paginationButton,
+                            page >= Math.ceil(totalItems / itemsPerPage) - 1 && styles.paginationButtonDisabled
+                        ]}
+                        onPress={() => handlePageChange(Math.ceil(totalItems / itemsPerPage) - 1)}
+                        disabled={page >= Math.ceil(totalItems / itemsPerPage) - 1}
+                    >
+                        <MaterialIcons name="last-page" size={24} color={
+                            page >= Math.ceil(totalItems / itemsPerPage) - 1 ? "#a0aec0" : "#3b82f6"
+                        } />
+                    </TouchableOpacity>
+                </View>
+                <View style={styles.rowsPerPageContainer}>
+                    <Text style={styles.rowsPerPageText}>Baris per halaman:</Text>
+                    <View style={styles.rowsPerPageButtons}>
+                        {numberOfItemsPerPageList.map((num) => (
+                            <TouchableOpacity
+                                key={num}
+                                style={[
+                                    styles.rowsPerPageButton,
+                                    itemsPerPage === num && styles.rowsPerPageButtonActive
+                                ]}
+                                onPress={() => handleItemsPerPageChange(num)}
+                            >
+                                <Text style={[
+                                    styles.rowsPerPageButtonText,
+                                    itemsPerPage === num && styles.rowsPerPageButtonTextActive
+                                ]}>
+                                    {num}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </View>
+            </View>
+        );
+    }, [page, itemsPerPage, totalItems, handlePageChange, handleItemsPerPageChange]);
+
+    // Add a function to toggle view mode
+    const toggleViewMode = () => {
+        setViewMode(viewMode === 'table' ? 'list' : 'table');
+    };
+
+    // Render the data section - conditional based on viewMode
+    const renderDataSection = () => {
+        if (loading) {
+            return (
+                <MotiView
+                    from={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ type: 'spring' }}
+                    style={styles.loadingContainer}
+                >
+                    <ActivityIndicator size="large" color="#3b82f6" />
+                    <MotiText
+                        from={{ translateY: 10 }}
+                        animate={{ translateY: 0 }}
+                        transition={{ loop: true, type: 'timing', duration: 1000 }}
+                        className="text-slate-600 mt-4"
+                    >
+                        Memuat data sensor...
+                    </MotiText>
+                </MotiView>
+            );
+        }
+
+        if (allCombinedData.length === 0) {
+            return (
+                <MotiView style={styles.emptyContainer}>
+                    <Text>Tidak ada data sensor di lokasi {data?.nama_sungai}</Text>
+                </MotiView>
+            );
+        }
+
+        return (
+            <MotiView
+                state={tableAnimation}
+                style={[
+                    styles.tableWrapper,
+                    isLandscape && styles.tableWrapperLandscape
+                ]}
+            >
+                <View style={styles.dataHeaderContainer}>
+                    <Text style={styles.dataHeaderTitle}>Data Sensor</Text>
+                    <View style={styles.dataHeaderButtons}>
+                        <TouchableOpacity
+                            style={styles.orientationButton}
+                            onPress={toggleOrientation}
+                        >
+                            <MaterialCommunityIcons
+                                name={isLandscape ? "phone-rotate-portrait" : "phone-rotate-landscape"}
+                                size={22}
+                                color="#3b82f6"
+                            />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                <FlatList
+                    ref={flatListRef}
+                    data={transformedData}
+                    renderItem={renderItem}
+                    keyExtractor={(item) => `sensor-${item.rowNumber}-${item.tanggal}`}
+                    contentContainerStyle={styles.listContainer}
+                    ListFooterComponent={renderFooter}
+                    onEndReachedThreshold={0.5}
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    windowSize={10}
+                    showsVerticalScrollIndicator={true}
+                />
+            </MotiView>
+        );
+    };
+
     // Render the fullscreen map
     const renderFullscreenMap = () => {
         return (
@@ -871,7 +1178,7 @@ const DetailLocationScreen = () => {
     return (
         <LinearGradient
             colors={['#f0f4ff', '#ffffff']}
-            style={styles.gradientContainer}
+            style={[styles.gradientContainer, isLandscape && styles.gradientContainerLandscape]}
         >
             <ScrollView
                 contentContainerStyle={styles.scrollContainer}
@@ -1034,99 +1341,11 @@ const DetailLocationScreen = () => {
                         </View>
                     </MotiView>
 
-                    {/* Enhanced Table */}
-                    {loading && (
-                        <MotiView
-                            from={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.8 }}
-                            transition={{ type: 'spring' }}
-                            style={styles.loadingContainer}
-                        >
-                            <ActivityIndicator size="large" color="#3b82f6" />
-                            <MotiText
-                                from={{ translateY: 10 }}
-                                animate={{ translateY: 0 }}
-                                transition={{ loop: true, type: 'timing', duration: 1000 }}
-                                className="text-slate-600 mt-4"
-                            >
-                                Memuat data sensor...
-                            </MotiText>
-                        </MotiView>
-                    )}
-                    {!loading && allCombinedData.length > 0 && (
-                        <MotiView
-                            state={tableAnimation}
-                            style={styles.tableWrapper}
-                        >
-                            <ScrollView
-                                horizontal
-                                style={styles.horizontalScroll}
-                                contentContainerStyle={styles.tableContent}
-                                persistentScrollbar={true}
-                            >
-                                <DataTable style={styles.dataTable}>
-                                    <DataTable.Header>
-                                        <DataTable.Title style={styles.numberCell}>No</DataTable.Title>
-                                        <DataTable.Title style={[styles.headerCell, { width: 200 }]}>
-                                            <MotiText
-                                                from={{ scale: 0.9 }}
-                                                animate={{ scale: 1 }}
-                                                transition={{ loop: true, type: 'timing', duration: 2000 }}
-                                            >
-                                                Tanggal & Waktu
-                                            </MotiText>
-                                        </DataTable.Title>
-                                        <DataTable.Title numeric style={[styles.headerCell, { width: 80 }]}>pH</DataTable.Title>
-                                        <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>Suhu</DataTable.Title>
-                                        <DataTable.Title numeric style={[styles.headerCell, { width: 120 }]}>Turbidity</DataTable.Title>
-                                        <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>Kecepatan</DataTable.Title>
-                                        <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>Accel X</DataTable.Title>
-                                        <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>Accel Y</DataTable.Title>
-                                        <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>Accel Z</DataTable.Title>
-                                    </DataTable.Header>
-
-                                    <AnimatePresence>
-                                        {transformedData.map((item, index) => (
-                                            <AnimatedTableRow
-                                                key={`row-${item.rowNumber}-${item.tanggal}`}
-                                                item={item}
-                                                index={index}
-                                                isNewDataSet={isNewDataSet}
-                                            />
-                                        ))}
-                                    </AnimatePresence>
-                                </DataTable>
-                            </ScrollView>
-
-                            <DataTable.Pagination
-                                page={page}
-                                numberOfPages={Math.ceil(totalItems / itemsPerPage)}
-                                onPageChange={handlePageChange}
-                                label={`${page * itemsPerPage + 1}-${Math.min(
-                                    (page + 1) * itemsPerPage,
-                                    totalItems
-                                )} dari ${totalItems}`}
-                                numberOfItemsPerPageList={numberOfItemsPerPageList}
-                                numberOfItemsPerPage={itemsPerPage}
-                                onItemsPerPageChange={handleItemsPerPageChange}
-                                showFastPaginationControls
-                                selectPageDropdownLabel={'Baris per halaman'}
-                                style={styles.pagination}
-                            />
-                        </MotiView>
-                    )}
+                    {/* Data Section */}
+                    {renderDataSection()}
 
                     {/* Loading overlay for transitions */}
                     <LoadingOverlay isVisible={isLoadingTransition} />
-
-                    {!loading && allCombinedData.length === 0 && (
-                        <MotiView
-                            style={styles.emptyContainer}
-                        >
-                            <Text>Tidak ada data sensor di lokasi {data?.nama_sungai}</Text>
-                        </MotiView>
-                    )}
                 </MotiView>
             </ScrollView>
         </LinearGradient>
@@ -1368,6 +1587,174 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
+    },
+    // New styles for list view
+    listContainer: {
+        paddingBottom: 80,
+        paddingHorizontal: 8,
+    },
+    listItem: {
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    listItemHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f0f0f0',
+        paddingBottom: 8,
+    },
+    listItemNumber: {
+        backgroundColor: '#3b82f6',
+        color: 'white',
+        fontWeight: 'bold',
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        textAlign: 'center',
+        lineHeight: 30,
+        marginRight: 12,
+    },
+    listItemDate: {
+        fontSize: 14,
+        color: '#64748b',
+        flex: 1,
+    },
+    listItemGrid: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 10,
+    },
+    listItemValue: {
+        flex: 1,
+        alignItems: 'flex-start',
+        marginRight: 10,
+    },
+    listItemLabel: {
+        fontSize: 12,
+        color: '#64748b',
+        marginBottom: 2,
+    },
+    listItemValueText: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#334155',
+    },
+
+    // Pagination styles
+    paginationContainer: {
+        backgroundColor: '#f8fafc',
+        paddingTop: 12,
+        paddingBottom: 20,
+        borderTopWidth: 1,
+        borderTopColor: '#e2e8f0',
+        marginTop: 16,
+    },
+    paginationControls: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    paginationButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        marginHorizontal: 4,
+    },
+    paginationButtonDisabled: {
+        backgroundColor: '#e2e8f0',
+    },
+    paginationText: {
+        marginHorizontal: 12,
+        fontSize: 14,
+        color: '#475569',
+    },
+    rowsPerPageContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    rowsPerPageText: {
+        fontSize: 14,
+        color: '#475569',
+        marginRight: 8,
+    },
+    rowsPerPageButtons: {
+        flexDirection: 'row',
+    },
+    rowsPerPageButton: {
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        marginHorizontal: 4,
+        borderRadius: 16,
+        backgroundColor: '#f1f5f9',
+    },
+    rowsPerPageButtonActive: {
+        backgroundColor: '#3b82f6',
+    },
+    rowsPerPageButtonText: {
+        fontSize: 14,
+        color: '#475569',
+    },
+    rowsPerPageButtonTextActive: {
+        color: 'white',
+    },
+
+    // Data header styles
+    dataHeaderContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        marginBottom: 12,
+    },
+    dataHeaderTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#334155',
+    },
+    dataHeaderButtons: {
+        flexDirection: 'row',
+    },
+    viewToggleButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        marginHorizontal: 4,
+    },
+    orientationButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        marginHorizontal: 4,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+
+    // Landscape mode styles
+    gradientContainerLandscape: {
+        paddingTop: 0,
+    },
+    tableWrapperLandscape: {
+        minHeight: 'auto',
     },
 });
 

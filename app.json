@@ -107,6 +107,12 @@
         {
           "minimumInterval": 5
         }
+      ],
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "DEFAULT"
+        }
       ]
     ],
     "experiments": {

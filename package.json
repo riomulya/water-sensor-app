@@ -110,7 +110,8 @@
     "socket.io-client": "^4.8.1",
     "use-debounce": "^10.0.4",
     "xlsx": "^0.18.5",
-    "zustand": "^5.0.4"
+    "zustand": "^5.0.4",
+    "expo-screen-orientation": "~8.0.4"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
