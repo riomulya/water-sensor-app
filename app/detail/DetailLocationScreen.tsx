@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Dimensions, Platform } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Dimensions, Platform, SafeAreaView, StatusBar } from 'react-native';
 import { Heading } from '@/components/ui/heading';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -10,12 +10,14 @@ import { port } from '@/constants/https';
 import { DataTable } from 'react-native-paper';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { AntDesign } from '@expo/vector-icons';
+import { AntDesign, SimpleLineIcons } from '@expo/vector-icons';
 import { MotiView, MotiText, AnimatePresence, useAnimationState } from 'moti'
 import { Easing } from 'react-native-reanimated'
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
+import WebView from 'react-native-webview';
+import { Asset } from 'expo-asset';
 
 interface ApiLocation {
     id_lokasi: number;
@@ -288,6 +290,7 @@ const DetailLocationScreen = () => {
     const router = useRouter();
     const [data, setData] = useState<ApiLocation | null>(null);
     const [allCombinedData, setAllCombinedData] = useState<CombinedData[]>([]);
+    const [allSensorData, setAllSensorData] = useState<CombinedData[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
     const [loading, setLoading] = useState(true);
@@ -296,6 +299,10 @@ const DetailLocationScreen = () => {
     const [page, setPage] = useState(0);
     const numberOfItemsPerPageList = [10, 20, 50, 100];
     const [downloadState, setDownloadState] = useState<DownloadState>('idle');
+    const [mapLoading, setMapLoading] = useState(true);
+    const [webViewContent, setWebViewContent] = useState<string | null>(null);
+    const webViewRef = useRef<WebView | null>(null);
+    const [isMapFullscreen, setIsMapFullscreen] = useState(false);
 
     // Add loading transition state
     const [isLoadingTransition, setIsLoadingTransition] = useState(false);
@@ -335,6 +342,208 @@ const DetailLocationScreen = () => {
 
         fetchCombinedData();
     }, [id, page, itemsPerPage]);
+
+    // Load the HTML content for Expo
+    useEffect(() => {
+        const loadHtml = async () => {
+            try {
+                setMapLoading(true);
+                const path = require("../../assets/index.html");
+                const asset = Asset.fromModule(path);
+                await asset.downloadAsync();
+
+                // Modify HTML content to remove search control
+                let htmlContent = await FileSystem.readAsStringAsync(asset.localUri!);
+
+                // Remove the search control initialization code
+                htmlContent = htmlContent.replace(
+                    /const searchControl = new L\.Control\.Geocoder\(.*?\)\.addTo\(map\);/gs,
+                    '// Search control removed'
+                );
+
+                // Also remove the event listener for search
+                htmlContent = htmlContent.replace(
+                    /L\.DomEvent\.on\(searchControl.*?\}\);/gs,
+                    '// Search event listener removed'
+                );
+
+                setWebViewContent(htmlContent);
+                setMapLoading(false);
+            } catch (error) {
+                console.error('Error loading HTML:', error);
+                Alert.alert('Error loading HTML', JSON.stringify(error));
+                setMapLoading(false);
+            }
+        };
+
+        loadHtml();
+    }, []);
+
+    // Add new useEffect to fetch all sensor data for the map
+    useEffect(() => {
+        const fetchAllSensorData = async () => {
+            try {
+                const response = await fetch(`${port}data_combined/${id}`);
+                const result = await response.json();
+                if (result.success) {
+                    setAllSensorData(result.data);
+                }
+            } catch (error) {
+                console.error('Error fetching all sensor data:', error);
+            }
+        };
+
+        if (id) {
+            fetchAllSensorData();
+        }
+    }, [id]);
+
+    // Handle WebView message
+    const handleWebViewMessage = (event: any) => {
+        try {
+            const data = JSON.parse(event.nativeEvent.data);
+            console.log('Received message from WebView:', data);
+        } catch (error) {
+            console.error('Error parsing WebView message:', error);
+        }
+    };
+
+    // Update map with location and sensor data
+    const updateMapData = useCallback(() => {
+        if (!webViewRef.current || !data || !allSensorData.length) return;
+
+        // Format location data
+        const locationData = [{
+            id_lokasi: data.id_lokasi,
+            lat: data.lat,
+            lon: data.lon,
+            nama_sungai: data.nama_sungai,
+            alamat: data.alamat,
+            tanggal: data.tanggal
+        }];
+
+        // Format sensor data with historical data
+        const sensorData = allSensorData.map(item => ({
+            lat: item.lat,
+            lon: item.lon,
+            nilai_accel_x: item.nilai_accel_x,
+            nilai_accel_y: item.nilai_accel_y,
+            nilai_accel_z: item.nilai_accel_z,
+            nilai_ph: item.nilai_ph,
+            nilai_temperature: item.nilai_temperature,
+            nilai_turbidity: item.nilai_turbidity,
+            nilai_speed: item.nilai_speed,
+            tanggal: item.tanggal
+        }));
+
+        // Inject JavaScript to update map
+        webViewRef.current.injectJavaScript(`
+            // Remove search control if exists
+            if (window.searchControl) {
+                map.removeControl(window.searchControl);
+            }
+
+            // Clear existing markers
+            if (window.markerClusterGroup) {
+                window.markerClusterGroup.clearLayers();
+            }
+
+            // Update location marker
+            window.updateLocationData(${JSON.stringify(locationData)});
+
+            // Update sensor data with clustering
+            window.updateSensorData(${JSON.stringify(sensorData)});
+
+            // Center map on location
+            map.setView([${data.lat}, ${data.lon}], 15);
+
+            // Initialize marker cluster group if not exists
+            if (!window.markerClusterGroup) {
+                window.markerClusterGroup = L.markerClusterGroup({
+                    chunkedLoading: true,
+                    chunkInterval: 200,
+                    spiderfyOnMaxZoom: true,
+                    showCoverageOnHover: false,
+                    zoomToBoundsOnClick: true,
+                    maxClusterRadius: 40,
+                    disableClusteringAtZoom: 18,
+                    spiderLegPolylineOptions: {
+                        weight: 1.5,
+                        color: '#222',
+                        opacity: 0.5
+                    },
+                    iconCreateFunction: function(cluster) {
+                        return L.divIcon({
+                            html: '<div class="cluster-marker">' + cluster.getChildCount() + '</div>',
+                            className: 'marker-cluster-custom',
+                            iconSize: L.point(40, 40, true)
+                        });
+                    }
+                }).addTo(map);
+            }
+
+            // Add sensor markers to cluster group
+            const geoJsonLayer = L.geoJSON({
+                "type": "FeatureCollection",
+                "features": ${JSON.stringify(sensorData)}.map(item => ({
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [parseFloat(item.lon), parseFloat(item.lat)]
+                    },
+                    "properties": item
+                }))
+            }, {
+                pointToLayer: function(feature, latlng) {
+                    return L.marker(latlng, {
+                        icon: window.markerWaterWays,
+                        title: 'Sensor Data',
+                        zIndexOffset: 0
+                    }).bindPopup(createSensorPopup(feature.properties));
+                }
+            });
+
+            window.markerClusterGroup.addLayer(geoJsonLayer);
+
+            // Enable all map interactions - will make the map work better in fullscreen
+            map.dragging.enable();
+            map.touchZoom.enable();
+            map.doubleClickZoom.enable();
+            map.scrollWheelZoom.enable();
+            map.boxZoom.enable();
+            map.keyboard.enable();
+            if (map.tap) map.tap.enable();
+
+            // Force map to invalidate size
+            map.invalidateSize();
+            
+            true;
+        `);
+    }, [data, allSensorData]);
+
+    // Call updateMapData when toggling fullscreen mode
+    useEffect(() => {
+        // Only update the map after the component has re-rendered in the new mode
+        const timer = setTimeout(() => {
+            if (webViewRef.current && data && allSensorData.length > 0) {
+                updateMapData();
+            }
+        }, 500); // Short delay to ensure WebView is ready
+
+        return () => clearTimeout(timer);
+    }, [isMapFullscreen, updateMapData]);
+
+    // Update map when data changes
+    useEffect(() => {
+        if (data && allSensorData.length > 0) {
+            updateMapData();
+        }
+    }, [data, allSensorData, updateMapData]);
+
+    // Toggle map fullscreen mode
+    const toggleMapFullscreen = () => {
+        setIsMapFullscreen(!isMapFullscreen);
+    };
 
     const handleBack = () => {
         router.back();
@@ -612,12 +821,63 @@ const DetailLocationScreen = () => {
         to: { opacity: 1, translateY: 0 },
     });
 
+    // Render the fullscreen map
+    const renderFullscreenMap = () => {
+        return (
+            <SafeAreaView style={styles.fullscreenContainer}>
+                <View style={styles.fullscreenMapContainer}>
+                    {mapLoading ? (
+                        <View style={styles.mapLoading}>
+                            <ActivityIndicator size="large" color="#3b82f6" />
+                            <Text style={styles.mapLoadingText}>Memuat peta...</Text>
+                        </View>
+                    ) : (
+                        webViewContent && (
+                            <WebView
+                                ref={webViewRef}
+                                source={{ html: webViewContent }}
+                                onMessage={handleWebViewMessage}
+                                style={{ flex: 1 }}
+                                javaScriptEnabled={true}
+                                domStorageEnabled={true}
+                                scrollEnabled={false}
+                                bounces={false}
+                                startInLoadingState={true}
+                                renderLoading={() => (
+                                    <View style={styles.mapLoading}>
+                                        <ActivityIndicator size="large" color="#3b82f6" />
+                                        <Text style={styles.mapLoadingText}>Memuat peta...</Text>
+                                    </View>
+                                )}
+                            />
+                        )
+                    )}
+                    <TouchableOpacity
+                        style={styles.fullscreenButton}
+                        onPress={toggleMapFullscreen}
+                    >
+                        <AntDesign name="shrink" size={24} color="white" />
+                    </TouchableOpacity>
+                </View>
+            </SafeAreaView>
+        );
+    };
+
+    // Render content
+    if (isMapFullscreen) {
+        return renderFullscreenMap();
+    }
+
     return (
         <LinearGradient
             colors={['#f0f4ff', '#ffffff']}
             style={styles.gradientContainer}
         >
-            <ScrollView contentContainerStyle={styles.scrollContainer}>
+            <ScrollView
+                contentContainerStyle={styles.scrollContainer}
+                scrollEnabled={true}
+                nestedScrollEnabled={true}
+            >
                 <MotiView
                     style={styles.container}
                     from={{ opacity: 0 }}
@@ -723,6 +983,56 @@ const DetailLocationScreen = () => {
                             </TouchableOpacity>
                         </MotiView>
                     )}
+
+                    {/* Map Section */}
+                    <MotiView
+                        style={styles.mapContainer}
+                        from={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ delay: 200 }}
+                    >
+                        <View style={styles.mapHeaderContainer}>
+                            <Text style={[styles.label]}>
+                                Peta Lokasi dan Data Sensor
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.expandButton}
+                                onPress={toggleMapFullscreen}
+                            >
+                                <SimpleLineIcons name="size-fullscreen" size={24} color="black" />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.mapOuterContainer}>
+                            <View style={styles.leafletContainer}>
+                                {mapLoading ? (
+                                    <View style={styles.mapLoading}>
+                                        <ActivityIndicator size="large" color="#3b82f6" />
+                                        <Text style={styles.mapLoadingText}>Memuat peta...</Text>
+                                    </View>
+                                ) : (
+                                    webViewContent && (
+                                        <WebView
+                                            ref={webViewRef}
+                                            source={{ html: webViewContent }}
+                                            onMessage={handleWebViewMessage}
+                                            style={{ flex: 1 }}
+                                            javaScriptEnabled={true}
+                                            domStorageEnabled={true}
+                                            scrollEnabled={false}
+                                            bounces={false}
+                                            startInLoadingState={true}
+                                            renderLoading={() => (
+                                                <View style={styles.mapLoading}>
+                                                    <ActivityIndicator size="large" color="#3b82f6" />
+                                                    <Text style={styles.mapLoadingText}>Memuat peta...</Text>
+                                                </View>
+                                            )}
+                                        />
+                                    )
+                                )}
+                            </View>
+                        </View>
+                    </MotiView>
 
                     {/* Enhanced Table */}
                     {loading && (
@@ -912,7 +1222,7 @@ const styles = StyleSheet.create({
     },
     scrollContainer: {
         flexGrow: 1,
-        paddingBottom: 100, // Ruang untuk pagination
+        paddingBottom: 100,
     },
     card: {
         marginVertical: 8,
@@ -980,6 +1290,84 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 8,
         elevation: 5,
+    },
+    mapContainer: {
+        marginBottom: 24,
+        borderRadius: 8,
+        overflow: 'hidden',
+    },
+    mapOuterContainer: {
+        borderRadius: 8,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    leafletContainer: {
+        position: 'relative',
+        height: 300,
+        width: '100%',
+        borderRadius: 8,
+        overflow: 'hidden',
+        backgroundColor: '#f1f5f9',
+    },
+    mapLoading: {
+        width: '100%',
+        height: 300,
+        backgroundColor: '#f1f5f9',
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    mapLoadingText: {
+        marginTop: 8,
+        color: '#64748b',
+    },
+    mapHeaderContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+        paddingHorizontal: 4,
+    },
+    label: {
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    expandButton: {
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    fullscreenContainer: {
+        flex: 1,
+        backgroundColor: '#000',
+        position: 'relative',
+    },
+    fullscreenMapContainer: {
+        flex: 1,
+        position: 'relative',
+    },
+    fullscreenButton: {
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        backgroundColor: 'rgba(37, 99, 235, 0.8)',
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
     },
 });
 
