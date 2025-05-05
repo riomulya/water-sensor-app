@@ -16,18 +16,31 @@ import * as XLSX from 'xlsx';
 import type { WorkBook, WorkSheet } from 'xlsx';
 import useChartStore, { TimeRange } from '@/app/stores/chartStore';
 import { Divider } from '@/components/ui/divider';
+import {
+    BottomSheet,
+    BottomSheetDragIndicator,
+    BottomSheetBackdrop,
+    BottomSheetContent,
+    BottomSheetScrollView
+} from '@/components/ui/bottomsheet';
+import { Input, InputField, InputIcon, InputSlot } from '@/components/ui/input';
+import { Box } from '@/components/ui/box';
+import { BottomSheetPortal } from '@/components/ui/bottomsheet';
 
 // We're now importing chart types from the store
 // import type { DataPoint, ChartData } from '@/app/stores/chartStore';
 
 interface Location {
-    id_lokasi: string;
+    id_lokasi: number;
     nama_sungai: string;
     alamat: string;
     lat: string;
     lon: string;
     tanggal: string;
 }
+
+// State type for location data fetching
+type DataState = 'idle' | 'loading' | 'success' | 'error';
 
 // Time range options - sudah disesuaikan dengan format yang didukung oleh server
 const timeRangeOptions: { label: string; value: TimeRange }[] = [
@@ -219,6 +232,97 @@ const convertToExcel = async (sensorData: Array<{
 // Memoized chart component to prevent unnecessary re-renders
 const MemoizedLineChart = memo(LineChart);
 
+// Loading component for locations
+const LocationsLoadingState = () => (
+    <View style={styles.locationStateContainer}>
+        <ActivityIndicator size="large" color="#2196f3" />
+        <Text style={styles.locationStateText}>Memuat daftar lokasi...</Text>
+    </View>
+);
+
+// Error component for locations with technical details
+const LocationsErrorState = ({ error, onRetry }: { error: string, onRetry: () => void }) => {
+    const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
+
+    return (
+        <View style={styles.locationStateContainer}>
+            <Ionicons name="alert-circle-outline" size={48} color="#f44336" />
+            <Text style={styles.locationStateText}>
+                Gagal memuat daftar lokasi
+            </Text>
+
+            <TouchableOpacity
+                style={styles.retryButton}
+                onPress={onRetry}
+                activeOpacity={0.7}
+            >
+                <HStack space="sm" style={{ alignItems: 'center' }}>
+                    <Ionicons name="refresh-outline" size={16} color="#2196f3" />
+                    <Text style={styles.retryButtonText}>Coba Lagi</Text>
+                </HStack>
+            </TouchableOpacity>
+
+            {/* Technical error details for developers */}
+            <TouchableOpacity
+                style={styles.showDetailsButton}
+                onPress={() => setShowTechnicalDetails(!showTechnicalDetails)}
+            >
+                <Text style={styles.showDetailsText}>
+                    {showTechnicalDetails ? 'Sembunyikan Detail Teknis' : 'Lihat Detail Teknis'}
+                </Text>
+            </TouchableOpacity>
+
+            {showTechnicalDetails && (
+                <View style={styles.technicalErrorContainer}>
+                    <Text style={styles.technicalErrorText}>{error}</Text>
+                </View>
+            )}
+        </View>
+    );
+};
+
+// Empty state for when no locations match the search
+const LocationsEmptyState = ({ debugInfo = '' }: { debugInfo?: string }) => (
+    <View style={styles.locationStateContainer}>
+        <Ionicons name="location-outline" size={48} color="#9e9e9e" />
+        <Text style={styles.locationStateText}>
+            Tidak ada lokasi yang tersedia
+        </Text>
+        <Text style={styles.locationStateSubText}>
+            Silakan coba lagi nanti atau hubungi administrator
+        </Text>
+        {debugInfo ? (
+            <View style={{ marginTop: 20 }}>
+                <TouchableOpacity
+                    style={styles.showDetailsButton}
+                    onPress={() => console.log('Debug Info:', debugInfo)}
+                >
+                    <Text style={styles.showDetailsText}>Debug Info</Text>
+                </TouchableOpacity>
+            </View>
+        ) : null}
+    </View>
+);
+
+// Empty search results component
+const LocationsEmptySearch = ({ query, onClear }: { query: string, onClear: () => void }) => (
+    <View style={styles.locationStateContainer}>
+        <Ionicons name="search-outline" size={48} color="#9e9e9e" />
+        <Text style={styles.locationStateText}>
+            Tidak ada hasil untuk "{query}"
+        </Text>
+        <TouchableOpacity
+            style={styles.clearSearchButton}
+            onPress={onClear}
+            activeOpacity={0.7}
+        >
+            <Text style={styles.clearSearchButtonText}>
+                Hapus Pencarian
+            </Text>
+        </TouchableOpacity>
+    </View>
+);
+
 const FeedsScreen: React.FC = () => {
     // Replace multiple useState hooks with the Zustand store
     const {
@@ -249,13 +353,10 @@ const FeedsScreen: React.FC = () => {
     const scrollViewRef = useRef<FlatList>(null);
     const [downloadState, setDownloadState] = useState<DownloadState>('idle');
     const [locations, setLocations] = useState<Location[]>([]);
+    const [locationsState, setLocationsState] = useState<DataState>('idle');
+    const [locationError, setLocationError] = useState<string>('');
     const [showLocationModal, setShowLocationModal] = useState(false);
     const [locationSearchQuery, setLocationSearchQuery] = useState('');
-
-    // Tambahkan refs dan animasi untuk BottomSheet
-    const bottomSheetAnimation = useRef(new Animated.Value(0)).current;
-    const bottomSheetHeight = Dimensions.get('window').height * 0.75;
-    const panY = useRef(new Animated.Value(bottomSheetHeight)).current;
 
     // Tambahkan state dan ref untuk scroll behavior
     const [headerVisible, setHeaderVisible] = useState(true);
@@ -272,11 +373,22 @@ const FeedsScreen: React.FC = () => {
         disabled: boolean,
         text: string
     }) => (
-        <Button size="md" variant="solid" action="primary">
-            <TouchableOpacity onPress={onPress} disabled={disabled}>
-                <ButtonText>{text}</ButtonText>
-            </TouchableOpacity>
-        </Button>
+        <TouchableOpacity
+            onPress={onPress}
+            disabled={disabled}
+            style={[
+                styles.paginationButton,
+                disabled && styles.paginationButtonDisabled
+            ]}
+            activeOpacity={0.7}
+        >
+            <Text style={[
+                styles.paginationButtonText,
+                disabled && styles.paginationButtonTextDisabled
+            ]}>
+                {text}
+            </Text>
+        </TouchableOpacity>
     ));
 
     // Improved Empty state component with better user experience
@@ -741,72 +853,75 @@ const FeedsScreen: React.FC = () => {
     useEffect(() => {
         const fetchLocations = async () => {
             try {
+                setLocationsState('loading');
+                console.log('Fetching locations from:', `${port}data_lokasi`);
                 const response = await fetch(`${port}data_lokasi`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const json = await response.json();
+                console.log('Raw locations response:', json);
+                console.log('Number of locations:', json.length);
+                console.log('First location:', json[0]);
+
                 setLocations(json);
+                setLocationsState('success');
+                console.log('Locations state updated:', json.length, 'items');
             } catch (error) {
                 console.error('Error fetching locations:', error);
+                setLocationError(error instanceof Error ? error.message : 'Failed to fetch locations');
+                setLocationsState('error');
             }
         };
         fetchLocations();
     }, []);
 
-    // Buat PanResponder untuk BottomSheet
-    const panResponder = useRef(
-        PanResponder.create({
-            onStartShouldSetPanResponder: () => true,
-            onPanResponderMove: (_, gesture) => {
-                if (gesture.dy > 0) {
-                    panY.setValue(gesture.dy);
-                }
-            },
-            onPanResponderRelease: (_, gesture) => {
-                if (gesture.dy > bottomSheetHeight * 0.3) {
-                    // Swipe down more than 30% -> close
-                    closeLocationSheet();
-                } else {
-                    // Reset to opened position
-                    Animated.spring(panY, {
-                        toValue: 0,
-                        useNativeDriver: true,
-                    }).start();
-                }
-            },
-        })
-    ).current;
-
     // Function untuk membuka BottomSheet
     const openLocationSheet = () => {
-        setShowLocationModal(true);
+        // Reset the search query
         setLocationSearchQuery('');
-        Animated.timing(bottomSheetAnimation, {
-            toValue: 1,
-            duration: 300,
-            useNativeDriver: true,
-        }).start();
-        Animated.spring(panY, {
-            toValue: 0,
-            useNativeDriver: true,
-        }).start();
+
+        // Show the modal
+        setShowLocationModal(true);
     };
 
     // Function untuk menutup BottomSheet
     const closeLocationSheet = () => {
-        Animated.timing(bottomSheetAnimation, {
-            toValue: 0,
-            duration: 300,
-            useNativeDriver: true,
-        }).start(() => {
-            setShowLocationModal(false);
-        });
-        Animated.spring(panY, {
-            toValue: bottomSheetHeight,
-            useNativeDriver: true,
-        }).start();
+        // Hide the modal
+        setShowLocationModal(false);
     };
 
-    const handleLocationChange = (locationId: string) => {
-        setSelectedLocation(locationId);
+    // Function to retry fetching locations
+    const retryFetchLocations = useCallback(async () => {
+        try {
+            setLocationsState('loading');
+            const response = await fetch(`${port}data_lokasi`);
+
+            if (!response.ok) {
+                throw new Error(`Server responded with status: ${response.status}`);
+            }
+
+            const json = await response.json();
+            setLocations(json);
+            setLocationsState('success');
+        } catch (error) {
+            console.error('Error fetching locations:', error);
+            setLocationsState('error');
+            setLocationError(error instanceof Error ? error.message : 'Terjadi kesalahan tak terduga');
+        }
+    }, []);
+
+    // Function for handling location changes with proper type handling
+    const handleLocationChange = (locationId: number | string) => {
+        if (locationId === '') {
+            // "All locations" case
+            setSelectedLocation('');
+        } else {
+            // Convert numeric ID to string for the store
+            setSelectedLocation(String(locationId));
+        }
         closeLocationSheet();
     };
 
@@ -834,7 +949,7 @@ const FeedsScreen: React.FC = () => {
         );
     }, [locations, locationSearchQuery]);
 
-    return (
+    return (<>
         <View style={styles.container}>
             {/* Wrapper untuk tombol filter dengan animasi */}
             <Animated.View
@@ -846,14 +961,18 @@ const FeedsScreen: React.FC = () => {
                 <View style={styles.headerContentWrapper}>
                     {/* Filter Time Range */}
                     <View style={styles.timeRangeContainer}>
-                        <Button variant="outline" size="sm" onPress={() => setShowTimeRangeModal(true)}>
-                            <HStack space="sm">
-                                <Ionicons name="time-outline" size={16} color="#000" />
-                                <ButtonText>
+                        <TouchableOpacity
+                            style={styles.timeFilterButton}
+                            onPress={() => setShowTimeRangeModal(true)}
+                            activeOpacity={0.8}
+                        >
+                            <HStack space="sm" style={styles.timeFilterButtonContent}>
+                                <Ionicons name="time-outline" size={16} color="#fff" />
+                                <Text style={styles.filterButtonText}>
                                     {timeRangeOptions.find(opt => opt.value === selectedTimeRange)?.label}
-                                </ButtonText>
+                                </Text>
                             </HStack>
-                        </Button>
+                        </TouchableOpacity>
 
                         {/* Download */}
                         <TouchableOpacity onPress={downloadExcel} disabled={isExporting}>
@@ -864,21 +983,20 @@ const FeedsScreen: React.FC = () => {
                     {/* Filter Lokasi Button - di tengah */}
                     <Divider className="my-0.5" />
                     <View style={styles.locationFilterContainer}>
-                        <Button
-                            variant="outline"
-                            size="sm"
+                        <TouchableOpacity
+                            style={styles.locationButton}
                             onPress={openLocationSheet}
-                            style={styles.locationFilterButton}
+                            activeOpacity={0.8}
                         >
-                            <HStack space="sm">
-                                <Ionicons name="location-outline" size={16} color="#000" />
-                                <ButtonText>
+                            <HStack space="sm" style={styles.locationButtonContent}>
+                                <Ionicons name="location-outline" size={16} color="#fff" />
+                                <Text style={styles.filterButtonText}>
                                     {selectedLocation
-                                        ? (locations.find(loc => loc.id_lokasi === selectedLocation)?.nama_sungai || selectedLocation)
+                                        ? locations.find(loc => String(loc.id_lokasi) === selectedLocation)?.nama_sungai || 'Lokasi tidak ditemukan'
                                         : 'Semua Lokasi'}
-                                </ButtonText>
+                                </Text>
                             </HStack>
-                        </Button>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </Animated.View>
@@ -1037,33 +1155,57 @@ const FeedsScreen: React.FC = () => {
                     <View style={styles.globalPagination}>
                         <HStack space="md" reversed={false}>
                             <VStack space="md" reversed={false}>
-                                <Button variant='outline' size='md'>
-                                    <TouchableOpacity onPress={() => handleGlobalPageChange('prev')} disabled={globalPage === 1}>
-                                        <ButtonText>Prev All</ButtonText>
-                                    </TouchableOpacity>
-                                </Button>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.globalPaginationButton,
+                                        globalPage === 1 && styles.globalPaginationButtonDisabled
+                                    ]}
+                                    onPress={() => handleGlobalPageChange('prev')}
+                                    disabled={globalPage === 1}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={styles.globalPaginationButtonText}>Prev All</Text>
+                                </TouchableOpacity>
 
-                                <Button variant='outline' size='md'>
-                                    <TouchableOpacity onPress={() => handleGlobalPageChange('first')} disabled={globalPage === 1}>
-                                        <ButtonText>First All</ButtonText>
-                                    </TouchableOpacity>
-                                </Button>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.globalPaginationButton,
+                                        globalPage === 1 && styles.globalPaginationButtonDisabled
+                                    ]}
+                                    onPress={() => handleGlobalPageChange('first')}
+                                    disabled={globalPage === 1}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={styles.globalPaginationButtonText}>First All</Text>
+                                </TouchableOpacity>
                             </VStack>
 
-                            <Text className='px-5 text-center'>{`Global Page: ${globalPage}`}</Text>
+                            <Text style={styles.globalPageIndicator}>{`Global Page: ${globalPage}`}</Text>
 
                             <VStack space="md" reversed={false}>
-                                <Button variant='outline' size='md'>
-                                    <TouchableOpacity onPress={() => handleGlobalPageChange('next')} disabled={globalPage === chartData[0].totalPage}>
-                                        <ButtonText>Next All</ButtonText>
-                                    </TouchableOpacity>
-                                </Button>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.globalPaginationButton,
+                                        globalPage === chartData[0]?.totalPage && styles.globalPaginationButtonDisabled
+                                    ]}
+                                    onPress={() => handleGlobalPageChange('next')}
+                                    disabled={globalPage === chartData[0]?.totalPage}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={styles.globalPaginationButtonText}>Next All</Text>
+                                </TouchableOpacity>
 
-                                <Button variant='outline' size='md'>
-                                    <TouchableOpacity onPress={() => handleGlobalPageChange('last')} disabled={globalPage === chartData[0].totalPage}>
-                                        <ButtonText>Last All</ButtonText>
-                                    </TouchableOpacity>
-                                </Button>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.globalPaginationButton,
+                                        globalPage === chartData[0]?.totalPage && styles.globalPaginationButtonDisabled
+                                    ]}
+                                    onPress={() => handleGlobalPageChange('last')}
+                                    disabled={globalPage === chartData[0]?.totalPage}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={styles.globalPaginationButtonText}>Last All</Text>
+                                </TouchableOpacity>
                             </VStack>
                         </HStack>
                     </View>
@@ -1072,161 +1214,187 @@ const FeedsScreen: React.FC = () => {
 
             <View style={{ height: 100 }}></View>
 
-            {/* Time Range Modal */}
-            <Modal
-                visible={showTimeRangeModal}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setShowTimeRangeModal(false)}
-            >
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.modalContent}>
-                            <Text style={styles.modalTitle}>Pilih Rentang Waktu</Text>
-                            <View style={styles.timeRangeOptions}>
-                                {timeRangeOptions.map((option) => (
-                                    <Pressable
-                                        key={option.value}
-                                        style={[
-                                            styles.timeRangeOption,
-                                            selectedTimeRange === option.value && styles.timeRangeOptionSelected
-                                        ]}
-                                        onPress={() => handleTimeRangeChange(option.value)}
-                                    >
-                                        <Text style={[
-                                            styles.timeRangeOptionText,
-                                            selectedTimeRange === option.value && styles.timeRangeOptionTextSelected
-                                        ]}>
-                                            {option.label}
-                                        </Text>
-                                    </Pressable>
-                                ))}
-                            </View>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onPress={() => setShowTimeRangeModal(false)}
-                                style={styles.modalCloseButton}
-                            >
-                                <ButtonText>Tutup</ButtonText>
-                            </Button>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-            {/* BottomSheet Location Picker */}
-            <Modal
-                visible={showLocationModal}
-                transparent
-                animationType="none"
-                onRequestClose={closeLocationSheet}
-            >
-                <Animated.View
-                    style={[
-                        styles.bottomSheetOverlay,
-                        {
-                            backgroundColor: bottomSheetAnimation.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)'],
-                            })
+            {/* Location Filter using proper BottomSheet component */}
+            <BottomSheet>
+                <BottomSheetPortal
+                    snapPoints={["75%"]}
+                    backdropComponent={(props) => (
+                        <BottomSheetBackdrop {...props} onPress={closeLocationSheet} />
+                    )}
+                    handleComponent={BottomSheetDragIndicator}
+                    enablePanDownToClose={true}
+                    index={showLocationModal ? 0 : -1}
+                    onChange={(index) => {
+                        if (index === -1) {
+                            setShowLocationModal(false);
                         }
-                    ]}
-                    onTouchEnd={closeLocationSheet}
+                    }}
                 >
-                    <Animated.View
-                        style={[
-                            styles.bottomSheetContainer,
-                            {
-                                transform: [
-                                    {
-                                        translateY: panY.interpolate({
-                                            inputRange: [0, bottomSheetHeight],
-                                            outputRange: [0, bottomSheetHeight],
-                                            extrapolate: 'clamp',
-                                        })
-                                    }
-                                ]
-                            }
-                        ]}
-                        onTouchEnd={(e) => e.stopPropagation()}
+                    <BottomSheetScrollView
+                        style={[styles.locationScrollView, { flex: 1 }]}
+                        contentContainerStyle={{ paddingBottom: 20 }}
                     >
-                        {/* Drag handle for BottomSheet */}
-                        <View {...panResponder.panHandlers} style={styles.dragHandle}>
-                            <View style={styles.dragIndicator} />
-                        </View>
+                        <BottomSheetContent style={{ flex: 1, backgroundColor: '#fff' }}>
 
-                        <Text style={styles.modalTitle}>Pilih Lokasi</Text>
 
-                        {/* Search Input */}
-                        <View style={styles.searchContainer}>
-                            <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
-                            <TextInput
-                                style={styles.searchInput}
-                                placeholder="Cari lokasi..."
-                                value={locationSearchQuery}
-                                onChangeText={setLocationSearchQuery}
-                                clearButtonMode="while-editing"
-                            />
-                            {locationSearchQuery.length > 0 && (
-                                <TouchableOpacity onPress={() => setLocationSearchQuery('')}>
-                                    <Ionicons name="close-circle" size={20} color="#666" />
-                                </TouchableOpacity>
-                            )}
-                        </View>
+                            {/* Locations list with different states */}
 
-                        <ScrollView style={styles.locationScrollView} contentContainerStyle={styles.locationOptionsContainer}>
-                            {/* Semua Lokasi */}
-                            <Pressable
-                                style={[
-                                    styles.locationOption,
-                                    selectedLocation === '' && styles.locationOptionSelected
-                                ]}
-                                onPress={() => handleLocationChange('')}
-                            >
-                                <Text
-                                    style={[
-                                        styles.locationOptionText,
-                                        selectedLocation === '' && styles.locationOptionTextSelected
-                                    ]}
-                                >
-                                    Semua Lokasi
-                                </Text>
-                            </Pressable>
-                            {/* List lokasi */}
-                            {filteredLocations.map((loc) => (
-                                <Pressable
-                                    key={loc.id_lokasi}
-                                    style={[
-                                        styles.locationOption,
-                                        selectedLocation === loc.id_lokasi && styles.locationOptionSelected
-                                    ]}
-                                    onPress={() => handleLocationChange(loc.id_lokasi)}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.locationOptionText,
-                                            selectedLocation === loc.id_lokasi && styles.locationOptionTextSelected
-                                        ]}
+
+                            {/* Search Input */}
+                            <View style={styles.searchContainer}>
+                                <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
+                                <TextInput
+                                    style={styles.searchInput}
+                                    placeholder="Cari lokasi..."
+                                    value={locationSearchQuery}
+                                    onChangeText={setLocationSearchQuery}
+                                    clearButtonMode="while-editing"
+                                    autoCorrect={false}
+                                    autoCapitalize="none"
+                                />
+                                {locationSearchQuery.length > 0 && (
+                                    <TouchableOpacity
+                                        onPress={() => setLocationSearchQuery('')}
+                                        style={styles.clearButton}
+                                        activeOpacity={0.6}
+                                        hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                                     >
-                                        {loc.nama_sungai}
-                                    </Text>
-                                    <Text style={styles.locationAddress}>
-                                        {loc.alamat}
-                                    </Text>
-                                </Pressable>
-                            ))}
+                                        <Ionicons name="close-circle" size={20} color="#666" />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                            {locationsState === 'loading' ? (
+                                <LocationsLoadingState />
+                            ) : locationsState === 'error' ? (
+                                <LocationsErrorState
+                                    error={locationError}
+                                    onRetry={retryFetchLocations}
+                                />
+                            ) : locations.length === 0 ? (
+                                <LocationsEmptyState debugInfo={`No locations found. State: ${locationsState}`} />
+                            ) : filteredLocations.length === 0 ? (
+                                <LocationsEmptySearch
+                                    query={locationSearchQuery}
+                                    onClear={() => setLocationSearchQuery('')}
+                                />
+                            ) : (
+                                <View style={[styles.locationOptionsContainer, { flex: 1 }]}>
+                                    {/* Semua Lokasi */}
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.locationOption,
+                                            selectedLocation === '' && styles.locationOptionSelected
+                                        ]}
+                                        onPress={() => handleLocationChange('')}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={styles.locationIconContainer}>
+                                            <Ionicons
+                                                name="globe-outline"
+                                                size={24}
+                                                color={selectedLocation === '' ? "#fff" : "#1e88e5"}
+                                            />
+                                        </View>
+                                        <Text
+                                            style={[
+                                                styles.locationOptionText,
+                                                selectedLocation === '' && styles.locationOptionTextSelected
+                                            ]}
+                                        >
+                                            Semua Lokasi
+                                        </Text>
+                                    </TouchableOpacity>
 
-                            {filteredLocations.length === 0 && (
-                                <View style={styles.noResultContainer}>
-                                    <Ionicons name="search-outline" size={40} color="#ccc" />
-                                    <Text style={styles.noResultText}>Lokasi tidak ditemukan</Text>
+                                    {/* List lokasi */}
+                                    {filteredLocations.map((loc) => (
+                                        <TouchableOpacity
+                                            key={loc.id_lokasi}
+                                            style={[
+                                                styles.locationOption,
+                                                selectedLocation === String(loc.id_lokasi) && styles.locationOptionSelected
+                                            ]}
+                                            onPress={() => handleLocationChange(loc.id_lokasi)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <View style={styles.locationIconContainer}>
+                                                <Ionicons
+                                                    name="location"
+                                                    size={22}
+                                                    color={selectedLocation === String(loc.id_lokasi) ? "#fff" : "#1e88e5"}
+                                                />
+                                            </View>
+                                            <View style={styles.locationTextContainer}>
+                                                <Text
+                                                    style={[
+                                                        styles.locationOptionText,
+                                                        selectedLocation === String(loc.id_lokasi) && styles.locationOptionTextSelected
+                                                    ]}
+                                                >
+                                                    {loc.nama_sungai}
+                                                </Text>
+                                                <Text style={[
+                                                    styles.locationAddress,
+                                                    selectedLocation === String(loc.id_lokasi) && styles.locationAddressSelected
+                                                ]}>
+                                                    {loc.alamat}
+                                                </Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    ))}
                                 </View>
                             )}
-                        </ScrollView>
-                    </Animated.View>
-                </Animated.View>
-            </Modal>
-        </View>
+                        </BottomSheetContent>
+                    </BottomSheetScrollView>
+                </BottomSheetPortal>
+            </BottomSheet>
+
+        </View >
+        <HStack>
+            <VStack>
+                {/* Time Range Modal */}
+                <Modal
+                    visible={showTimeRangeModal}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={() => setShowTimeRangeModal(false)}
+                >
+                    <View style={styles.modalContainer}>
+                        <View style={styles.modalOverlay}>
+                            <View style={styles.modalContent}>
+                                <Text style={styles.modalTitle}>Pilih Rentang Waktu</Text>
+                                <View style={styles.timeRangeOptions}>
+                                    {timeRangeOptions.map((option) => (
+                                        <Pressable
+                                            key={option.value}
+                                            style={[
+                                                styles.timeRangeOption,
+                                                selectedTimeRange === option.value && styles.timeRangeOptionSelected
+                                            ]}
+                                            onPress={() => handleTimeRangeChange(option.value)}
+                                        >
+                                            <Text style={[
+                                                styles.timeRangeOptionText,
+                                                selectedTimeRange === option.value && styles.timeRangeOptionTextSelected
+                                            ]}>
+                                                {option.label}
+                                            </Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+                                <TouchableOpacity
+                                    style={styles.modalCloseButton}
+                                    onPress={() => setShowTimeRangeModal(false)}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={styles.modalCloseButtonText}>Tutup</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
+            </VStack>
+        </HStack>
+    </>
     );
 };
 
@@ -1297,107 +1465,39 @@ const styles = StyleSheet.create({
         padding: 10,
         backgroundColor: '#fff',
     },
-    modalContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    },
-    modalOverlay: {
-        justifyContent: 'center',
-        alignItems: 'center',
-        width: '100%',
-    },
-    modalContent: {
-        backgroundColor: '#fff',
-        borderRadius: 15,
-        padding: 20,
-        width: '80%',
-        maxWidth: 350,
-        alignSelf: 'center',
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-    },
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginBottom: 20,
-        textAlign: 'center',
-    },
-    timeRangeOptions: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        gap: 10,
-    },
-    timeRangeOption: {
+    timeFilterButton: {
+        backgroundColor: '#3498db',
         paddingVertical: 10,
-        paddingHorizontal: 15,
-        borderRadius: 20,
-        backgroundColor: '#f0f0f0',
-        minWidth: 100,
+        paddingHorizontal: 16,
+        borderRadius: 25,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 3,
+    },
+    timeFilterButtonContent: {
         alignItems: 'center',
     },
-    timeRangeOptionSelected: {
-        backgroundColor: '#007AFF',
-    },
-    timeRangeOptionText: {
-        color: '#333',
-        fontSize: 14,
-    },
-    timeRangeOptionTextSelected: {
-        color: '#fff',
-    },
-    modalCloseButton: {
-        marginTop: 20,
+    locationButton: {
+        backgroundColor: '#2ecc71',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 25,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 3,
         alignSelf: 'center',
     },
-    emptyStateContainer: {
-        height: 200,
-        justifyContent: 'center',
+    locationButtonContent: {
         alignItems: 'center',
-        backgroundColor: '#f9f9f9',
-        borderRadius: 8,
-        padding: 15,
     },
-    emptyStateText: {
-        marginTop: 10,
-        color: '#666',
-        textAlign: 'center',
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    errorInfo: {
-        marginLeft: 8,
-        padding: 2,
-    },
-    downloadAnimationContainer: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#e0e0e0',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minWidth: 120,
-    },
-    downloadAnimationContent: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    downloadAnimationText: {
-        fontSize: 14,
-        color: '#333',
-        fontWeight: '500',
-    },
-    downloadAnimationTextCompleted: {
+    filterButtonText: {
         color: '#fff',
+        fontWeight: '600',
+        fontSize: 14,
     },
     locationFilterContainer: {
         padding: 10,
@@ -1406,9 +1506,6 @@ const styles = StyleSheet.create({
         borderBottomColor: '#eee',
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    locationFilterButton: {
-        alignSelf: 'center',
     },
     locationModalOverlay: {
         justifyContent: 'flex-end',
@@ -1437,36 +1534,51 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#f5f5f5',
-        paddingHorizontal: 10,
-        borderRadius: 10,
+        paddingHorizontal: 15,
+        borderRadius: 12,
+        marginHorizontal: 15,
         marginBottom: 15,
-        height: 45,
+        height: 50,
+        borderWidth: 1,
+        borderColor: '#eaeaea',
     },
     searchIcon: {
-        marginRight: 5,
+        marginRight: 10,
     },
     searchInput: {
         flex: 1,
-        height: 40,
-        paddingHorizontal: 8,
+        height: 46,
+        fontSize: 16,
+        color: '#333',
     },
     locationScrollView: {
         flex: 1,
         marginBottom: 15,
+        paddingHorizontal: 15,
     },
     locationOptionsContainer: {
         paddingBottom: 20,
     },
     locationOption: {
-        paddingVertical: 12,
-        paddingHorizontal: 15,
-        backgroundColor: '#f0f0f0',
-        borderRadius: 10,
-        marginBottom: 8,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        backgroundColor: '#f8f9fa',
+        borderRadius: 12,
+        marginBottom: 10,
         width: '100%',
+        elevation: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 1,
     },
     locationOptionSelected: {
-        backgroundColor: '#007AFF',
+        backgroundColor: '#1e88e5',
+        elevation: 3,
+        shadowColor: '#0d47a1',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
     },
     locationOptionText: {
         color: '#333',
@@ -1491,40 +1603,204 @@ const styles = StyleSheet.create({
         color: '#999',
         fontSize: 16,
     },
-    bottomSheetOverlay: {
-        flex: 1,
-        justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0,0,0,0.5)',
+    bottomSheetHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 10,
+        paddingHorizontal: 15,
     },
-    bottomSheetContainer: {
-        backgroundColor: '#fff',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        padding: 20,
-        paddingTop: 12,
-        height: '75%',
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 20,
+        textAlign: 'center',
+    },
+    modalContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    modalOverlay: {
+        justifyContent: 'center',
+        alignItems: 'center',
         width: '100%',
+    },
+    modalContent: {
+        backgroundColor: '#fff',
+        borderRadius: 15,
+        padding: 20,
+        width: '80%',
+        maxWidth: 350,
+        alignSelf: 'center',
         elevation: 5,
         shadowColor: '#000',
         shadowOffset: {
             width: 0,
-            height: -3,
+            height: 2,
         },
         shadowOpacity: 0.25,
-        shadowRadius: 4,
+        shadowRadius: 3.84,
     },
-    dragHandle: {
-        width: '100%',
-        height: 24,
+    modalCloseButton: {
+        marginTop: 20,
+        alignSelf: 'center',
+        backgroundColor: '#f44336',
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 25,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 3,
+    },
+    modalCloseButtonText: {
+        color: '#fff',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    timeRangeOptions: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 10,
+    },
+    timeRangeOption: {
+        paddingVertical: 10,
+        paddingHorizontal: 15,
+        borderRadius: 20,
+        backgroundColor: '#f0f0f0',
+        minWidth: 100,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 1,
+        elevation: 1,
+    },
+    timeRangeOptionSelected: {
+        backgroundColor: '#1e88e5',
+        shadowColor: '#0d47a1',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 3,
+    },
+    timeRangeOptionText: {
+        color: '#333',
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    timeRangeOptionTextSelected: {
+        color: '#fff',
+        fontWeight: '600',
+    },
+    paginationButton: {
+        backgroundColor: '#f0f8ff',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: '#c5e1ff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    paginationButtonDisabled: {
+        backgroundColor: '#f5f5f5',
+        borderColor: '#e0e0e0',
+        elevation: 0,
+    },
+    paginationButtonText: {
+        color: '#0066cc',
+        fontWeight: '500',
+        fontSize: 12,
+    },
+    paginationButtonTextDisabled: {
+        color: '#aaa',
+    },
+    globalPaginationButton: {
+        backgroundColor: '#e3f2fd',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#bbdefb',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+        alignItems: 'center',
+        minWidth: 100,
+    },
+    globalPaginationButtonDisabled: {
+        backgroundColor: '#f5f5f5',
+        borderColor: '#e0e0e0',
+        elevation: 0,
+    },
+    globalPaginationButtonText: {
+        color: '#1976d2',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    globalPageIndicator: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#333',
+        alignSelf: 'center',
+        paddingHorizontal: 15,
+        textAlign: 'center',
+    },
+    downloadAnimationContainer: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 25,
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minWidth: 120,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    downloadAnimationContent: {
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 8,
     },
-    dragIndicator: {
-        width: 40,
-        height: 5,
-        borderRadius: 3,
-        backgroundColor: '#DDD',
+    downloadAnimationText: {
+        fontSize: 14,
+        color: '#333',
+        fontWeight: '500',
+    },
+    downloadAnimationTextCompleted: {
+        color: '#fff',
+    },
+    emptyStateContainer: {
+        height: 200,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f9f9f9',
+        borderRadius: 8,
+        padding: 15,
+    },
+    emptyStateText: {
+        marginTop: 10,
+        color: '#666',
+        textAlign: 'center',
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    errorInfo: {
+        marginLeft: 8,
+        padding: 2,
     },
     showDetailsButton: {
         paddingHorizontal: 15,
@@ -1590,6 +1866,50 @@ const styles = StyleSheet.create({
         paddingTop: 110, // Sesuaikan dengan tinggi total header
         paddingBottom: 20,
     },
+    closeButton: {
+        padding: 5,
+    },
+    locationIconContainer: {
+        marginRight: 10,
+    },
+    locationTextContainer: {
+        flexDirection: 'column',
+    },
+    locationAddressSelected: {
+        color: '#1e88e5',
+    },
+    clearButton: {
+        padding: 5,
+    },
+    locationStateContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    locationStateText: {
+        marginTop: 10,
+        color: '#666',
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    locationStateSubText: {
+        marginTop: 5,
+        color: '#999',
+        fontSize: 12,
+        textAlign: 'center',
+    },
+    clearSearchButton: {
+        padding: 10,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 20,
+        marginTop: 10,
+    },
+    clearSearchButtonText: {
+        color: '#2196f3',
+        fontSize: 14,
+        fontWeight: '500',
+    },
 });
 
-export default FeedsScreen;
+export default FeedsScreen;  
