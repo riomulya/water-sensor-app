@@ -1,5 +1,5 @@
 import React, { useEffect, useState, memo, useCallback, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Modal, Pressable, Alert, Platform, TextInput, Dimensions, PanResponder, Animated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Modal, Pressable, Alert, Platform, TextInput, Dimensions, PanResponder, Animated, ScrollView } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import moment from 'moment';
 import { Button, ButtonText } from '@/components/ui/button';
@@ -14,27 +14,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 import * as XLSX from 'xlsx';
 import type { WorkBook, WorkSheet } from 'xlsx';
+import useChartStore, { TimeRange } from '@/app/stores/chartStore';
+import { Divider } from '@/components/ui/divider';
 
-interface DataPoint {
-    value: number;
-    dataPointText: string;
-    label: string;
-    labelComponent?: () => JSX.Element;
-}
-
-interface ChartData {
-    title: string;
-    as: string;
-    url: string;
-    color: string;
-    maxValue: number;
-    data: DataPoint[];
-    page: number;
-    loading: boolean;
-    totalPage: number;  // Track the total pages for each chart
-    hasError: boolean;  // Track if this chart has an error
-    errorMessage: string; // Store error message
-}
+// We're now importing chart types from the store
+// import type { DataPoint, ChartData } from '@/app/stores/chartStore';
 
 interface Location {
     id_lokasi: string;
@@ -44,141 +28,6 @@ interface Location {
     lon: string;
     tanggal: string;
 }
-
-const chartConfigs: ChartData[] = [
-    {
-        title: 'pH Sensor',
-        as: 'nilai_ph',
-        url: `${port}data_ph`,
-        color: 'tomato',
-        maxValue: 14,
-        data: [],
-        page: 1,
-        loading: false,
-        totalPage: 1,
-        hasError: false,
-        errorMessage: ''
-    },
-    {
-        title: 'Acceleration X',
-        as: 'nilai_accel_x',
-        url: `${port}data_accel_x`,
-        color: 'blue',
-        maxValue: 10,
-        data: [],
-        page: 1,
-        loading: false,
-        totalPage: 1,
-        hasError: false,
-        errorMessage: ''
-    },
-    {
-        title: 'Acceleration Y',
-        as: 'nilai_accel_y',
-        url: `${port}data_accel_y`,
-        color: 'green',
-        maxValue: 10,
-        data: [],
-        page: 1,
-        loading: false,
-        totalPage: 1,
-        hasError: false,
-        errorMessage: ''
-    },
-    {
-        title: 'Acceleration Z',
-        as: 'nilai_accel_z',
-        url: `${port}data_accel_z`,
-        color: 'orange',
-        maxValue: 10,
-        data: [],
-        page: 1,
-        loading: false,
-        totalPage: 1,
-        hasError: false,
-        errorMessage: ''
-    },
-    {
-        title: 'Temperature',
-        as: 'nilai_temperature',
-        url: `${port}data_temperature`,
-        color: 'purple',
-        maxValue: 100,
-        data: [],
-        page: 1,
-        loading: false,
-        totalPage: 1,
-        hasError: false,
-        errorMessage: ''
-    },
-    {
-        title: 'Turbidity',
-        as: 'nilai_turbidity',
-        url: `${port}data_turbidity`,
-        color: 'brown',
-        maxValue: 1000,
-        data: [],
-        page: 1,
-        loading: false,
-        totalPage: 1,
-        hasError: false,
-        errorMessage: ''
-    },
-    {
-        title: 'Speed',
-        as: 'nilai_speed',
-        url: `${port}data_speed`,
-        color: '#2196f3',
-        maxValue: 20,
-        data: [],
-        page: 1,
-        loading: false,
-        totalPage: 1,
-        hasError: false,
-        errorMessage: ''
-    },
-];
-
-// Optimize DataPoint creation with memoization
-const createDataPoint = (item: any, as: string): DataPoint => {
-    try {
-        const value = parseFloat(item[as]);
-        // Parse date correctly from ISO format (API returns format like "2025-03-24T13:05:00.000Z")
-        const date = moment(item.tanggal);
-
-        if (isNaN(value)) {
-            console.warn('Invalid value for', as, ':', item[as]);
-        }
-
-        if (!date.isValid()) {
-            console.warn('Invalid date:', item.tanggal);
-        }
-
-        return {
-            value: value,
-            dataPointText: value.toFixed(2),
-            label: date.format('DD-MM-YYYY HH:mm:ss'),
-            labelComponent: () => (
-                <Text style={[styles.italicLabel, { transform: [{ rotate: '-60deg' }] }]}>
-                    {date.format('DD/MM/YYYY HH:mm:ss')}
-                </Text>
-            )
-        };
-    } catch (error) {
-        console.error('Error creating data point:', error);
-        return {
-            value: 0,
-            dataPointText: '0',
-            label: 'Invalid Date',
-            labelComponent: () => <Text style={styles.italicLabel}>Invalid</Text>
-        };
-    }
-};
-
-// Memoized chart component to prevent unnecessary re-renders
-const MemoizedLineChart = memo(LineChart);
-
-type TimeRange = 'ALL' | '1h' | '3h' | '7h' | '1d' | '2d' | '3d' | '7d' | '1m' | '3m' | '6m' | '1y';
 
 // Time range options - sudah disesuaikan dengan format yang didukung oleh server
 const timeRangeOptions: { label: string; value: TimeRange }[] = [
@@ -367,19 +216,39 @@ const convertToExcel = async (sensorData: Array<{
     return base64;
 };
 
+// Memoized chart component to prevent unnecessary re-renders
+const MemoizedLineChart = memo(LineChart);
+
 const FeedsScreen: React.FC = () => {
-    const [chartData, setChartData] = useState<ChartData[]>(chartConfigs);
-    const [globalPage, setGlobalPage] = useState(1);  // Global page to sync all charts
-    const [isRefreshing, setIsRefreshing] = useState(false);  // State to manage refresh control
-    const [isDataLoaded, setIsDataLoaded] = useState(false);  // Track initial data load
-    const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRange>('ALL');
+    // Replace multiple useState hooks with the Zustand store
+    const {
+        chartData,
+        globalPage,
+        isRefreshing,
+        isDataLoaded,
+        selectedTimeRange,
+        selectedLocation,
+        visibleCharts,
+        setChartData,
+        setGlobalPage,
+        setIsRefreshing,
+        setIsDataLoaded,
+        setSelectedTimeRange,
+        setSelectedLocation,
+        setVisibleCharts,
+        fetchAllData,
+        refreshData,
+        handlePageChange,
+        handleGlobalPageChange,
+        updateChartDataAtIndex
+    } = useChartStore();
+
+    // Keep these useState hooks as they are specific to this component
     const [showTimeRangeModal, setShowTimeRangeModal] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
-    const [visibleCharts, setVisibleCharts] = useState<number[]>([0, 1]);
-    const scrollViewRef = useRef<ScrollView>(null);
+    const scrollViewRef = useRef<FlatList>(null);
     const [downloadState, setDownloadState] = useState<DownloadState>('idle');
     const [locations, setLocations] = useState<Location[]>([]);
-    const [selectedLocation, setSelectedLocation] = useState<string>('');  // '' artinya semua
     const [showLocationModal, setShowLocationModal] = useState(false);
     const [locationSearchQuery, setLocationSearchQuery] = useState('');
 
@@ -396,347 +265,6 @@ const FeedsScreen: React.FC = () => {
     // Reduce limit for first load to improve initial render speed
     const initialLimit = 100;
     const limit = isDataLoaded ? 100 : initialLimit;  // Number of data points per page
-
-    // Window data points based on screen size to improve performance
-    const windowData = useCallback((data: DataPoint[], maxPoints: number = 100): DataPoint[] => {
-        if (data.length <= maxPoints) return data;
-
-        // Calculate interval to pick evenly distributed points
-        const interval = Math.ceil(data.length / maxPoints);
-
-        // For very dense data, show only some labels to avoid overlapping
-        const labelInterval = interval > 3 ? 3 : 1;
-
-        // Return filtered data points with selective labeling
-        const windowedData = data.filter((_, index) => index % interval === 0);
-
-        console.log('Windowed data points:', windowedData.length);
-
-        // Ensure we have at least 2 points for the chart
-        if (windowedData.length < 2) {
-            console.warn('Not enough data points after windowing, using all points');
-            return data;
-        }
-
-        return windowedData.map((point, index) => {
-            // Only show labels for some points to prevent overlapping
-            if (index % labelInterval !== 0) {
-                return {
-                    ...point,
-                    // Keep the value but don't render the label component
-                    labelComponent: undefined
-                };
-            }
-            return point;
-        });
-    }, []);
-
-    // Fetch data for a specific chart
-    const fetchData = async (url: string, as: string, page: number) => {
-        try {
-            console.log('Fetching data for:', url, 'page:', page);
-
-            let apiUrl = '';
-            const baseUrl = url.split('?')[0]; // Ambil URL dasar tanpa query params
-
-            if (selectedLocation && selectedLocation !== 'all') {
-                // Untuk semua endpoint gunakan format yang sama, karena semua controller 
-                // telah diperbarui dengan format yang sama
-                apiUrl = `${baseUrl}/${selectedLocation}?page=${page}&limit=${limit}`;
-
-                // Tambahkan time range jika bukan ALL
-                if (selectedTimeRange !== 'ALL') {
-                    apiUrl += `&range=${selectedTimeRange}`;
-                }
-            } else {
-                // Jika tidak ada lokasi yang dipilih, gunakan endpoint dasar
-                apiUrl = `${baseUrl}?page=${page}&limit=${limit}`;
-
-                // Tambahkan time range jika bukan ALL
-                if (selectedTimeRange !== 'ALL') {
-                    apiUrl += `&range=${selectedTimeRange}`;
-                }
-            }
-
-            console.log('API URL:', apiUrl);
-
-            // Tambahkan timeout untuk request
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 detik timeout
-
-            try {
-                const response = await fetch(apiUrl, {
-                    signal: controller.signal
-                });
-
-                // Clear timeout setelah response diterima
-                clearTimeout(timeoutId);
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error(`Request failed with status ${response.status}. Response: ${errorText}`);
-
-                    // Pesan error yang lebih informatif
-                    let errorMessage = '';
-                    if (response.status === 404) {
-                        errorMessage = 'Data tidak ditemukan';
-                    } else if (response.status === 500) {
-                        errorMessage = 'Terjadi kesalahan pada server';
-                    } else {
-                        errorMessage = `Error ${response.status}: ${errorText || 'Unknown error'}`;
-                    }
-
-                    throw new Error(errorMessage);
-                }
-
-                const json = await response.json();
-
-                if (json.success) {
-                    console.log('Received data points:', json.data.length);
-
-                    // Sort data by timestamp in descending order (newest first)
-                    const sortedData = [...json.data].sort((a, b) =>
-                        moment(b.tanggal).valueOf() - moment(a.tanggal).valueOf()
-                    );
-
-                    const formattedData: DataPoint[] = sortedData.map((item: any) =>
-                        createDataPoint(item, as)
-                    );
-
-                    return {
-                        formattedData: windowData(formattedData),
-                        totalPage: json.totalPage,
-                        hasMore: page < json.totalPage,
-                        hasError: false,
-                        errorMessage: ''
-                    };
-                } else {
-                    console.warn('API error:', json.message);
-                    return {
-                        formattedData: [],
-                        totalPage: 0,
-                        hasMore: false,
-                        hasError: true,
-                        errorMessage: json.message || 'Error fetching data'
-                    };
-                }
-            } catch (fetchError) {
-                clearTimeout(timeoutId);
-                throw fetchError;
-            }
-        } catch (error) {
-            console.error('Error fetching data:', error);
-
-            // Pesan error yang lebih user-friendly untuk tampilan, tapi tetap menyimpan detail teknis
-            let userMessage = 'Terjadi kesalahan saat mengambil data';
-            let technicalMessage = error instanceof Error ? error.message : 'Network error';
-
-            if (error instanceof Error) {
-                if (error.name === 'AbortError') {
-                    userMessage = 'Permintaan timeout, coba lagi nanti';
-                } else if (error.message.includes('Network request failed')) {
-                    userMessage = 'Koneksi jaringan gagal';
-                }
-            }
-
-            return {
-                formattedData: [],
-                totalPage: 0,
-                hasMore: false,
-                hasError: true,
-                errorMessage: `${userMessage} (${technicalMessage})`
-            };
-        }
-    };
-
-    // Fetch data for all charts
-    const fetchAllData = async () => {
-        try {
-            // First set all charts to loading
-            setChartData(prev => prev.map(chart => ({ ...chart, loading: true, hasError: false, errorMessage: '' })));
-
-            const updatedChartData = await Promise.all(
-                chartData.map(async (chart) => {
-                    try {
-                        const { formattedData, totalPage, hasError, errorMessage } = await fetchData(chart.url, chart.as, chart.page);
-                        return {
-                            ...chart,
-                            data: formattedData,
-                            loading: false,
-                            totalPage: totalPage || 1,
-                            hasError,
-                            errorMessage
-                        };
-                    } catch (chartError) {
-                        // Tangani error per chart
-                        console.error(`Error fetching data for ${chart.title}:`, chartError);
-                        return {
-                            ...chart,
-                            data: [],
-                            loading: false,
-                            hasError: true,
-                            errorMessage: chartError instanceof Error
-                                ? chartError.message
-                                : 'Terjadi kesalahan saat mengambil data'
-                        };
-                    }
-                })
-            );
-
-            setChartData(updatedChartData);
-            setIsDataLoaded(true); // Mark data as loaded after first fetch
-        } catch (error) {
-            console.error('Error in fetchAllData:', error);
-
-            // Generate user friendly messages for each chart
-            setChartData((prevData) =>
-                prevData.map((prevChart) => {
-                    const userMessage = 'Gagal memuat data';
-                    const technicalMessage = error instanceof Error ? error.message : 'Network error';
-
-                    return {
-                        ...prevChart,
-                        loading: false,
-                        hasError: true,
-                        errorMessage: `${userMessage} (${technicalMessage})`
-                    };
-                })
-            );
-        }
-    };
-
-    // Use InteractionManager to defer non-critical operations
-    useEffect(() => {
-        if (isDataLoaded) return;
-
-        InteractionManager.runAfterInteractions(() => {
-            fetchAllData();
-        });
-    }, []);
-
-    // Add back effect for globalPage changes
-    useEffect(() => {
-        if (isDataLoaded) {
-            fetchAllData();
-        }
-    }, [globalPage]);
-
-    // Add effect to handle parameter changes
-    useEffect(() => {
-        if (isDataLoaded) {
-            // Reset pages when any filter parameter changes
-            const resetPagesChartData = chartData.map((chart) => ({
-                ...chart,
-                page: 1,
-                hasError: false,
-                errorMessage: ''
-            }));
-            setChartData(resetPagesChartData);
-            setGlobalPage(1);
-
-            // Delay sedikit untuk memberikan waktu UI memperbarui state
-            setTimeout(() => {
-                fetchAllData();
-            }, 50);
-        }
-    }, [selectedTimeRange, selectedLocation]); // Combine filters into single effect
-
-    // Handle scroll events to determine which charts are visible
-    const handleScroll = useCallback((event: any) => {
-        const offsetY = event.nativeEvent.contentOffset.y;
-        const height = event.nativeEvent.layoutMeasurement.height;
-
-        // Estimate which charts are visible based on scroll position
-        // Assuming each chart container is roughly 400px tall
-        const chartHeight = 400;
-        const startChart = Math.max(0, Math.floor(offsetY / chartHeight));
-        const endChart = Math.min(chartConfigs.length - 1, Math.ceil((offsetY + height) / chartHeight));
-
-        // Set buffer of one chart above and below viewport
-        const visibleIndices = [];
-        for (let i = Math.max(0, startChart - 1); i <= Math.min(chartConfigs.length - 1, endChart + 1); i++) {
-            visibleIndices.push(i);
-        }
-
-        setVisibleCharts(visibleIndices);
-    }, []);
-
-    // Handle pagination change for a specific chart
-    const handlePageChange = useCallback(async (chartIndex: number, direction: 'next' | 'prev' | 'first' | 'last') => {
-        // All time ranges now support pagination (handled by server)
-        const updatedChartData = [...chartData];
-        const chart = updatedChartData[chartIndex];
-        let newPage = chart.page;
-
-        switch (direction) {
-            case 'next':
-                if (newPage < chart.totalPage) newPage++;
-                break;
-            case 'prev':
-                if (newPage > 1) newPage--;
-                break;
-            case 'first':
-                newPage = 1;
-                break;
-            case 'last':
-                newPage = chart.totalPage;
-                break;
-        }
-
-        updatedChartData[chartIndex].page = newPage;
-        setChartData(updatedChartData);
-    }, [chartData, selectedTimeRange]);
-
-    // Refresh all data and reset pages
-    const refreshData = useDebouncedCallback(async () => {
-        setIsRefreshing(true);
-        const resetPagesChartData = chartData.map((chart) => ({
-            ...chart,
-            page: 1,
-            hasError: false,
-            errorMessage: ''
-        }));
-        setChartData(resetPagesChartData);
-        await fetchAllData();
-        setIsRefreshing(false);
-    }, 20);  // 20ms debounce
-
-    // Handle global page change for all charts
-    const handleGlobalPageChange = async (direction: 'next' | 'prev' | 'first' | 'last') => {
-        let newGlobalPage = globalPage;
-
-        switch (direction) {
-            case 'next':
-                newGlobalPage++;
-                break;
-            case 'prev':
-                newGlobalPage--;
-                break;
-            case 'first':
-                newGlobalPage = 1;
-                break;
-            case 'last':
-                newGlobalPage = Math.min(...chartData.map(chart => chart.totalPage || 1));  // Get the minimum total page
-                break;
-        }
-
-        // Update global page only if it is valid (greater than 0 and less than or equal to totalPage)
-        const minTotalPage = Math.min(...chartData.map(chart => chart.totalPage || 1));  // Get the minimum total page
-        if (newGlobalPage > 0 && newGlobalPage <= minTotalPage) {  // Use minTotalPage instead of chartData[0].totalPage
-            setGlobalPage(newGlobalPage);  // Update the global page state
-
-            // Update the page for all charts to the new global page
-            const updatedChartData = chartData.map((chart) => ({
-                ...chart,
-                page: newGlobalPage,  // Set each chart's page to the global page
-            }));
-
-            setChartData(updatedChartData);  // Update chart data with new pages for all charts
-
-            // Fetch new data for all charts at the updated global page
-            await fetchAllData();
-        }
-    };
 
     // Optimize pagination buttons with proper memoization:
     const PaginationButton = memo(({ onPress, disabled, text }: {
@@ -1035,6 +563,100 @@ const FeedsScreen: React.FC = () => {
         }
     };
 
+    // Fetch data for a specific chart
+    const fetchData = async (url: string, as: string, page: number) => {
+        // Use the store's fetchData function instead
+        const { fetchData } = useChartStore.getState();
+        return await fetchData(url, as, page, limit);
+    };
+
+    // Use InteractionManager to defer non-critical operations
+    useEffect(() => {
+        if (isDataLoaded) return;
+
+        InteractionManager.runAfterInteractions(() => {
+            fetchAllData();
+        });
+    }, [isDataLoaded, fetchAllData]);
+
+    // Add back effect for globalPage changes
+    useEffect(() => {
+        if (isDataLoaded) {
+            fetchAllData();
+        }
+    }, [globalPage, isDataLoaded, fetchAllData]);
+
+    // Add effect to handle parameter changes
+    useEffect(() => {
+        if (isDataLoaded) {
+            // Delay slightly to give the UI time to update state
+            setTimeout(() => {
+                fetchAllData();
+            }, 50);
+        }
+    }, [selectedTimeRange, selectedLocation, isDataLoaded, fetchAllData]); // Combine filters into single effect
+
+    // Handler untuk memanage scroll dan menampilkan/menyembunyikan header
+    const handleScrollHeader = useCallback((event: any) => {
+        const currentScrollY = event.nativeEvent.contentOffset.y;
+
+        // Deteksi arah scroll
+        if (currentScrollY <= 10) {
+            // Di paling atas atau hampir di atas, selalu tampilkan header
+            setHeaderVisible(true);
+            Animated.spring(headerAnimation, {
+                toValue: 0,
+                useNativeDriver: true,
+                tension: 80,
+                friction: 9
+            }).start();
+        } else if (currentScrollY > lastScrollY.current + 5) {
+            // Scroll ke bawah (dengan threshold 5px untuk menghindari jitter), sembunyikan header
+            if (headerVisible) {
+                setHeaderVisible(false);
+                Animated.spring(headerAnimation, {
+                    toValue: -110, // Angka negatif sesuai dengan tinggi header
+                    useNativeDriver: true,
+                    tension: 100,
+                    friction: 10
+                }).start();
+            }
+        } else if (currentScrollY < lastScrollY.current - 5) {
+            // Scroll ke atas (dengan threshold 5px), tampilkan header
+            if (!headerVisible) {
+                setHeaderVisible(true);
+                Animated.spring(headerAnimation, {
+                    toValue: 0,
+                    useNativeDriver: true,
+                    tension: 80,
+                    friction: 9
+                }).start();
+            }
+        }
+
+        // Simpan posisi scroll terakhir
+        lastScrollY.current = currentScrollY;
+
+        // Calculate visible charts for FlatList
+        const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+        const offsetY = contentOffset.y;
+        const height = layoutMeasurement.height;
+
+        // Estimate which charts are visible based on scroll position
+        // Assuming each chart container is roughly 400px tall
+        const chartHeight = 400;
+        const startChart = Math.max(0, Math.floor(offsetY / chartHeight));
+        const endChart = Math.min(chartData.length - 1, Math.ceil((offsetY + height) / chartHeight));
+
+        // Set buffer of one chart above and below viewport
+        const visibleIndices = [];
+        for (let i = Math.max(0, startChart - 1); i <= Math.min(chartData.length - 1, endChart + 1); i++) {
+            visibleIndices.push(i);
+        }
+
+        setVisibleCharts(visibleIndices);
+    }, [headerVisible, setVisibleCharts, chartData.length]);
+
     // Handle notification response
     useEffect(() => {
         const subscription = Notifications.addNotificationResponseReceivedListener(async (response) => {
@@ -1112,17 +734,7 @@ const FeedsScreen: React.FC = () => {
     const handleTimeRangeChange = async (range: TimeRange) => {
         setSelectedTimeRange(range);
         setShowTimeRangeModal(false);
-
         // No need for special handling as we're using server-side filtering now
-        // Just reset pagination and fetch data
-        setGlobalPage(1);
-        const resetPagesChartData = chartData.map((chart) => ({
-            ...chart,
-            page: 1,
-            hasError: false,
-            errorMessage: ''
-        }));
-        setChartData(resetPagesChartData);
     };
 
     // 3) Fetch daftar lokasi sekali
@@ -1222,51 +834,6 @@ const FeedsScreen: React.FC = () => {
         );
     }, [locations, locationSearchQuery]);
 
-    // Handler untuk memanage scroll dan menampilkan/menyembunyikan header
-    const handleScrollHeader = useCallback((event: any) => {
-        const currentScrollY = event.nativeEvent.contentOffset.y;
-
-        // Deteksi arah scroll
-        if (currentScrollY <= 10) {
-            // Di paling atas atau hampir di atas, selalu tampilkan header
-            setHeaderVisible(true);
-            Animated.spring(headerAnimation, {
-                toValue: 0,
-                useNativeDriver: true,
-                tension: 80,
-                friction: 9
-            }).start();
-        } else if (currentScrollY > lastScrollY.current + 5) {
-            // Scroll ke bawah (dengan threshold 5px untuk menghindari jitter), sembunyikan header
-            if (headerVisible) {
-                setHeaderVisible(false);
-                Animated.spring(headerAnimation, {
-                    toValue: -110, // Angka negatif sesuai dengan tinggi header
-                    useNativeDriver: true,
-                    tension: 100,
-                    friction: 10
-                }).start();
-            }
-        } else if (currentScrollY < lastScrollY.current - 5) {
-            // Scroll ke atas (dengan threshold 5px), tampilkan header
-            if (!headerVisible) {
-                setHeaderVisible(true);
-                Animated.spring(headerAnimation, {
-                    toValue: 0,
-                    useNativeDriver: true,
-                    tension: 80,
-                    friction: 9
-                }).start();
-            }
-        }
-
-        // Simpan posisi scroll terakhir
-        lastScrollY.current = currentScrollY;
-
-        // Panggil original handler untuk visible charts
-        handleScroll(event);
-    }, [headerVisible]);
-
     return (
         <View style={styles.container}>
             {/* Wrapper untuk tombol filter dengan animasi */}
@@ -1295,6 +862,7 @@ const FeedsScreen: React.FC = () => {
                     </View>
 
                     {/* Filter Lokasi Button - di tengah */}
+                    <Divider className="my-0.5" />
                     <View style={styles.locationFilterContainer}>
                         <Button
                             variant="outline"
@@ -1315,15 +883,21 @@ const FeedsScreen: React.FC = () => {
                 </View>
             </Animated.View>
 
-            <ScrollView
-                ref={scrollViewRef}
+            <FlatList
+                ref={scrollViewRef as any}
                 style={styles.scrollView}
                 contentContainerStyle={styles.scrollViewContent}
+                data={chartData}
+                keyExtractor={(item, index) => `chart-${index}-${item.title}`}
                 refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshData} />}
                 onScroll={handleScrollHeader}
-                scrollEventThrottle={400}
-            >
-                {chartData.map((chart, index) => (
+                scrollEventThrottle={16} // Increased for smoother header animation
+                windowSize={5} // Controls how many items to render outside of the visible area
+                maxToRenderPerBatch={2} // Limits the number of items rendered per batch
+                initialNumToRender={2} // Only render 2 charts initially for faster startup
+                updateCellsBatchingPeriod={50} // Batch updates to reduce rendering load
+                removeClippedSubviews={Platform.OS === 'android'} // Helps with memory usage on Android
+                renderItem={({ item: chart, index }) => (
                     <View style={styles.chartContainer} key={index}>
                         <HStack style={styles.chartHeader}>
                             <Text style={styles.title}>{chart.title}</Text>
@@ -1458,199 +1032,200 @@ const FeedsScreen: React.FC = () => {
                             </View>
                         )}
                     </View >
-                ))}
+                )}
+                ListFooterComponent={() => (
+                    <View style={styles.globalPagination}>
+                        <HStack space="md" reversed={false}>
+                            <VStack space="md" reversed={false}>
+                                <Button variant='outline' size='md'>
+                                    <TouchableOpacity onPress={() => handleGlobalPageChange('prev')} disabled={globalPage === 1}>
+                                        <ButtonText>Prev All</ButtonText>
+                                    </TouchableOpacity>
+                                </Button>
 
-                {/* Global Pagination */}
-                <View style={styles.globalPagination}>
-                    <HStack space="md" reversed={false}>
-                        <VStack space="md" reversed={false}>
-                            <Button variant='outline' size='md'>
-                                <TouchableOpacity onPress={() => handleGlobalPageChange('prev')} disabled={globalPage === 1}>
-                                    <ButtonText>Prev All</ButtonText>
-                                </TouchableOpacity>
-                            </Button>
+                                <Button variant='outline' size='md'>
+                                    <TouchableOpacity onPress={() => handleGlobalPageChange('first')} disabled={globalPage === 1}>
+                                        <ButtonText>First All</ButtonText>
+                                    </TouchableOpacity>
+                                </Button>
+                            </VStack>
 
-                            <Button variant='outline' size='md'>
-                                <TouchableOpacity onPress={() => handleGlobalPageChange('first')} disabled={globalPage === 1}>
-                                    <ButtonText>First All</ButtonText>
-                                </TouchableOpacity>
-                            </Button>
-                        </VStack>
+                            <Text className='px-5 text-center'>{`Global Page: ${globalPage}`}</Text>
 
-                        <Text className='px-5 text-center'>{`Global Page: ${globalPage}`}</Text>
+                            <VStack space="md" reversed={false}>
+                                <Button variant='outline' size='md'>
+                                    <TouchableOpacity onPress={() => handleGlobalPageChange('next')} disabled={globalPage === chartData[0].totalPage}>
+                                        <ButtonText>Next All</ButtonText>
+                                    </TouchableOpacity>
+                                </Button>
 
-                        <VStack space="md" reversed={false}>
-                            <Button variant='outline' size='md'>
-                                <TouchableOpacity onPress={() => handleGlobalPageChange('next')} disabled={globalPage === chartData[0].totalPage}>
-                                    <ButtonText>Next All</ButtonText>
-                                </TouchableOpacity>
-                            </Button>
-
-                            <Button variant='outline' size='md'>
-                                <TouchableOpacity onPress={() => handleGlobalPageChange('last')} disabled={globalPage === chartData[0].totalPage}>
-                                    <ButtonText>Last All</ButtonText>
-                                </TouchableOpacity>
-                            </Button>
-
-                            <Modal
-                                visible={showTimeRangeModal}
-                                transparent={true}
-                                animationType="fade"
-                                onRequestClose={() => setShowTimeRangeModal(false)}
-                            >
-                                <View style={styles.modalContainer}>
-                                    <View style={styles.modalOverlay}>
-                                        <View style={styles.modalContent}>
-                                            <Text style={styles.modalTitle}>Pilih Rentang Waktu</Text>
-                                            <View style={styles.timeRangeOptions}>
-                                                {timeRangeOptions.map((option) => (
-                                                    <Pressable
-                                                        key={option.value}
-                                                        style={[
-                                                            styles.timeRangeOption,
-                                                            selectedTimeRange === option.value && styles.timeRangeOptionSelected
-                                                        ]}
-                                                        onPress={() => handleTimeRangeChange(option.value)}
-                                                    >
-                                                        <Text style={[
-                                                            styles.timeRangeOptionText,
-                                                            selectedTimeRange === option.value && styles.timeRangeOptionTextSelected
-                                                        ]}>
-                                                            {option.label}
-                                                        </Text>
-                                                    </Pressable>
-                                                ))}
-                                            </View>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onPress={() => setShowTimeRangeModal(false)}
-                                                style={styles.modalCloseButton}
-                                            >
-                                                <ButtonText>Tutup</ButtonText>
-                                            </Button>
-                                        </View>
-                                    </View>
-                                </View>
-                            </Modal>
-                            {/* BottomSheet Location Picker */}
-                            <Modal
-                                visible={showLocationModal}
-                                transparent
-                                animationType="none"
-                                onRequestClose={closeLocationSheet}
-                            >
-                                <Animated.View
-                                    style={[
-                                        styles.bottomSheetOverlay,
-                                        {
-                                            backgroundColor: bottomSheetAnimation.interpolate({
-                                                inputRange: [0, 1],
-                                                outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)'],
-                                            })
-                                        }
-                                    ]}
-                                    onTouchEnd={closeLocationSheet}
-                                >
-                                    <Animated.View
-                                        style={[
-                                            styles.bottomSheetContainer,
-                                            {
-                                                transform: [
-                                                    {
-                                                        translateY: panY.interpolate({
-                                                            inputRange: [0, bottomSheetHeight],
-                                                            outputRange: [0, bottomSheetHeight],
-                                                            extrapolate: 'clamp',
-                                                        })
-                                                    }
-                                                ]
-                                            }
-                                        ]}
-                                        onTouchEnd={(e) => e.stopPropagation()}
-                                    >
-                                        {/* Drag handle for BottomSheet */}
-                                        <View {...panResponder.panHandlers} style={styles.dragHandle}>
-                                            <View style={styles.dragIndicator} />
-                                        </View>
-
-                                        <Text style={styles.modalTitle}>Pilih Lokasi</Text>
-
-                                        {/* Search Input */}
-                                        <View style={styles.searchContainer}>
-                                            <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
-                                            <TextInput
-                                                style={styles.searchInput}
-                                                placeholder="Cari lokasi..."
-                                                value={locationSearchQuery}
-                                                onChangeText={setLocationSearchQuery}
-                                                clearButtonMode="while-editing"
-                                            />
-                                            {locationSearchQuery.length > 0 && (
-                                                <TouchableOpacity onPress={() => setLocationSearchQuery('')}>
-                                                    <Ionicons name="close-circle" size={20} color="#666" />
-                                                </TouchableOpacity>
-                                            )}
-                                        </View>
-
-                                        <ScrollView style={styles.locationScrollView} contentContainerStyle={styles.locationOptionsContainer}>
-                                            {/* Semua Lokasi */}
-                                            <Pressable
-                                                style={[
-                                                    styles.locationOption,
-                                                    selectedLocation === '' && styles.locationOptionSelected
-                                                ]}
-                                                onPress={() => handleLocationChange('')}
-                                            >
-                                                <Text
-                                                    style={[
-                                                        styles.locationOptionText,
-                                                        selectedLocation === '' && styles.locationOptionTextSelected
-                                                    ]}
-                                                >
-                                                    Semua Lokasi
-                                                </Text>
-                                            </Pressable>
-                                            {/* List lokasi */}
-                                            {filteredLocations.map((loc) => (
-                                                <Pressable
-                                                    key={loc.id_lokasi}
-                                                    style={[
-                                                        styles.locationOption,
-                                                        selectedLocation === loc.id_lokasi && styles.locationOptionSelected
-                                                    ]}
-                                                    onPress={() => handleLocationChange(loc.id_lokasi)}
-                                                >
-                                                    <Text
-                                                        style={[
-                                                            styles.locationOptionText,
-                                                            selectedLocation === loc.id_lokasi && styles.locationOptionTextSelected
-                                                        ]}
-                                                    >
-                                                        {loc.nama_sungai}
-                                                    </Text>
-                                                    <Text style={styles.locationAddress}>
-                                                        {loc.alamat}
-                                                    </Text>
-                                                </Pressable>
-                                            ))}
-
-                                            {filteredLocations.length === 0 && (
-                                                <View style={styles.noResultContainer}>
-                                                    <Ionicons name="search-outline" size={40} color="#ccc" />
-                                                    <Text style={styles.noResultText}>Lokasi tidak ditemukan</Text>
-                                                </View>
-                                            )}
-                                        </ScrollView>
-                                    </Animated.View>
-                                </Animated.View>
-                            </Modal>
-                        </VStack>
-                    </HStack>
-                </View>
-            </ScrollView>
+                                <Button variant='outline' size='md'>
+                                    <TouchableOpacity onPress={() => handleGlobalPageChange('last')} disabled={globalPage === chartData[0].totalPage}>
+                                        <ButtonText>Last All</ButtonText>
+                                    </TouchableOpacity>
+                                </Button>
+                            </VStack>
+                        </HStack>
+                    </View>
+                )}
+            />
 
             <View style={{ height: 100 }}></View>
+
+            {/* Time Range Modal */}
+            <Modal
+                visible={showTimeRangeModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowTimeRangeModal(false)}
+            >
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalTitle}>Pilih Rentang Waktu</Text>
+                            <View style={styles.timeRangeOptions}>
+                                {timeRangeOptions.map((option) => (
+                                    <Pressable
+                                        key={option.value}
+                                        style={[
+                                            styles.timeRangeOption,
+                                            selectedTimeRange === option.value && styles.timeRangeOptionSelected
+                                        ]}
+                                        onPress={() => handleTimeRangeChange(option.value)}
+                                    >
+                                        <Text style={[
+                                            styles.timeRangeOptionText,
+                                            selectedTimeRange === option.value && styles.timeRangeOptionTextSelected
+                                        ]}>
+                                            {option.label}
+                                        </Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onPress={() => setShowTimeRangeModal(false)}
+                                style={styles.modalCloseButton}
+                            >
+                                <ButtonText>Tutup</ButtonText>
+                            </Button>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+            {/* BottomSheet Location Picker */}
+            <Modal
+                visible={showLocationModal}
+                transparent
+                animationType="none"
+                onRequestClose={closeLocationSheet}
+            >
+                <Animated.View
+                    style={[
+                        styles.bottomSheetOverlay,
+                        {
+                            backgroundColor: bottomSheetAnimation.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)'],
+                            })
+                        }
+                    ]}
+                    onTouchEnd={closeLocationSheet}
+                >
+                    <Animated.View
+                        style={[
+                            styles.bottomSheetContainer,
+                            {
+                                transform: [
+                                    {
+                                        translateY: panY.interpolate({
+                                            inputRange: [0, bottomSheetHeight],
+                                            outputRange: [0, bottomSheetHeight],
+                                            extrapolate: 'clamp',
+                                        })
+                                    }
+                                ]
+                            }
+                        ]}
+                        onTouchEnd={(e) => e.stopPropagation()}
+                    >
+                        {/* Drag handle for BottomSheet */}
+                        <View {...panResponder.panHandlers} style={styles.dragHandle}>
+                            <View style={styles.dragIndicator} />
+                        </View>
+
+                        <Text style={styles.modalTitle}>Pilih Lokasi</Text>
+
+                        {/* Search Input */}
+                        <View style={styles.searchContainer}>
+                            <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="Cari lokasi..."
+                                value={locationSearchQuery}
+                                onChangeText={setLocationSearchQuery}
+                                clearButtonMode="while-editing"
+                            />
+                            {locationSearchQuery.length > 0 && (
+                                <TouchableOpacity onPress={() => setLocationSearchQuery('')}>
+                                    <Ionicons name="close-circle" size={20} color="#666" />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        <ScrollView style={styles.locationScrollView} contentContainerStyle={styles.locationOptionsContainer}>
+                            {/* Semua Lokasi */}
+                            <Pressable
+                                style={[
+                                    styles.locationOption,
+                                    selectedLocation === '' && styles.locationOptionSelected
+                                ]}
+                                onPress={() => handleLocationChange('')}
+                            >
+                                <Text
+                                    style={[
+                                        styles.locationOptionText,
+                                        selectedLocation === '' && styles.locationOptionTextSelected
+                                    ]}
+                                >
+                                    Semua Lokasi
+                                </Text>
+                            </Pressable>
+                            {/* List lokasi */}
+                            {filteredLocations.map((loc) => (
+                                <Pressable
+                                    key={loc.id_lokasi}
+                                    style={[
+                                        styles.locationOption,
+                                        selectedLocation === loc.id_lokasi && styles.locationOptionSelected
+                                    ]}
+                                    onPress={() => handleLocationChange(loc.id_lokasi)}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.locationOptionText,
+                                            selectedLocation === loc.id_lokasi && styles.locationOptionTextSelected
+                                        ]}
+                                    >
+                                        {loc.nama_sungai}
+                                    </Text>
+                                    <Text style={styles.locationAddress}>
+                                        {loc.alamat}
+                                    </Text>
+                                </Pressable>
+                            ))}
+
+                            {filteredLocations.length === 0 && (
+                                <View style={styles.noResultContainer}>
+                                    <Ionicons name="search-outline" size={40} color="#ccc" />
+                                    <Text style={styles.noResultText}>Lokasi tidak ditemukan</Text>
+                                </View>
+                            )}
+                        </ScrollView>
+                    </Animated.View>
+                </Animated.View>
+            </Modal>
         </View>
     );
 };
@@ -1688,12 +1263,14 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginTop: 10,
+        paddingHorizontal: 5,
     },
     globalPagination: {
         flexDirection: 'row',
         justifyContent: 'center',
         marginTop: 20,
         marginBottom: 20,
+        paddingHorizontal: 10,
     },
     loadingContainer: {
         height: 200,  // Fixed height for loading state
@@ -2011,6 +1588,7 @@ const styles = StyleSheet.create({
     },
     scrollViewContent: {
         paddingTop: 110, // Sesuaikan dengan tinggi total header
+        paddingBottom: 20,
     },
 });
 
