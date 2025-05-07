@@ -1235,21 +1235,43 @@ const FeedsScreen: React.FC = () => {
                         contentContainerStyle={{ paddingBottom: 20 }}
                     >
                         <BottomSheetContent style={{ flex: 1, backgroundColor: '#fff' }}>
-                            <View style={styles.bottomSheetHeader}>
-                                <Text style={styles.bottomSheetTitle}>Pilih Lokasi</Text>
-                                <TouchableOpacity
-                                    onPress={closeLocationSheet}
-                                    hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                                >
-                                    <Ionicons name="close" size={24} color="#666" />
-                                </TouchableOpacity>
+                            <View style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                paddingVertical: 16,
+                                paddingHorizontal: 20,
+                                borderBottomWidth: 1,
+                                borderBottomColor: '#f0f0f0',
+                            }}>
+                                <Text style={{
+                                    fontSize: 18,
+                                    fontWeight: 'bold',
+                                    color: '#333',
+                                }}>Pilih Lokasi</Text>
                             </View>
 
                             {/* Search Input with improved styling */}
-                            <View style={styles.searchContainer}>
-                                <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
+                            <View style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                backgroundColor: '#f5f5f5',
+                                paddingHorizontal: 15,
+                                borderRadius: 12,
+                                marginHorizontal: 15,
+                                marginVertical: 16,
+                                height: 50,
+                                borderWidth: 1,
+                                borderColor: '#eaeaea',
+                            }}>
+                                <Ionicons name="search-outline" size={20} color="#666" style={{ marginRight: 10 }} />
                                 <TextInput
-                                    style={styles.searchInput}
+                                    style={{
+                                        flex: 1,
+                                        height: 46,
+                                        fontSize: 16,
+                                        color: '#333',
+                                    }}
                                     placeholder="Cari lokasi..."
                                     value={locationSearchQuery}
                                     onChangeText={setLocationSearchQuery}
@@ -1261,7 +1283,7 @@ const FeedsScreen: React.FC = () => {
                                 {locationSearchQuery.length > 0 && (
                                     <TouchableOpacity
                                         onPress={() => setLocationSearchQuery('')}
-                                        style={styles.clearButton}
+                                        style={{ padding: 5 }}
                                         activeOpacity={0.6}
                                         hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                                     >
@@ -1272,52 +1294,188 @@ const FeedsScreen: React.FC = () => {
 
                             {/* Locations list with different states */}
                             {locationsState === 'loading' ? (
-                                <LocationsLoadingState />
+                                <View style={{
+                                    flex: 1,
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    padding: 20,
+                                }}>
+                                    <ActivityIndicator size="large" color="#2196f3" />
+                                    <Text style={{
+                                        marginTop: 10,
+                                        color: '#666',
+                                        fontSize: 14,
+                                        fontWeight: '500',
+                                    }}>Memuat daftar lokasi...</Text>
+                                </View>
                             ) : locationsState === 'error' ? (
-                                <LocationsErrorState
-                                    error={locationError}
-                                    onRetry={retryFetchLocations}
-                                />
+                                <View style={{
+                                    flex: 1,
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    padding: 20,
+                                }}>
+                                    <Ionicons name="alert-circle-outline" size={48} color="#f44336" />
+                                    <Text style={{
+                                        marginTop: 10,
+                                        color: '#666',
+                                        fontSize: 14,
+                                        fontWeight: '500',
+                                    }}>
+                                        Gagal memuat daftar lokasi
+                                    </Text>
+
+                                    <TouchableOpacity
+                                        style={{
+                                            paddingHorizontal: 15,
+                                            paddingVertical: 8,
+                                            backgroundColor: '#e3f2fd',
+                                            borderRadius: 20,
+                                            marginTop: 15,
+                                            borderWidth: 1,
+                                            borderColor: '#bbdefb',
+                                        }}
+                                        onPress={retryFetchLocations}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <Ionicons name="refresh-outline" size={16} color="#2196f3" />
+                                            <Text style={{
+                                                color: '#2196f3',
+                                                fontSize: 14,
+                                                fontWeight: '500',
+                                                marginLeft: 5
+                                            }}>Coba Lagi</Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                </View>
                             ) : locations.length === 0 ? (
-                                <LocationsEmptyState debugInfo={`No locations found. State: ${locationsState}`} />
+                                <View style={{
+                                    flex: 1,
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    padding: 20,
+                                }}>
+                                    <Ionicons name="location-outline" size={48} color="#9e9e9e" />
+                                    <Text style={{
+                                        marginTop: 10,
+                                        color: '#666',
+                                        fontSize: 14,
+                                        fontWeight: '500',
+                                    }}>
+                                        Tidak ada lokasi yang tersedia
+                                    </Text>
+                                    <Text style={{
+                                        marginTop: 5,
+                                        color: '#999',
+                                        fontSize: 12,
+                                        textAlign: 'center',
+                                    }}>
+                                        Silakan coba lagi nanti atau hubungi administrator
+                                    </Text>
+                                </View>
                             ) : filteredLocations.length === 0 ? (
-                                <LocationsEmptySearch
-                                    query={locationSearchQuery}
-                                    onClear={() => setLocationSearchQuery('')}
-                                />
+                                <View style={{
+                                    flex: 1,
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    padding: 20,
+                                }}>
+                                    <Ionicons name="search-outline" size={48} color="#9e9e9e" />
+                                    <Text style={{
+                                        marginTop: 10,
+                                        color: '#666',
+                                        fontSize: 14,
+                                        fontWeight: '500',
+                                    }}>
+                                        Tidak ada hasil untuk "{locationSearchQuery}"
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={{
+                                            padding: 10,
+                                            backgroundColor: '#f0f0f0',
+                                            borderRadius: 20,
+                                            marginTop: 10,
+                                        }}
+                                        onPress={() => setLocationSearchQuery('')}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={{
+                                            color: '#2196f3',
+                                            fontSize: 14,
+                                            fontWeight: '500',
+                                        }}>
+                                            Hapus Pencarian
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
                             ) : (
-                                <View style={[styles.locationOptionsContainer, { flex: 1 }]}>
+                                <View style={{ flex: 1, paddingHorizontal: 15, paddingBottom: 20 }}>
                                     {/* Semua Lokasi with enhanced styling */}
                                     <TouchableOpacity
-                                        style={[
-                                            styles.locationOptionSpecial,
-                                            selectedLocation === '' && styles.locationOptionSelected
-                                        ]}
+                                        style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            paddingVertical: 14,
+                                            paddingHorizontal: 16,
+                                            backgroundColor: selectedLocation === '' ? '#1e88e5' : '#e3f2fd',
+                                            borderRadius: 12,
+                                            marginVertical: 5,
+                                            width: '100%',
+                                            elevation: selectedLocation === '' ? 3 : 2,
+                                            shadowColor: selectedLocation === '' ? '#0d47a1' : '#000',
+                                            shadowOffset: { width: 0, height: selectedLocation === '' ? 2 : 1 },
+                                            shadowOpacity: selectedLocation === '' ? 0.2 : 0.1,
+                                            shadowRadius: selectedLocation === '' ? 3 : 2,
+                                            justifyContent: 'space-between',
+                                        }}
                                         onPress={() => handleLocationChange('')}
                                         activeOpacity={0.7}
                                     >
-                                        <View style={styles.locationIconContainerSpecial}>
-                                            <Ionicons
-                                                name="globe-outline"
-                                                size={24}
-                                                color={selectedLocation === '' ? "#fff" : "#1e88e5"}
-                                            />
+                                        <View style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                        }}>
+                                            <View style={{
+                                                width: 40,
+                                                height: 40,
+                                                borderRadius: 20,
+                                                backgroundColor: selectedLocation === '' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(30, 136, 229, 0.15)',
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                                marginRight: 12,
+                                            }}>
+                                                <Ionicons
+                                                    name="globe-outline"
+                                                    size={24}
+                                                    color={selectedLocation === '' ? "#fff" : "#1e88e5"}
+                                                />
+                                            </View>
+                                            <Text
+                                                style={{
+                                                    color: selectedLocation === '' ? '#fff' : '#1e88e5',
+                                                    fontSize: 16,
+                                                    fontWeight: '600',
+                                                }}
+                                            >
+                                                Semua Lokasi
+                                            </Text>
                                         </View>
-                                        <Text
-                                            style={[
-                                                styles.locationOptionTextSpecial,
-                                                selectedLocation === '' && styles.locationOptionTextSelected
-                                            ]}
-                                        >
-                                            Semua Lokasi
-                                        </Text>
+
                                         {selectedLocation === '' && (
-                                            <Ionicons name="checkmark-circle" size={22} color="#fff" style={styles.selectedIcon} />
+                                            <Ionicons name="checkmark-circle" size={22} color="#fff" style={{ marginLeft: 8 }} />
                                         )}
                                     </TouchableOpacity>
 
-                                    <Text style={styles.locationSectionTitle}>Lokasi Tersedia</Text>
-                                    <Divider style={styles.sectionDivider} />
+                                    <View style={{ marginTop: 20, marginBottom: 8 }}>
+                                        <Text style={{
+                                            fontSize: 14,
+                                            fontWeight: '600',
+                                            color: '#666',
+                                            paddingHorizontal: 5,
+                                        }}>Lokasi Tersedia</Text>
+                                        <Divider style={{ height: 1, backgroundColor: '#f0f0f0', marginTop: 8, marginBottom: 15 }} />
+                                    </View>
 
                                     {/* Grouped locations list */}
                                     {filteredLocations.map((loc) => (
@@ -1328,36 +1486,65 @@ const FeedsScreen: React.FC = () => {
                                             transition={{ type: 'timing', duration: 300, delay: filteredLocations.indexOf(loc) * 50 }}
                                         >
                                             <TouchableOpacity
-                                                style={[
-                                                    styles.locationOption,
-                                                    selectedLocation === String(loc.id_lokasi) && styles.locationOptionSelected
-                                                ]}
+                                                style={{
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    paddingVertical: 14,
+                                                    paddingHorizontal: 16,
+                                                    backgroundColor: selectedLocation === String(loc.id_lokasi) ? '#1e88e5' : '#f8f9fa',
+                                                    borderRadius: 12,
+                                                    marginBottom: 10,
+                                                    width: '100%',
+                                                    elevation: selectedLocation === String(loc.id_lokasi) ? 3 : 1,
+                                                    shadowColor: selectedLocation === String(loc.id_lokasi) ? '#0d47a1' : '#000',
+                                                    shadowOffset: { width: 0, height: selectedLocation === String(loc.id_lokasi) ? 2 : 1 },
+                                                    shadowOpacity: selectedLocation === String(loc.id_lokasi) ? 0.2 : 0.1,
+                                                    shadowRadius: selectedLocation === String(loc.id_lokasi) ? 3 : 1,
+                                                    justifyContent: 'space-between',
+                                                }}
                                                 onPress={() => handleLocationChange(loc.id_lokasi)}
                                                 activeOpacity={0.7}
                                             >
-                                                <View style={styles.locationContent}>
-                                                    <View style={styles.locationIconContainer}>
+                                                <View style={{
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    flex: 1,
+                                                }}>
+                                                    <View style={{
+                                                        width: 36,
+                                                        height: 36,
+                                                        borderRadius: 18,
+                                                        backgroundColor: selectedLocation === String(loc.id_lokasi) ? 'rgba(255, 255, 255, 0.2)' : 'rgba(30, 136, 229, 0.1)',
+                                                        justifyContent: 'center',
+                                                        alignItems: 'center',
+                                                        marginRight: 12,
+                                                    }}>
                                                         <Ionicons
                                                             name="location"
                                                             size={22}
                                                             color={selectedLocation === String(loc.id_lokasi) ? "#fff" : "#1e88e5"}
                                                         />
                                                     </View>
-                                                    <View style={styles.locationTextContainer}>
+                                                    <View style={{
+                                                        flexDirection: 'column',
+                                                        flex: 1,
+                                                    }}>
                                                         <Text
-                                                            style={[
-                                                                styles.locationOptionText,
-                                                                selectedLocation === String(loc.id_lokasi) && styles.locationOptionTextSelected
-                                                            ]}
+                                                            style={{
+                                                                color: selectedLocation === String(loc.id_lokasi) ? '#fff' : '#333',
+                                                                fontSize: 16,
+                                                                fontWeight: '500',
+                                                            }}
                                                             numberOfLines={1}
                                                         >
                                                             {loc.nama_sungai}
                                                         </Text>
                                                         <Text
-                                                            style={[
-                                                                styles.locationAddress,
-                                                                selectedLocation === String(loc.id_lokasi) && styles.locationAddressSelected
-                                                            ]}
+                                                            style={{
+                                                                color: selectedLocation === String(loc.id_lokasi) ? 'rgba(255, 255, 255, 0.8)' : '#666',
+                                                                fontSize: 12,
+                                                                marginTop: 4,
+                                                            }}
                                                             numberOfLines={2}
                                                         >
                                                             {loc.alamat}
@@ -1366,13 +1553,14 @@ const FeedsScreen: React.FC = () => {
                                                 </View>
 
                                                 {selectedLocation === String(loc.id_lokasi) && (
-                                                    <Ionicons name="checkmark-circle" size={22} color="#fff" style={styles.selectedIcon} />
+                                                    <Ionicons name="checkmark-circle" size={22} color="#fff" style={{ marginLeft: 8 }} />
                                                 )}
                                             </TouchableOpacity>
                                         </MotiView>
                                     ))}
                                 </View>
                             )}
+                            <View style={{ height: 100 }} />
                         </BottomSheetContent>
                     </BottomSheetScrollView>
                 </BottomSheetPortal>
