@@ -70,6 +70,79 @@
       animation: dash 60s linear infinite;
     }
 
+    /* Pulsing marker animation */
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+        opacity: 1;
+        box-shadow: 0 0 0 0 rgba(51, 136, 255, 0.5);
+      }
+
+      50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+        box-shadow: 0 0 0 8px rgba(51, 136, 255, 0);
+      }
+
+      100% {
+        transform: scale(1);
+        opacity: 1;
+        box-shadow: 0 0 0 0 rgba(51, 136, 255, 0);
+      }
+    }
+
+    .pulsing-marker {
+      animation: pulse 1.5s ease-in-out infinite;
+      transform-origin: center bottom;
+      filter: drop-shadow(0 0 3px rgba(51, 136, 255, 0.7));
+      opacity: 0;
+      animation-name: pulse, fade-in;
+      animation-duration: 1.5s, 0.3s;
+      animation-iteration-count: infinite, 1;
+      animation-timing-function: ease-in-out, ease-out;
+      animation-fill-mode: none, forwards;
+    }
+
+    @keyframes fade-in {
+      0% {
+        opacity: 0;
+      }
+
+      100% {
+        opacity: 1;
+      }
+    }
+
+    /* Special animation for IOT marker */
+    @keyframes pulse-iot {
+      0% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 0 rgba(72, 52, 212, 0.7));
+      }
+
+      50% {
+        transform: scale(1.1);
+        filter: drop-shadow(0 0 5px rgba(72, 52, 212, 0.9));
+      }
+
+      100% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 0 rgba(72, 52, 212, 0.7));
+      }
+    }
+
+    .pulsing-marker-iot {
+      animation: pulse-iot 1.5s ease-in-out infinite;
+      transform-origin: center bottom;
+    }
+
+    /* Smooth transition for accuracy circle */
+    .accuracy-circle {
+      transition: all 0.5s ease-in-out;
+      stroke-dasharray: 5, 5;
+      animation: circle-pulse 3s ease-in-out infinite;
+    }
+
     @keyframes dash {
       from {
         stroke-dashoffset: 1000;
@@ -77,6 +150,23 @@
 
       to {
         stroke-dashoffset: 0;
+      }
+    }
+
+    @keyframes circle-pulse {
+      0% {
+        stroke-opacity: 0.7;
+        stroke-width: 1;
+      }
+
+      50% {
+        stroke-opacity: 0.3;
+        stroke-width: 2;
+      }
+
+      100% {
+        stroke-opacity: 0.7;
+        stroke-width: 1;
       }
     }
 
@@ -125,6 +215,56 @@
       background: #94a3b8;
       cursor: not-allowed;
       opacity: 0.7;
+    }
+
+    /* Custom location control button */
+    .leaflet-control-location {
+      background-color: #fff;
+      width: 40px;
+      height: 40px;
+      line-height: 40px;
+      text-align: center;
+      border-radius: 4px;
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+      cursor: pointer;
+    }
+
+    .leaflet-control-location.active {
+      background-color: #3388ff;
+    }
+
+    .leaflet-control-location.active svg {
+      fill: #fff;
+    }
+
+    .leaflet-control-location:hover {
+      background-color: #f4f4f4;
+    }
+
+    .leaflet-control-location.active:hover {
+      background-color: #2979e4;
+    }
+
+    .gps-accuracy-info {
+      background: rgba(255, 255, 255, 0.8);
+      padding: 6px 10px;
+      border-radius: 4px;
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .high-accuracy {
+      color: #2ecc71;
+    }
+
+    .medium-accuracy {
+      color: #f39c12;
+    }
+
+    .low-accuracy {
+      color: #e74c3c;
     }
   </style>
 </head>
@@ -215,6 +355,43 @@
       .setPrefix('BRIN Water Sensors') // Ganti teks "Leaflet"
       .addTo(map);
 
+    // Add GPS accuracy display
+    const accuracyDisplay = L.Control.extend({
+      options: {
+        position: 'bottomleft'
+      },
+
+      onAdd: function (map) {
+        this._div = L.DomUtil.create('div', 'gps-accuracy-info');
+        this.update();
+        return this._div;
+      },
+
+      update: function (accuracy) {
+        let accuracyText = 'Menunggu GPS...';
+        let accuracyClass = '';
+
+        if (accuracy && !isNaN(accuracy)) {
+          accuracy = Math.round(accuracy);
+          if (accuracy <= 10) {
+            accuracyText = `Akurasi GPS: ${accuracy}m (tinggi)`;
+            accuracyClass = 'high-accuracy';
+          } else if (accuracy <= 50) {
+            accuracyText = `Akurasi GPS: ${accuracy}m (sedang)`;
+            accuracyClass = 'medium-accuracy';
+          } else {
+            accuracyText = `Akurasi GPS: ${accuracy}m (rendah)`;
+            accuracyClass = 'low-accuracy';
+          }
+        }
+
+        this._div.className = 'gps-accuracy-info ' + accuracyClass;
+        this._div.innerHTML = accuracyText;
+      }
+    });
+
+    const gpsInfo = new accuracyDisplay().addTo(map);
+
     let currentMarker = null;
     let baseLocationMarker = null;
     let locationAccuracyCircle = null;
@@ -304,6 +481,76 @@
       } else {
         return "bad"; // Kualitas air buruk (merah)
       }
+    }
+
+    // Create IOT device popup with new UI style
+    function createIOTDevicePopup(properties) {
+      return `
+        <div style="min-width: 280px; border-radius: 8px; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <div style="background: linear-gradient(135deg, #4834d4, #686de0); color: white; padding: 12px; text-align: center; font-size: 16px;">
+            <div style="font-size: 22px; margin-bottom: 6px;">🛰️</div>
+            <strong>Perangkat IOT Realtime</strong>
+          </div>
+          
+          <div style="background-color: white; padding: 15px; border-bottom: 1px solid #eee;">
+            <div style="margin-bottom: 10px; font-weight: 500; color: #555;">
+              <span style="color: #777; font-size: 13px;">WAKTU PENGUKURAN</span><br>
+              <span style="font-size: 15px;">${new Date().toLocaleString('id-ID', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: 'Asia/Jakarta'
+      })}</span>
+            </div>
+          </div>
+          
+          <div style="padding: 15px; background-color: rgba(72, 52, 212, 0.05); display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="param-item" style="background: white; border-radius: 6px; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+              <div style="color: #4834d4; font-weight: bold; margin-bottom: 3px;">pH</div>
+              <div style="font-size: 16px;">${parseFloat(properties.nilai_ph).toFixed(2)}</div>
+            </div>
+            <div class="param-item" style="background: white; border-radius: 6px; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+              <div style="color: #4834d4; font-weight: bold; margin-bottom: 3px;">Temperatur</div>
+              <div style="font-size: 16px;">${parseFloat(properties.nilai_temperature).toFixed(2)}°C</div>
+            </div>
+            <div class="param-item" style="background: white; border-radius: 6px; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+              <div style="color: #4834d4; font-weight: bold; margin-bottom: 3px;">Kekeruhan</div>
+              <div style="font-size: 16px;">${parseFloat(properties.nilai_turbidity).toFixed(2)} NTU</div>
+            </div>
+            <div class="param-item" style="background: white; border-radius: 6px; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+              <div style="color: #4834d4; font-weight: bold; margin-bottom: 3px;">Kecepatan</div>
+              <div style="font-size: 16px;">${parseFloat(properties.nilai_speed).toFixed(2)} m/s</div>
+            </div>
+          </div>
+          
+          <div style="background-color: #f8f9fa; padding: 12px 15px; border-top: 1px solid #eee;">
+            <div style="font-size: 13px; color: #666; margin-bottom: 8px;">Accelerometer:</div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px;">
+              <span><b>X:</b> ${parseFloat(properties.nilai_accel_x).toFixed(2)} m/s²</span>
+              <span><b>Y:</b> ${parseFloat(properties.nilai_accel_y).toFixed(2)} m/s²</span>
+              <span><b>Z:</b> ${parseFloat(properties.nilai_accel_z).toFixed(2)} m/s²</span>
+            </div>
+          </div>
+          
+          <div style="background-color: white; padding: 12px 15px; border-top: 1px solid #eee;">
+            <div style="font-size: 13px; color: #666; margin-bottom: 5px;">Koordinat:</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div style="background-color: #f1f5f9; padding: 8px; border-radius: 6px;">
+                <div style="font-size: 12px; color: #64748b;">Latitude</div>
+                <div style="font-weight: 500; font-size: 14px;">${properties.lat}</div>
+              </div>
+              <div style="background-color: #f1f5f9; padding: 8px; border-radius: 6px;">
+                <div style="font-size: 12px; color: #64748b;">Longitude</div>
+                <div style="font-weight: 500; font-size: 14px;">${properties.lon}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
     }
 
     // Fungsi update dari React Native
@@ -600,57 +847,66 @@
     }
 
     // Function to update the map location from React Native
-    const baseLocation = window.updateMapLocation = async function (lat, lng) {
-      // Get address via reverse geocoding
-      let address = 'Memuat alamat...';
+    const baseLocation = window.updateMapLocation = function (lat, lng) {
+      // Validate inputs
+      if (isNaN(lat) || isNaN(lng)) {
+        console.error('Invalid coordinates received:', lat, lng);
+        return;
+      }
 
-      // Jika ada marker sebelumnya, update posisi
+      // If marker exists, update position directly
       if (baseLocationMarker) {
         baseLocationMarker.setLatLng([lat, lng]);
+        baseLocationMarker.getPopup().setContent("Lokasi terkini anda <br>Lat: " + lat + "<br>Long: " + lng);
 
-        // Update popup content dengan format baru
-        const popupContent = createCurrentLocationPopup(lat, lng, address);
-        baseLocationMarker.getPopup().setContent(popupContent);
-
-        // Update radius circle
+        // Update accuracy circle
         if (locationAccuracyCircle) {
           locationAccuracyCircle.setLatLng([lat, lng]);
         }
-
-        if (baseLocationMarker.isPopupOpen()) {
-          baseLocationMarker.openPopup();
-        }
       } else {
-        // Tambahkan marker baru jika belum ada
-        const popupContent = createCurrentLocationPopup(lat, lng, address);
+        // Create new marker
         baseLocationMarker = L.marker([lat, lng], {
           icon: markerLocation,
           bubblingMouseEvents: false,
           autoPanOnFocus: false
         }).addTo(map)
-          .bindPopup(popupContent)
+          .bindPopup("Lokasi terkini anda <br>Lat: " + lat + "<br>Long: " + lng)
           .openPopup();
 
-        // Tambahkan radius circle
+        // Create accuracy circle
         locationAccuracyCircle = L.circle([lat, lng], {
           color: '#3388ff',
           fillColor: '#3388ff',
           fillOpacity: 0.2,
-          radius: 50 // Radius dalam meter
+          radius: 50
         }).addTo(map);
       }
-
-      // Fetch alamat secara asynchronous
-      reverseGeocode(lat, lng).then(address => {
-        const updatedPopupContent = createCurrentLocationPopup(lat, lng, address);
-        if (baseLocationMarker) {
-          baseLocationMarker.getPopup().setContent(updatedPopupContent);
-          if (baseLocationMarker.isPopupOpen()) {
-            baseLocationMarker.openPopup();
-          }
-        }
-      });
     };
+
+    // Button to center on current location
+    window.centerOnLocation = function () {
+      if (baseLocationMarker) {
+        map.setView(baseLocationMarker.getLatLng(), 18, { animate: true });
+      }
+    };
+
+    // Add styles for accuracy indicator
+    const styleSheet = document.createElement("style");
+    styleSheet.textContent = `
+      .gps-accuracy-info {
+        background: rgba(255, 255, 255, 0.8);
+        padding: 6px 10px;
+        border-radius: 4px;
+        box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+        font-family: 'Segoe UI', Arial, sans-serif;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .high-accuracy { color: #2ecc71; }
+      .medium-accuracy { color: #f39c12; }
+      .low-accuracy { color: #e74c3c; }
+    `;
+    document.head.appendChild(styleSheet);
 
     // Fungsi untuk membuat konten popup lokasi saat ini
     function createCurrentLocationPopup(lat, lng, address) {
@@ -681,6 +937,13 @@
               <div style="background-color: #f1f5f9; padding: 10px; border-radius: 6px; border-left: 3px solid #3498db;">
                 <div style="font-size: 14px;" id="current-location-address">${address}</div>
               </div>
+            </div>
+            
+            <div style="margin-top: 10px; text-align: center;">
+              <button onclick="centerOnLocation()" 
+                style="background: #3498db; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: 500;">
+                Pusatkan Peta
+              </button>
             </div>
           </div>
         </div>
@@ -745,6 +1008,51 @@
         [-6.0, 107.0]
       ]);
     };
+
+    // Update IOT marker handling
+    newSocket.on('mqttData', (data) => {
+      const formattedData = {
+        id: Date.now(),
+        lat: parseFloat(data.message.latitude),
+        lon: parseFloat(data.message.longitude),
+        nilai_accel_x: data.message.accel_x,
+        nilai_accel_y: data.message.accel_y,
+        nilai_accel_z: data.message.accel_z,
+        nilai_ph: data.message.ph,
+        nilai_temperature: data.message.temperature,
+        nilai_turbidity: data.message.turbidity,
+        nilai_speed: data.message.speed,
+        tanggal: data.timestamp
+      };
+
+      // Update or create IOT marker
+      if (window.iotMarker) {
+        window.iotMarker.setLatLng([formattedData.lat, formattedData.lon]);
+      } else {
+        window.iotMarker = L.marker([formattedData.lat, formattedData.lon], {
+          icon: IOTDeviceMarker,
+          zIndexOffset: 1000
+        }).addTo(map);
+      }
+
+      // Update popup content
+      window.iotMarker.bindPopup(createIOTDevicePopup({
+        lat: formattedData.lat,
+        lon: formattedData.lon,
+        nilai_accel_x: formattedData.nilai_accel_x,
+        nilai_accel_y: formattedData.nilai_accel_y,
+        nilai_accel_z: formattedData.nilai_accel_z,
+        nilai_ph: formattedData.nilai_ph,
+        nilai_temperature: formattedData.nilai_temperature,
+        nilai_turbidity: formattedData.nilai_turbidity,
+        nilai_speed: formattedData.nilai_speed
+      }));
+
+      // Center map on marker if popup is open
+      if (window.iotMarker.isPopupOpen()) {
+        map.setView([formattedData.lat, formattedData.lon], map.getZoom());
+      }
+    });
   </script>
 </body>
 
