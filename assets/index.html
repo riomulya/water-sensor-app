@@ -153,6 +153,40 @@
       iconSize: [40, 40],
     });
 
+    // Tambahkan marker untuk indikator kualitas air
+    const markerWaterGood = {
+      getIcon: function () {
+        return L.divIcon({
+          className: 'water-quality-marker good',
+          html: '<div style="background-color:#2ecc71; width:10px; height:10px; border-radius:50%;"></div>',
+          iconSize: [10, 10],
+          iconAnchor: [5, 5],
+        });
+      }
+    };
+
+    const markerWaterMedium = {
+      getIcon: function () {
+        return L.divIcon({
+          className: 'water-quality-marker medium',
+          html: '<div style="background-color:#f39c12; width:10px; height:10px; border-radius:50%;"></div>',
+          iconSize: [10, 10],
+          iconAnchor: [5, 5],
+        });
+      }
+    };
+
+    const markerWaterBad = {
+      getIcon: function () {
+        return L.divIcon({
+          className: 'water-quality-marker bad',
+          html: '<div style="background-color:#e74c3c; width:10px; height:10px; border-radius:50%;"></div>',
+          iconSize: [10, 10],
+          iconAnchor: [5, 5],
+        });
+      }
+    };
+
     const waterMarkerLocation = L.icon({
       iconUrl: 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/water_marker_location.png', // ✅ Path gambar akan diganti oleh React Native
       iconSize: [40, 40],
@@ -225,6 +259,53 @@
     let currentSensorData = [];
     let currentLocationData = [];
 
+    // Fungsi untuk menilai kualitas air berdasarkan parameter sensor
+    function assessWaterQuality(properties) {
+      // Parameter untuk penilaian kualitas air (nilai standar)
+      const standards = {
+        ph: { min: 6.5, max: 8.5 }, // Range pH yang baik untuk air
+        turbidity: { max: 5 }, // Batas kekeruhan yang baik (NTU)
+        temperature: { min: 20, max: 30 } // Range suhu normal (°C)
+      };
+
+      let score = 0;
+
+      // Cek pH
+      const ph = parseFloat(properties.nilai_ph);
+      if (ph >= standards.ph.min && ph <= standards.ph.max) {
+        score += 2; // pH ideal
+      } else if ((ph >= standards.ph.min - 1 && ph < standards.ph.min) ||
+        (ph > standards.ph.max && ph <= standards.ph.max + 1)) {
+        score += 1; // pH kurang ideal tapi masih bisa diterima
+      }
+
+      // Cek kekeruhan (turbidity)
+      const turbidity = parseFloat(properties.nilai_turbidity);
+      if (turbidity <= standards.turbidity.max) {
+        score += 2; // Kekeruhan baik
+      } else if (turbidity <= standards.turbidity.max * 2) {
+        score += 1; // Kekeruhan kurang ideal
+      }
+
+      // Cek suhu
+      const temp = parseFloat(properties.nilai_temperature);
+      if (temp >= standards.temperature.min && temp <= standards.temperature.max) {
+        score += 2; // Suhu ideal
+      } else if ((temp >= standards.temperature.min - 5 && temp < standards.temperature.min) ||
+        (temp > standards.temperature.max && temp <= standards.temperature.max + 5)) {
+        score += 1; // Suhu kurang ideal tapi masih bisa diterima
+      }
+
+      // Nilai maksimal adalah 6
+      if (score >= 5) {
+        return "good"; // Kualitas air baik (hijau)
+      } else if (score >= 3) {
+        return "medium"; // Kualitas air sedang (kuning)
+      } else {
+        return "bad"; // Kualitas air buruk (merah)
+      }
+    }
+
     // Fungsi update dari React Native
     window.updateSensorData = function (data) {
       console.log('Received sensor data in HTML:', data);
@@ -276,8 +357,28 @@
           // Cek apakah data berasal dari IOT realtime
           const isIOTDevice = feature.properties.hasOwnProperty('id');
 
+          // Jika bukan IOT device, tentukan marker berdasarkan kualitas air
+          let markerIcon;
+
+          if (!isIOTDevice) {
+            // Nilai kualitas air
+            const waterQuality = assessWaterQuality(feature.properties);
+
+            // Pilih marker sesuai kualitas air
+            if (waterQuality === "good") {
+              markerIcon = markerWaterGood.getIcon();
+            } else if (waterQuality === "medium") {
+              markerIcon = markerWaterMedium.getIcon();
+            } else {
+              markerIcon = markerWaterBad.getIcon();
+            }
+          } else {
+            // IOT device marker
+            markerIcon = IOTDeviceMarker;
+          }
+
           return L.marker(latlng, {
-            icon: isIOTDevice ? IOTDeviceMarker : markerWaterWays,
+            icon: markerIcon,
             title: isIOTDevice ? 'Perangkat IOT' : `Sensor ${feature.properties.id_ph}`,
             zIndexOffset: isIOTDevice ? 1000 : 0
           }).bindPopup(createSensorPopup(feature.properties));
@@ -332,14 +433,34 @@
         timeZone: 'Asia/Jakarta',
         timeZoneName: 'short'
       };
+
+      // Assess water quality
+      const waterQuality = assessWaterQuality(properties);
+      let statusColor = "#e74c3c"; // Default red for bad
+      let statusText = "Buruk";
+
+      if (waterQuality === "good") {
+        statusColor = "#2ecc71"; // Green for good
+        statusText = "Baik";
+      } else if (waterQuality === "medium") {
+        statusColor = "#f39c12"; // Yellow/orange for medium
+        statusText = "Sedang";
+      }
+
       return `
-        <b>Tanggal:</b> ${tanggal.toLocaleDateString('id-ID', options)}<br>
-        <b>Accel X:</b> ${properties.nilai_accel_x}<br>
-        <b>Accel Y:</b> ${properties.nilai_accel_y}<br>
-        <b>Accel X:</b> ${properties.nilai_accel_z}<br>
-        <b>pH:</b> ${properties.nilai_ph}<br>
-        <b>Temperatur:</b> ${properties.nilai_temperature}°C<br>
-        <b>Kekeruhan:</b> ${properties.nilai_turbidity}
+        <div style="min-width: 220px;">
+          <div style="background-color: ${statusColor}; color: white; padding: 8px; text-align: center; border-radius: 4px 4px 0 0; margin-bottom: 8px;">
+            <strong>Kualitas Air: ${statusText}</strong>
+          </div>
+          <b>Tanggal:</b> ${tanggal.toLocaleDateString('id-ID', options)}<br>
+          <b>Accel X:</b> ${parseFloat(properties.nilai_accel_x).toFixed(2)} m/s²<br>
+          <b>Accel Y:</b> ${parseFloat(properties.nilai_accel_y).toFixed(2)} m/s²<br>
+          <b>Accel Z:</b> ${parseFloat(properties.nilai_accel_z).toFixed(2)} m/s²<br>
+          <b>pH:</b> ${parseFloat(properties.nilai_ph).toFixed(2)}<br>
+          <b>Temperatur:</b> ${parseFloat(properties.nilai_temperature).toFixed(2)}°C<br>
+          <b>Kekeruhan:</b> ${parseFloat(properties.nilai_turbidity).toFixed(2)} NTU<br>
+          <b>Kecepatan:</b> ${parseFloat(properties.nilai_speed).toFixed(2)} m/s
+        </div>
       `;
     }
 

@@ -21,7 +21,7 @@ import { Asset } from 'expo-asset';
 import * as ScreenOrientation from 'expo-screen-orientation';
 
 // useEffect(() => {
-LogBox.ignoreLogs(["VirtualizedLists should never be nested"])
+LogBox.ignoreLogs(["VirtualizedLists should never be nested"]);
 // }, [])
 
 interface ApiLocation {
@@ -166,54 +166,7 @@ const DownloadAnimation = ({ downloadState }: { downloadState: DownloadState }) 
     );
 };
 
-// New loading animation component
-const LoadingOverlay = ({ isVisible }: { isVisible: boolean }) => {
-    return (
-        <AnimatePresence>
-            {isVisible && (
-                <MotiView
-                    from={{ opacity: 0 }}
-                    animate={{ opacity: 0.9 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ type: 'timing', duration: 300 }}
-                    style={styles.loadingOverlay}
-                >
-                    <MotiView
-                        from={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ type: 'spring', damping: 12 }}
-                        style={styles.loadingCard}
-                    >
-                        <MotiView
-                            from={{ rotate: '0deg' }}
-                            animate={{ rotate: '360deg' }}
-                            transition={{
-                                loop: true,
-                                repeatReverse: false,
-                                duration: 1000,
-                                type: 'timing',
-                                easing: Easing.linear,
-                            }}
-                            style={{ marginBottom: 16 }}
-                        >
-                            <Feather name="refresh-cw" size={30} color="#3b82f6" />
-                        </MotiView>
-                        <MotiText
-                            from={{ opacity: 0, translateY: 5 }}
-                            animate={{ opacity: 1, translateY: 0 }}
-                            transition={{ type: 'timing', duration: 300 }}
-                            className="text-slate-700 font-medium"
-                        >
-                            Memuat data...
-                        </MotiText>
-                    </MotiView>
-                </MotiView>
-            )}
-        </AnimatePresence>
-    );
-};
-
-// Row animation component
+// Row animation component - optimize animation for better performance
 const AnimatedTableRow = ({
     item,
     index,
@@ -227,8 +180,8 @@ const AnimatedTableRow = ({
         <MotiView
             from={{
                 opacity: 0,
-                scale: 0.95,
-                translateX: isNewDataSet ? 10 : 0
+                scale: 0.98,
+                translateX: isNewDataSet ? 5 : 0
             }}
             animate={{
                 opacity: 1,
@@ -237,9 +190,9 @@ const AnimatedTableRow = ({
             }}
             exit={{ opacity: 0, scale: 0.8 }}
             transition={{
-                delay: isNewDataSet ? index * 5 : index * 10,
-                type: 'spring',
-                damping: 12
+                delay: isNewDataSet ? index * 3 : index * 5,
+                type: 'timing',
+                duration: 150
             }}
         >
             <DataTable.Row style={[
@@ -247,7 +200,9 @@ const AnimatedTableRow = ({
                 index % 2 === 0 && { backgroundColor: '#f8fafc' }
             ]}>
                 <DataTable.Cell style={styles.numberCell}>
-                    {item.rowNumber}
+                    <Text style={styles.rowNumberText} numberOfLines={1} adjustsFontSizeToFit>
+                        {item.rowNumber}
+                    </Text>
                 </DataTable.Cell>
                 <DataTable.Cell style={[styles.dataCell, { width: 200 }]}>
                     <Text className="text-slate-600 text-sm">
@@ -293,13 +248,15 @@ const AnimatedTableRow = ({
 const SensorListItem = ({ item }: { item: EnhancedCombinedData }) => {
     return (
         <MotiView
-            from={{ opacity: 0, translateY: 5 }}
+            from={{ opacity: 0, translateY: 3 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 300, delay: 50 }}
+            transition={{ type: 'timing', duration: 150 }}
             style={styles.listItem}
         >
             <View style={styles.listItemHeader}>
-                <Text style={styles.listItemNumber}>{item.rowNumber}</Text>
+                <Text style={styles.listItemNumber} numberOfLines={1} adjustsFontSizeToFit>
+                    {item.rowNumber}
+                </Text>
                 <Text style={styles.listItemDate}>{item.formattedDate}</Text>
             </View>
             <View style={styles.listItemGrid}>
@@ -359,6 +316,74 @@ const SensorListItem = ({ item }: { item: EnhancedCombinedData }) => {
                 </View>
             </View>
         </MotiView>
+    );
+};
+
+// Update LoadingOverlay for better performance
+const LoadingOverlay = ({ isVisible }: { isVisible: boolean }) => {
+    return (
+        <AnimatePresence>
+            {isVisible && (
+                <MotiView
+                    from={{ opacity: 0 }}
+                    animate={{ opacity: 0.9 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ type: 'timing', duration: 150 }}
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        zIndex: 1000,
+                    }}
+                >
+                    <MotiView
+                        from={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: 'timing', duration: 200 }}
+                        style={{
+                            backgroundColor: 'white',
+                            padding: 24,
+                            borderRadius: 16,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.1,
+                            shadowRadius: 8,
+                            elevation: 5,
+                        }}
+                    >
+                        <MotiView
+                            from={{ rotate: '0deg' }}
+                            animate={{ rotate: '360deg' }}
+                            transition={{
+                                loop: true,
+                                repeatReverse: false,
+                                duration: 800,
+                                type: 'timing',
+                                easing: Easing.linear,
+                            }}
+                            style={{ marginBottom: 16 }}
+                        >
+                            <Feather name="refresh-cw" size={30} color="#3b82f6" />
+                        </MotiView>
+                        <MotiText
+                            from={{ opacity: 0, translateY: 5 }}
+                            animate={{ opacity: 1, translateY: 0 }}
+                            transition={{ type: 'timing', duration: 150 }}
+                            className="text-slate-700 font-medium"
+                        >
+                            Memuat data...
+                        </MotiText>
+                    </MotiView>
+                </MotiView>
+            )}
+        </AnimatePresence>
     );
 };
 
@@ -887,31 +912,31 @@ const DetailLocationScreen = () => {
         setIsLoadingTransition(true);
         setIsNewDataSet(false);
 
-        // Small delay to show loading animation
+        // Reduced delay time for better responsiveness
         setTimeout(() => {
             setPage(newPage);
 
-            // Hide loading after data is fetched (simulating network delay)
+            // Reduced loading time
             setTimeout(() => {
                 setIsLoadingTransition(false);
-            }, 400);
-        }, 300);
+            }, 200);
+        }, 100);
     }, []);
 
     const handleItemsPerPageChange = useCallback((newItemsPerPage: number) => {
         setIsLoadingTransition(true);
         setIsNewDataSet(true);
 
-        // Small delay to show loading animation
+        // Reduced delay for better responsiveness
         setTimeout(() => {
             setItemsPerPage(newItemsPerPage);
             setPage(0); // Reset to first page when changing items per page
 
-            // Hide loading after data is fetched (simulating network delay)
+            // Reduced loading time
             setTimeout(() => {
                 setIsLoadingTransition(false);
-            }, 500);
-        }, 300);
+            }, 300);
+        }, 100);
     }, []);
 
     // Animasi untuk tabel
@@ -1099,8 +1124,23 @@ const DetailLocationScreen = () => {
                     <Text style={styles.dataHeaderTitle}>Data Sensor</Text>
                     <View style={styles.dataHeaderButtons}>
                         <TouchableOpacity
+                            style={styles.viewToggleButton}
+                            onPress={toggleViewMode}
+                        >
+                            <MaterialIcons
+                                name={viewMode === 'table' ? "view-list" : "view-column"}
+                                size={22}
+                                color="#3b82f6"
+                            />
+                        </TouchableOpacity>
+                        <TouchableOpacity
                             style={styles.orientationButton}
-                            onPress={toggleOrientation}
+                            onPress={() => {
+                                toggleOrientation();
+                                if (!isLandscape && viewMode !== 'table') {
+                                    setViewMode('table');
+                                }
+                            }}
                         >
                             <MaterialCommunityIcons
                                 name={isLandscape ? "phone-rotate-portrait" : "phone-rotate-landscape"}
@@ -1111,19 +1151,79 @@ const DetailLocationScreen = () => {
                     </View>
                 </View>
 
-                <FlatList
-                    ref={flatListRef}
-                    data={transformedData}
-                    renderItem={renderItem}
-                    keyExtractor={(item) => `sensor-${item.rowNumber}-${item.tanggal}`}
-                    contentContainerStyle={styles.listContainer}
-                    ListFooterComponent={renderFooter}
-                    onEndReachedThreshold={0.5}
-                    initialNumToRender={10}
-                    maxToRenderPerBatch={10}
-                    windowSize={10}
-                    showsVerticalScrollIndicator={true}
-                />
+                {viewMode === 'table' ? (
+                    <View style={{ flex: 1 }}>
+                        <ScrollView
+                            horizontal={true}
+                            contentContainerStyle={{ flexGrow: 1 }}
+                            showsHorizontalScrollIndicator={true}
+                        >
+                            <DataTable style={styles.dataTable}>
+                                <DataTable.Header style={styles.tableHeader}>
+                                    <DataTable.Title style={styles.numberCell}>
+                                        <Text style={styles.tableHeaderTitle}>No.</Text>
+                                    </DataTable.Title>
+                                    <DataTable.Title style={[styles.headerCell, { width: 200 }]}>
+                                        <Text style={styles.tableHeaderTitle}>Waktu</Text>
+                                    </DataTable.Title>
+                                    <DataTable.Title numeric style={[styles.headerCell, { width: 80 }]}>
+                                        <Text style={styles.tableHeaderTitle}>pH</Text>
+                                    </DataTable.Title>
+                                    <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>
+                                        <Text style={styles.tableHeaderTitle}>Suhu</Text>
+                                    </DataTable.Title>
+                                    <DataTable.Title numeric style={[styles.headerCell, { width: 120 }]}>
+                                        <Text style={styles.tableHeaderTitle}>Turbidity</Text>
+                                    </DataTable.Title>
+                                    <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>
+                                        <Text style={styles.tableHeaderTitle}>Speed</Text>
+                                    </DataTable.Title>
+                                    <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>
+                                        <Text style={styles.tableHeaderTitle}>Accel X</Text>
+                                    </DataTable.Title>
+                                    <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>
+                                        <Text style={styles.tableHeaderTitle}>Accel Y</Text>
+                                    </DataTable.Title>
+                                    <DataTable.Title numeric style={[styles.headerCell, { width: 100 }]}>
+                                        <Text style={styles.tableHeaderTitle}>Accel Z</Text>
+                                    </DataTable.Title>
+                                </DataTable.Header>
+
+                                <ScrollView
+                                    style={styles.tableContent}
+                                    nestedScrollEnabled={true}
+                                    showsVerticalScrollIndicator={true}
+                                >
+                                    {transformedData.map((item, index) => (
+                                        <AnimatedTableRow
+                                            key={`row-${item.rowNumber}-${item.tanggal}`}
+                                            item={item}
+                                            index={index}
+                                            isNewDataSet={isNewDataSet}
+                                        />
+                                    ))}
+                                </ScrollView>
+                            </DataTable>
+                        </ScrollView>
+
+                        {/* Add pagination for table view */}
+                        {renderFooter()}
+                    </View>
+                ) : (
+                    <FlatList
+                        ref={flatListRef}
+                        data={transformedData}
+                        renderItem={renderItem}
+                        keyExtractor={(item) => `sensor-${item.rowNumber}-${item.tanggal}`}
+                        contentContainerStyle={styles.listContainer}
+                        ListFooterComponent={renderFooter}
+                        onEndReachedThreshold={0.5}
+                        initialNumToRender={10}
+                        maxToRenderPerBatch={10}
+                        windowSize={10}
+                        showsVerticalScrollIndicator={true}
+                    />
+                )}
             </MotiView>
         );
     };
@@ -1410,6 +1510,10 @@ const styles = StyleSheet.create({
         flex: 1,
         minHeight: Dimensions.get('window').height * 0.6, // Minimum 60% dari tinggi layar
         position: 'relative',
+        backgroundColor: 'white',
+        borderRadius: 16,
+        overflow: 'hidden',
+        elevation: 2,
     },
     tableHeader: {
         backgroundColor: '#3b82f6',
@@ -1455,20 +1559,19 @@ const styles = StyleSheet.create({
     },
     tableContent: {
         flexGrow: 1,
-        paddingBottom: 16, // Jarak antara tabel dan pagination
+        paddingBottom: 16,
+        minHeight: Dimensions.get('window').height * 0.4,
     },
     dataTable: {
         flex: 1,
         minWidth: Dimensions.get('window').width * 1.5,
-        minHeight: Dimensions.get('window').height * 0.6,
         backgroundColor: 'white',
         borderRadius: 12,
-        elevation: 2,
     },
     headerCell: {
         paddingVertical: 12,
         borderRightWidth: 1,
-        borderRightColor: '#e2e8f0',
+        borderRightColor: 'rgba(255,255,255,0.3)',
         justifyContent: 'center',
     },
     dataCell: {
@@ -1478,37 +1581,193 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     numberCell: {
-        width: 60,
+        width: 70,
         justifyContent: 'center',
     },
-    pagination: {
+    rowNumberText: {
+        textAlign: 'center',
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#475569',
+    },
+    listItem: {
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    listItemHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f0f0f0',
+        paddingBottom: 8,
+    },
+    listItemNumber: {
+        backgroundColor: '#3b82f6',
+        color: 'white',
+        fontWeight: 'bold',
+        minWidth: 30,
+        height: 30,
+        borderRadius: 15,
+        textAlign: 'center',
+        lineHeight: 30,
+        marginRight: 12,
+        paddingHorizontal: 8,
+        overflow: 'hidden',
+    },
+    listItemDate: {
+        fontSize: 14,
+        color: '#64748b',
+        flex: 1,
+    },
+    listItemGrid: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 10,
+    },
+    listItemValue: {
+        flex: 1,
+        alignItems: 'flex-start',
+        marginRight: 10,
+    },
+    listItemLabel: {
+        fontSize: 12,
+        color: '#64748b',
+        marginBottom: 2,
+    },
+    listItemValueText: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#334155',
+    },
+    paginationContainer: {
         backgroundColor: '#f8fafc',
+        paddingVertical: 16,
+        paddingHorizontal: 8,
         borderTopWidth: 1,
         borderTopColor: '#e2e8f0',
-        paddingVertical: 8,
+        marginTop: 16,
     },
-    loadingOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    paginationControls: {
+        flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 1000,
+        marginBottom: 16,
+        flexWrap: 'wrap',
     },
-    loadingCard: {
-        backgroundColor: 'white',
-        padding: 24,
+    paginationButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        marginHorizontal: 4,
+        elevation: 1,
+    },
+    paginationButtonDisabled: {
+        backgroundColor: '#e2e8f0',
+        elevation: 0,
+    },
+    paginationText: {
+        marginHorizontal: 12,
+        fontSize: 14,
+        color: '#475569',
+        paddingVertical: 10,
+    },
+    rowsPerPageContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+    },
+    rowsPerPageText: {
+        fontSize: 14,
+        color: '#475569',
+        marginRight: 8,
+        paddingVertical: 6,
+    },
+    rowsPerPageButtons: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+    },
+    rowsPerPageButton: {
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        marginHorizontal: 4,
+        marginBottom: 4,
         borderRadius: 16,
+        backgroundColor: '#f1f5f9',
+        elevation: 1,
+    },
+    rowsPerPageButtonActive: {
+        backgroundColor: '#3b82f6',
+        elevation: 2,
+    },
+    rowsPerPageButtonText: {
+        fontSize: 14,
+        color: '#475569',
+        textAlign: 'center',
+        minWidth: 20,
+    },
+    rowsPerPageButtonTextActive: {
+        color: 'white',
+        fontWeight: '500',
+    },
+    dataHeaderContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        marginBottom: 16,
+        backgroundColor: 'white',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e2e8f0',
+    },
+    dataHeaderTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#334155',
+    },
+    dataHeaderButtons: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    viewToggleButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 5,
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        elevation: 2,
+    },
+    orientationButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        elevation: 2,
+    },
+    gradientContainerLandscape: {
+        paddingTop: 0,
+    },
+    tableWrapperLandscape: {
+        minHeight: 'auto',
     },
     mapContainer: {
         marginBottom: 24,
@@ -1588,173 +1847,32 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
     },
-    // New styles for list view
     listContainer: {
         paddingBottom: 80,
         paddingHorizontal: 8,
     },
-    listItem: {
+    loadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+    },
+    loadingCard: {
         backgroundColor: 'white',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
-    },
-    listItemHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-        paddingBottom: 8,
-    },
-    listItemNumber: {
-        backgroundColor: '#3b82f6',
-        color: 'white',
-        fontWeight: 'bold',
-        width: 30,
-        height: 30,
-        borderRadius: 15,
-        textAlign: 'center',
-        lineHeight: 30,
-        marginRight: 12,
-    },
-    listItemDate: {
-        fontSize: 14,
-        color: '#64748b',
-        flex: 1,
-    },
-    listItemGrid: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 10,
-    },
-    listItemValue: {
-        flex: 1,
-        alignItems: 'flex-start',
-        marginRight: 10,
-    },
-    listItemLabel: {
-        fontSize: 12,
-        color: '#64748b',
-        marginBottom: 2,
-    },
-    listItemValueText: {
-        fontSize: 16,
-        fontWeight: '500',
-        color: '#334155',
-    },
-
-    // Pagination styles
-    paginationContainer: {
-        backgroundColor: '#f8fafc',
-        paddingTop: 12,
-        paddingBottom: 20,
-        borderTopWidth: 1,
-        borderTopColor: '#e2e8f0',
-        marginTop: 16,
-    },
-    paginationControls: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    paginationButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#f1f5f9',
-        marginHorizontal: 4,
-    },
-    paginationButtonDisabled: {
-        backgroundColor: '#e2e8f0',
-    },
-    paginationText: {
-        marginHorizontal: 12,
-        fontSize: 14,
-        color: '#475569',
-    },
-    rowsPerPageContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    rowsPerPageText: {
-        fontSize: 14,
-        color: '#475569',
-        marginRight: 8,
-    },
-    rowsPerPageButtons: {
-        flexDirection: 'row',
-    },
-    rowsPerPageButton: {
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        marginHorizontal: 4,
+        padding: 24,
         borderRadius: 16,
-        backgroundColor: '#f1f5f9',
-    },
-    rowsPerPageButtonActive: {
-        backgroundColor: '#3b82f6',
-    },
-    rowsPerPageButtonText: {
-        fontSize: 14,
-        color: '#475569',
-    },
-    rowsPerPageButtonTextActive: {
-        color: 'white',
-    },
-
-    // Data header styles
-    dataHeaderContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 8,
-        marginBottom: 12,
-    },
-    dataHeaderTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#334155',
-    },
-    dataHeaderButtons: {
-        flexDirection: 'row',
-    },
-    viewToggleButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
         justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#f1f5f9',
-        marginHorizontal: 4,
-    },
-    orientationButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#f1f5f9',
-        marginHorizontal: 4,
-        borderWidth: 1,
-        borderColor: '#e2e8f0',
-    },
-
-    // Landscape mode styles
-    gradientContainerLandscape: {
-        paddingTop: 0,
-    },
-    tableWrapperLandscape: {
-        minHeight: 'auto',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 5,
     },
 });
 

@@ -22,6 +22,9 @@ const targetMarker = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object
 const waterMarker = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/water_marker_location.png';
 const waterSelected = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/waterSelected.png';
 const waterways = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/waterways.png';
+const markerGreen = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/marker_green.png';
+const markerYellow = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/marker_yellow.png';
+const markerRed = 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/marker_red.png';
 
 interface Props {
     onInitialized: (zoomToGeoJSONFunc: () => void) => void;
@@ -165,13 +168,13 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
                         <b>Lat</b>: ${formattedData.lat}<br>
                         <b>Lon</b>: ${formattedData.lon}<br>
                         <b>Waktu</b>: ${new Date().toLocaleString()}<br>
-                        <b>Accel X</b> : ${formattedData.nilai_accel_x} m/s<sup>2</sup><br>
-                        <b>Accel Y</b> : ${formattedData.nilai_accel_y} m/s<sup>2</sup><br>
-                        <b>Accel Z</b> : ${formattedData.nilai_accel_z} m/s<sup>2</sup><br>
-                        <b>pH</b> : ${formattedData.nilai_ph}<br>
-                        <b>Suhu</b> : ${formattedData.nilai_temperature}°C<br>
-                        <b>Kekeruhan</b> : ${formattedData.nilai_turbidity} NTU<br>
-                        <b>Kecepatan</b> : ${formattedData.nilai_speed} m/s
+                        <b>Accel X</b> : ${parseFloat(formattedData.nilai_accel_x).toFixed(2)} m/s²<br>
+                        <b>Accel Y</b> : ${parseFloat(formattedData.nilai_accel_y).toFixed(2)} m/s²<br>
+                        <b>Accel Z</b> : ${parseFloat(formattedData.nilai_accel_z).toFixed(2)} m/s²<br>
+                        <b>pH</b> : ${parseFloat(formattedData.nilai_ph).toFixed(2)}<br>
+                        <b>Suhu</b> : ${parseFloat(formattedData.nilai_temperature).toFixed(2)}°C<br>
+                        <b>Kekeruhan</b> : ${parseFloat(formattedData.nilai_turbidity).toFixed(2)} NTU<br>
+                        <b>Kecepatan</b> : ${parseFloat(formattedData.nilai_speed).toFixed(2)} m/s
                     \`);
                     
                     // Auto-pan ke marker
@@ -239,13 +242,14 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
                 nilai_ph: item.nilai_ph,
                 nilai_temperature: item.nilai_temperature,
                 nilai_turbidity: item.nilai_turbidity,
+                nilai_speed: item.nilai_speed || 0,
                 tanggal: item.tanggal
             }));
 
             webViewRef.current?.injectJavaScript(`
-              window.updateSensorData(${JSON.stringify(formattedData)});
-              map.invalidateSize();
-            `);
+                  window.updateSensorData(${JSON.stringify(formattedData)});
+                  map.invalidateSize();
+                `);
         } catch (error) {
             console.error('Error:', error);
         }
@@ -270,9 +274,9 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
             setLocationData(formattedData);
 
             webViewRef.current?.injectJavaScript(`
-                window.updateLocationData(${JSON.stringify(formattedData)});
-                map.invalidateSize();
-            `);
+                    window.updateLocationData(${JSON.stringify(formattedData)});
+                    map.invalidateSize();
+                `);
         } catch (error) {
             console.error('Error fetching location data:', error);
         }
@@ -280,15 +284,15 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
 
     const zoomToLocation = (lat: number, lon: number) => {
         webViewRef.current?.injectJavaScript(`
-            map.setView([${lat}, ${lon}], 18, {
-                animate: true,
-                duration: 0.5
-            });
-            L.marker([${lat}, ${lon}], { 
-                icon: window.waterMarkerLocation 
-            }).addTo(map).bindPopup("Lokasi Monitoring").openPopup();
-            true;
-        `);
+                map.setView([${lat}, ${lon}], 18, {
+                    animate: true,
+                    duration: 0.5
+                });
+                L.marker([${lat}, ${lon}], { 
+                    icon: window.waterMarkerLocation 
+                }).addTo(map).bindPopup("Lokasi Monitoring").openPopup();
+                true;
+            `);
     };
 
     React.useImperativeHandle(ref, () => ({
