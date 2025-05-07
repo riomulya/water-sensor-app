@@ -362,6 +362,82 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
         getCurrentLocation();
     };
 
+    const testIOTMarkerCreation = () => {
+        console.log('Testing IOT marker creation');
+        webViewRef.current?.injectJavaScript(`
+            (function() {
+                console.log('============= TESTING IOT MARKER CREATION =============');
+                // Step 1: Check if map is available
+                if (!map) {
+                    console.error('Map object not available!');
+                    return;
+                }
+                console.log('Map object available ✓');
+                
+                // Step 2: Check if IOTDeviceMarker is available
+                if (!window.IOTDeviceMarker) {
+                    console.error('IOTDeviceMarker not available, creating it');
+                    window.IOTDeviceMarker = L.icon({
+                        iconUrl: '${targetMarker}',
+                        iconSize: [40, 40], 
+                        iconAnchor: [20, 40],
+                        popupAnchor: [0, -40]
+                    });
+                }
+                console.log('IOTDeviceMarker available ✓');
+                
+                // Step 3: Create the marker
+                try {
+                    // Force remove any existing marker first
+                    if (window.iotMarker) {
+                        console.log('Removing existing IOT marker');
+                        map.removeLayer(window.iotMarker);
+                        window.iotMarker = null;
+                    }
+                    
+                    // Create new marker
+                    console.log('Creating new IOT marker');
+                    const lat = -6.354952;
+                    const lon = 106.659897;
+                    window.iotMarker = L.marker([lat, lon], {
+                        icon: window.IOTDeviceMarker,
+                        zIndexOffset: 1000
+                    }).addTo(map);
+                    
+                    // Check if marker was added
+                    if (window.iotMarker._map !== map) {
+                        console.error('Marker not added to map!');
+                    } else {
+                        console.log('Marker added to map ✓');
+                    }
+                    
+                    // Add styling
+                    if (window.iotMarker._icon) {
+                        window.iotMarker._icon.className += " pulsing-marker-iot";
+                        console.log('Animation class added ✓');
+                    } else {
+                        console.warn('Icon element not available yet');
+                    }
+                    
+                    // Add popup and open it
+                    window.iotMarker.bindPopup('IOT Marker Test').openPopup();
+                    console.log('Popup added and opened ✓');
+                    
+                    // Center map on marker
+                    map.setView([lat, lon], 15);
+                    console.log('Map centered on marker ✓');
+                    
+                    console.log('IOT MARKER CREATED SUCCESSFULLY ✓');
+                    return true;
+                } catch (err) {
+                    console.error('ERROR CREATING IOT MARKER:', err);
+                    return false;
+                }
+            })();
+            true;
+        `);
+    };
+
     useEffect(() => {
         const initialize = async () => {
             if (assets) {
@@ -373,13 +449,20 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
                     .replace('__WATER_SELECTED__', waterSelected)
                     .replace('__WATERWAYS__', waterways)
                     .replace('__API_PORT__', port)
-                    .replace(/lang=".*?"/, 'lang="en"') // Force HTML ke English
+                    .replace(/lang=".*?"/, 'lang="en"')
                     .replace(/moment.locale\('.*?'\)/g, 'moment.locale("en")');
 
                 setHtmlString(modifiedHtml);
 
                 // Tambahkan delay 1 detik untuk pastikan WebView ready
                 await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Ensure our React Native component handles the MQTT data exclusively
+                webViewRef.current?.injectJavaScript(`
+                    window.iotHandlerDisabled = true;
+                    console.log('React Native will handle IOT marker positioning');
+                    true;
+                `);
 
                 onInitialized(zoomToGeoJSON);
                 onGetCurrentLocation(getCurrentLocationFunc);
@@ -390,84 +473,217 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
         initialize();
     }, [assets]);
 
+    // Initialize socket separately to ensure it's available
     useEffect(() => {
-        const initializeSocket = () => {
-            const newSocket = io(port);
+        console.log('Initializing socket connection');
+        const newSocket = io(port);
+        setSocket(newSocket);
 
-            // Update listener untuk data MQTT
-            newSocket.on('mqttData', (data: any) => {
-                const formattedData = {
-                    id: Date.now(), // ID unik untuk marker
-                    lat: parseFloat(data.message.latitude),
-                    lon: parseFloat(data.message.longitude),
-                    nilai_accel_x: data.message.accel_x,
-                    nilai_accel_y: data.message.accel_y,
-                    nilai_accel_z: data.message.accel_z,
-                    nilai_ph: data.message.ph,
-                    nilai_temperature: data.message.temperature,
-                    nilai_turbidity: data.message.turbidity,
-                    nilai_speed: data.message.speed,
-                    tanggal: data.timestamp
-                };
+        return () => {
+            if (newSocket) {
+                console.log('Disconnecting socket');
+                newSocket.disconnect();
+            }
+        };
+    }, []);
 
-                webViewRef.current?.injectJavaScript(`
-                    // Update atau tambahkan marker baru
-                    if(window.iotMarker) {
-                        window.iotMarker.slideTo([${formattedData.lat}, ${formattedData.lon}], {
-                            duration: 300,
-                            keepAtCenter: false
-                        });
-                    } else {
-                        window.iotMarker = L.marker([${formattedData.lat}, ${formattedData.lon}], {
-                            icon: IOTDeviceMarker,
-                            zIndexOffset: 1000
-                        }).addTo(map);
-                        
-                        // Add pulsing animation to the IOT marker
-                        if (window.iotMarker._icon) {
-                            window.iotMarker._icon.className += " pulsing-marker-iot";
-                        }
-                    }
-                    
-                    // Update popup with the new styled popup
-                    window.iotMarker.bindPopup(createIOTDevicePopup({
-                        lat: ${formattedData.lat},
-                        lon: ${formattedData.lon},
-                        nilai_accel_x: ${formattedData.nilai_accel_x},
-                        nilai_accel_y: ${formattedData.nilai_accel_y},
-                        nilai_accel_z: ${formattedData.nilai_accel_z},
-                        nilai_ph: ${formattedData.nilai_ph},
-                        nilai_temperature: ${formattedData.nilai_temperature},
-                        nilai_turbidity: ${formattedData.nilai_turbidity},
-                        nilai_speed: ${formattedData.nilai_speed}
-                    }));
-                    
-                    // Auto-pan ke marker dengan animasi
-                    map.flyTo([${formattedData.lat}, ${formattedData.lon}], map.getZoom(), {
-                        animate: true,
-                        duration: 0.5
-                    });
-                    true;
-                `);
+    useEffect(() => {
+        // Only setup socket listeners once the socket is created
+        if (socket) {
+            console.log('Setting up socket listeners');
+
+            // Add explicit connection monitoring and debugging
+            socket.on('connect', () => {
+                console.log('Socket connected successfully from React Native');
+                // Test the socket with a fake MQTT message
+                setTimeout(() => {
+                    console.log('Sending test MQTT data');
+                    const testData = {
+                        message: {
+                            latitude: -6.354952,
+                            longitude: 106.659897,
+                            ph: 7.0,
+                            temperature: 25.0,
+                            turbidity: 5.0,
+                            speed: 1.2,
+                            accel_x: 0.1,
+                            accel_y: 0.2,
+                            accel_z: 9.8,
+                        },
+                        timestamp: new Date().toISOString()
+                    };
+
+                    // Process the test data directly
+                    socket.emit('mqttData', testData);
+                }, 5000);
             });
 
-            newSocket.on('new-location', fetchLocationData);
-            newSocket.on('update-location', fetchLocationData);
-            newSocket.on('delete-location', fetchLocationData);
-            newSocket.on('sensor-data-changed', fetchSensorData);
-            setSocket(newSocket);
-        };
+            socket.on('connect_error', (error) => {
+                console.error('Socket connection error:', error);
+            });
 
-        if (!socket) {
-            initializeSocket();
+            // Update listener untuk data MQTT
+            socket.on('mqttData', (data: any) => {
+                console.log('MQTT data received in React Native:', data);
+
+                try {
+                    if (!data || !data.message) {
+                        console.error('Invalid MQTT data structure:', data);
+                        return;
+                    }
+
+                    // Check if latitude and longitude exist in the data
+                    if (!('latitude' in data.message) || !('longitude' in data.message)) {
+                        console.error('Missing coordinates in MQTT data:', data.message);
+                        return;
+                    }
+
+                    // Ensure we're working with valid floating point numbers for coordinates
+                    const lat = Number(parseFloat(data.message.latitude).toFixed(7));
+                    const lon = Number(parseFloat(data.message.longitude).toFixed(7));
+
+                    // Validate coordinates
+                    if (isNaN(lat) || isNaN(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+                        console.error('Invalid coordinates received:', { lat, lon });
+                        return;
+                    }
+
+                    console.log('Processing valid MQTT data with coordinates:', { lat, lon });
+
+                    const formattedData = {
+                        id: Date.now(),
+                        lat: lat,
+                        lon: lon,
+                        nilai_accel_x: Number(data.message.accel_x || 0).toFixed(2),
+                        nilai_accel_y: Number(data.message.accel_y || 0).toFixed(2),
+                        nilai_accel_z: Number(data.message.accel_z || 0).toFixed(2),
+                        nilai_ph: Number(data.message.ph || 7).toFixed(2),
+                        nilai_temperature: Number(data.message.temperature || 25).toFixed(2),
+                        nilai_turbidity: Number(data.message.turbidity || 0).toFixed(2),
+                        nilai_speed: Number(data.message.speed || 0).toFixed(2),
+                        tanggal: data.timestamp || new Date().toISOString()
+                    };
+
+                    webViewRef.current?.injectJavaScript(`
+                        try {
+                            const exactLatLng = [${lat}, ${lon}];
+                            
+                            // Update atau create marker
+                            if(window.iotMarker) {
+                                window.iotMarker.setLatLng(exactLatLng);
+                            } else {
+                                window.iotMarker = L.marker(exactLatLng, {
+                                    icon: window.IOTDeviceMarker,
+                                    zIndexOffset: 1000
+                                }).addTo(map);
+                            }
+                            
+                            // Update popup dengan style yang bagus
+                            window.iotMarker.bindPopup(\`
+                                <div style="min-width: 280px; border-radius: 8px; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                                    <div style="background: linear-gradient(135deg, #4834d4, #686de0); color: white; padding: 12px; text-align: center; font-size: 16px;">
+                                        <div style="font-size: 22px; margin-bottom: 6px;">🛰️</div>
+                                        <strong>Perangkat IOT Realtime</strong>
+                                    </div>
+                                    
+                                    <div style="background-color: white; padding: 15px; border-bottom: 1px solid #eee;">
+                                        <div style="margin-bottom: 10px; font-weight: 500; color: #555;">
+                                            <span style="color: #777; font-size: 13px;">WAKTU PENGUKURAN</span><br>
+                                            <span style="font-size: 15px;">${new Date().toLocaleString('id-ID', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        timeZone: 'Asia/Jakarta'
+                    })}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div style="padding: 15px; background-color: rgba(72, 52, 212, 0.05); display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                        <div class="param-item" style="background: white; border-radius: 6px; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                                            <div style="color: #4834d4; font-weight: bold; margin-bottom: 3px;">pH</div>
+                                            <div style="font-size: 16px;">${formattedData.nilai_ph}</div>
+                                        </div>
+                                        <div class="param-item" style="background: white; border-radius: 6px; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                                            <div style="color: #4834d4; font-weight: bold; margin-bottom: 3px;">Temperatur</div>
+                                            <div style="font-size: 16px;">${formattedData.nilai_temperature}°C</div>
+                                        </div>
+                                        <div class="param-item" style="background: white; border-radius: 6px; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                                            <div style="color: #4834d4; font-weight: bold; margin-bottom: 3px;">Kekeruhan</div>
+                                            <div style="font-size: 16px;">${formattedData.nilai_turbidity} NTU</div>
+                                        </div>
+                                        <div class="param-item" style="background: white; border-radius: 6px; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                                            <div style="color: #4834d4; font-weight: bold; margin-bottom: 3px;">Kecepatan</div>
+                                            <div style="font-size: 16px;">${formattedData.nilai_speed} m/s</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div style="background-color: #f8f9fa; padding: 12px 15px; border-top: 1px solid #eee;">
+                                        <div style="font-size: 13px; color: #666; margin-bottom: 8px;">Accelerometer:</div>
+                                        <div style="display: flex; justify-content: space-between; font-size: 14px;">
+                                            <span><b>X:</b> ${formattedData.nilai_accel_x} m/s²</span>
+                                            <span><b>Y:</b> ${formattedData.nilai_accel_y} m/s²</span>
+                                            <span><b>Z:</b> ${formattedData.nilai_accel_z} m/s²</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div style="background-color: white; padding: 12px 15px; border-top: 1px solid #eee;">
+                                        <div style="font-size: 13px; color: #666; margin-bottom: 5px;">Koordinat:</div>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                            <div style="background-color: #f1f5f9; padding: 8px; border-radius: 6px;">
+                                                <div style="font-size: 12px; color: #64748b;">Latitude</div>
+                                                <div style="font-weight: 500; font-size: 14px;">${lat}</div>
+                                            </div>
+                                            <div style="background-color: #f1f5f9; padding: 8px; border-radius: 6px;">
+                                                <div style="font-size: 12px; color: #64748b;">Longitude</div>
+                                                <div style="font-weight: 500; font-size: 14px;">${lon}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            \`);
+                            
+                            // Store last position
+                            window.lastIOTPosition = {
+                                lat: ${lat},
+                                lon: ${lon},
+                                timestamp: Date.now()
+                            };
+                            
+                            console.log('IOT marker updated successfully');
+                        } catch (err) {
+                            console.error('Error updating IOT marker:', err);
+                        }
+                        true;
+                    `);
+
+                } catch (error) {
+                    console.error('Error processing MQTT data in React Native:', error);
+                }
+            });
+
+            socket.on('new-location', fetchLocationData);
+            socket.on('update-location', fetchLocationData);
+            socket.on('delete-location', fetchLocationData);
+            socket.on('sensor-data-changed', fetchSensorData);
         }
 
         return () => {
             if (socket) {
-                socket.disconnect();
+                console.log('Removing socket listeners');
+                socket.off('connect');
+                socket.off('connect_error');
+                socket.off('mqttData');
+                socket.off('new-location');
+                socket.off('update-location');
+                socket.off('delete-location');
+                socket.off('sensor-data-changed');
             }
         };
-    }, []);
+    }, [socket]);
 
     const messageHandler = (e: WebViewMessageEvent) => {
         try {

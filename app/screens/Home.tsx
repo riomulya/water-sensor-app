@@ -889,6 +889,42 @@ const HomeScreen = () => {
                 <AntDesign name="team" size={35} color="#ea5757" />
             </Fab>
 
+            {/* FAB untuk zoom ke IOT device */}
+            <Fab
+                size="sm"
+                isHovered={false}
+                isDisabled={!mqttData?.message}
+                isPressed={true}
+                onPress={() => {
+                    if (!mqttData?.message?.latitude || !mqttData?.message?.longitude) {
+                        toast.show({
+                            placement: "top",
+                            render: ({ id }) => (
+                                <Toast nativeID={"toast-" + id} action="warning" variant="solid">
+                                    <ToastTitle>Perangkat IOT belum aktif</ToastTitle>
+                                    <ToastDescription>Silakan tunggu data GPS dari perangkat</ToastDescription>
+                                </Toast>
+                            ),
+                        });
+                        return;
+                    }
+                    mapRef.current?.zoomToLocation(
+                        Number(mqttData.message.latitude),
+                        Number(mqttData.message.longitude)
+                    );
+                }}
+                placement='bottom left'
+                style={{
+                    backgroundColor: 'white',
+                    position: 'absolute',
+                    bottom: 180,
+                    left: 25,
+                    zIndex: 0,
+                }}
+            >
+                <AntDesign name="rocket1" size={35} color="#ea5757" />
+            </Fab>
+
             {/* Combined Bottom Sheet */}
             <BottomSheet snapToIndex={bottomSheetOpen ? 0 : 1} onOpen={() => setBottomSheetOpen(true)} onClose={() => setBottomSheetOpen(false)}>
                 <Fab
