@@ -120,41 +120,38 @@ function ScreensLayout() {
                 {/* Logout Confirmation Alert */}
                 <AlertDialog isOpen={showLogoutAlert} onClose={() => setShowLogoutAlert(false)}>
                     <AlertDialogBackdrop />
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <Center>
-                                <AntDesign name="logout" size={32} color="#ef4444" style={{ marginBottom: 12 }} />
-                                <Heading size="md" style={{ textAlign: 'center', color: '#1e293b' }}>Konfirmasi Logout</Heading>
-                            </Center>
+                    <AlertDialogContent style={styles.alertContent}>
+                        <AlertDialogHeader style={styles.alertHeader}>
+                            <View style={styles.iconContainer}>
+                                <AntDesign name="logout" size={24} color="#fff" />
+                            </View>
+                            <Heading size="md" style={styles.alertTitle}>Konfirmasi Logout</Heading>
                         </AlertDialogHeader>
-                        <AlertDialogBody>
+                        <AlertDialogBody style={styles.alertBody} contentContainerStyle={styles.alertBodyContent}>
                             <Text style={styles.alertText}>
                                 Apakah Anda yakin ingin keluar dari aplikasi?
                             </Text>
-                            <Text style={[styles.alertText, { marginTop: 6 }]}>
+                            <Text style={[styles.alertText, { marginTop: 8, opacity: 0.8 }]}>
                                 Anda perlu login kembali untuk mengakses aplikasi.
                             </Text>
                         </AlertDialogBody>
-                        <AlertDialogFooter>
-                            <HStack space="md" style={styles.buttonContainer}>
-                                <Button
-                                    variant="outline"
-                                    size="md"
-                                    style={styles.cancelButton}
-                                    onPress={() => setShowLogoutAlert(false)}
-                                >
-                                    <ButtonText>Batal</ButtonText>
-                                </Button>
-                                <Button
-                                    action="negative"
-                                    size="md"
-                                    style={styles.logoutConfirmButton}
-                                    onPress={handleLogoutConfirm}
-                                >
-                                    <AntDesign name="logout" size={16} color="white" style={{ marginRight: 8 }} />
-                                    <ButtonText>Ya, Logout</ButtonText>
-                                </Button>
-                            </HStack>
+                        <AlertDialogFooter style={styles.alertFooter}>
+                            <Button
+                                variant="outline"
+                                size="md"
+                                style={styles.cancelButton}
+                                onPress={() => setShowLogoutAlert(false)}
+                            >
+                                <ButtonText style={styles.cancelButtonText}>Batal</ButtonText>
+                            </Button>
+                            <Button
+                                size="md"
+                                style={styles.logoutConfirmButton}
+                                onPress={handleLogoutConfirm}
+                            >
+                                <AntDesign name="logout" size={16} color="white" style={{ marginRight: 6 }} />
+                                <ButtonText>Logout</ButtonText>
+                            </Button>
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
@@ -205,24 +202,84 @@ const styles = StyleSheet.create({
     logoutButton: {
         padding: 6,
     },
-    alertText: {
-        fontSize: 14,
-        color: '#64748b',
-        textAlign: 'center',
-        lineHeight: 20,
+    // Alert Dialog styles
+    alertContent: {
+        borderRadius: 16,
+        paddingTop: 24,
+        paddingBottom: 16,
+        paddingHorizontal: 16,
+        width: '85%',
+        maxWidth: 320,
     },
-    buttonContainer: {
-        width: '100%',
+    alertHeader: {
+        alignItems: 'center',
+        paddingBottom: 8,
+    },
+    iconContainer: {
+        backgroundColor: '#ef4444',
+        width: 60,
+        height: 60,
+        borderRadius: 30,
         justifyContent: 'center',
-        marginTop: 10,
+        alignItems: 'center',
+        marginBottom: 16,
+        shadowColor: '#ef4444',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+        elevation: 8,
+    },
+    alertTitle: {
+        marginRight: 50,
+        textAlign: 'center',
+        color: '#1e293b',
+        fontWeight: '700',
+        fontSize: 18,
+    },
+    alertBody: {
+        paddingHorizontal: 0,
+        paddingVertical: 16,
+    },
+    alertBodyContent: {
+        alignItems: 'center',
+    },
+    alertText: {
+        fontSize: 15,
+        color: '#4b5563',
+        textAlign: 'center',
+        lineHeight: 22,
+    },
+    alertFooter: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        width: '100%',
+        paddingTop: 8,
     },
     cancelButton: {
         flex: 1,
+        marginRight: 8,
         borderColor: '#e2e8f0',
+        borderWidth: 1.5,
+        height: 46,
+        justifyContent: 'center',
+    },
+    cancelButtonText: {
+        color: '#64748b',
+        fontWeight: '600',
+        fontSize: 15,
     },
     logoutConfirmButton: {
         flex: 1,
+        marginLeft: 8,
         backgroundColor: '#ef4444',
+        borderRadius: 8,
+        height: 46,
+        justifyContent: 'center',
+        shadowColor: '#ef4444',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 2,
     },
 });
 
