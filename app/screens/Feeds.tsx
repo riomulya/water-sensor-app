@@ -323,147 +323,6 @@ const LocationsEmptySearch = ({ query, onClear }: { query: string, onClear: () =
     </View>
 );
 
-// Add these type definitions for our components
-interface LocationCardProps {
-    location: Location;
-    isSelected: boolean;
-    onPress: () => void;
-}
-
-interface LocationFilterHeaderProps {
-    onClose: () => void;
-    searchQuery: string;
-    setSearchQuery: (query: string) => void;
-    locationsCount: number;
-}
-
-interface AnimatedSearchBarProps {
-    value: string;
-    onChangeText: (text: string) => void;
-    onClear: () => void;
-}
-
-// Add these new components for the improved location filter
-const LocationCard = memo(({ location, isSelected, onPress }: LocationCardProps) => {
-    return (
-        <TouchableOpacity
-            style={[
-                styles.locationCard,
-                isSelected && styles.locationCardSelected
-            ]}
-            onPress={onPress}
-            activeOpacity={0.7}
-        >
-            <MotiView
-                animate={{
-                    scale: isSelected ? 1 : 0.9,
-                    opacity: isSelected ? 1 : 0.7
-                }}
-                transition={{ type: 'timing', duration: 150 }}
-                style={styles.locationIconBadge}
-            >
-                <Ionicons
-                    name={isSelected ? "location" : "location-outline"}
-                    size={22}
-                    color={isSelected ? "#fff" : "#1e88e5"}
-                />
-            </MotiView>
-            <View style={styles.locationCardContent}>
-                <Text
-                    style={[
-                        styles.locationCardTitle,
-                        isSelected && styles.locationCardTitleSelected
-                    ]}
-                    numberOfLines={1}
-                >
-                    {location.nama_sungai}
-                </Text>
-                <Text
-                    style={[
-                        styles.locationCardAddress,
-                        isSelected && styles.locationCardAddressSelected
-                    ]}
-                    numberOfLines={2}
-                >
-                    {location.alamat}
-                </Text>
-            </View>
-            {isSelected && (
-                <MotiView
-                    from={{ opacity: 0, scale: 0.5 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                    style={styles.selectedCheckmark}
-                >
-                    <Ionicons name="checkmark-circle" size={24} color="#1e88e5" />
-                </MotiView>
-            )}
-        </TouchableOpacity>
-    );
-});
-
-const LocationFilterHeader = ({ onClose, searchQuery, setSearchQuery, locationsCount }: LocationFilterHeaderProps) => {
-    return (
-        <View style={styles.locationFilterHeader}>
-            <View style={styles.locationFilterHeaderContent}>
-                <Text style={styles.locationFilterTitle}>Pilih Lokasi</Text>
-                <Text style={styles.locationFilterSubtitle}>
-                    {locationsCount} lokasi tersedia
-                </Text>
-            </View>
-            <TouchableOpacity
-                onPress={onClose}
-                style={styles.locationFilterCloseButton}
-                hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-            >
-                <Ionicons name="close" size={24} color="#666" />
-            </TouchableOpacity>
-        </View>
-    );
-};
-
-const AnimatedSearchBar = ({ value, onChangeText, onClear }: AnimatedSearchBarProps) => {
-    return (
-        <MotiView
-            from={{ opacity: 0.7, translateY: 10 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 300 }}
-            style={styles.searchBarContainer}
-        >
-            <View style={styles.searchInputWrapper}>
-                <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
-                <TextInput
-                    style={styles.searchInputEnhanced}
-                    placeholder="Cari nama sungai atau alamat..."
-                    value={value}
-                    onChangeText={onChangeText}
-                    autoCorrect={false}
-                    autoCapitalize="none"
-                    clearButtonMode="never"
-                    returnKeyType="search"
-                    placeholderTextColor="#9e9e9e"
-                />
-                {value.length > 0 && (
-                    <MotiView
-                        from={{ opacity: 0, scale: 0 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0 }}
-                        transition={{ type: 'spring', stiffness: 250, damping: 20 }}
-                    >
-                        <TouchableOpacity
-                            onPress={onClear}
-                            style={styles.clearSearchButton}
-                            hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                        >
-                            <Ionicons name="close-circle" size={20} color="#666" />
-                        </TouchableOpacity>
-                    </MotiView>
-                )}
-            </View>
-        </MotiView>
-    );
-};
-
 const FeedsScreen: React.FC = () => {
     // Replace multiple useState hooks with the Zustand store
     const {
@@ -1054,32 +913,18 @@ const FeedsScreen: React.FC = () => {
         }
     }, []);
 
-    // New state for recent locations
-    const [recentLocations, setRecentLocations] = useState<number[]>([]);
-
-    // Function to handle location selection with recents tracking
-    const handleLocationChange = useCallback((locationId: number | string) => {
+    // Function for handling location changes with proper type handling
+    const handleLocationChange = (locationId: number | string) => {
         if (locationId === '') {
             // "All locations" case
             setSelectedLocation('');
         } else {
             // Convert numeric ID to string for the store
             setSelectedLocation(String(locationId));
-
-            // Add to recent locations if it's a numeric ID
-            if (typeof locationId === 'number') {
-                setRecentLocations(prev => {
-                    // Remove if already exists
-                    const filtered = prev.filter(id => id !== locationId);
-                    // Add to the beginning and limit to 3 items
-                    return [locationId, ...filtered].slice(0, 3);
-                });
-            }
         }
         closeLocationSheet();
-    }, [setSelectedLocation]);
+    };
 
-    // Add back the effect for selectedLocation changes
     useEffect(() => {
         if (isDataLoaded) {
             // reset halaman tiap chart
@@ -1093,26 +938,16 @@ const FeedsScreen: React.FC = () => {
             setGlobalPage(1);
             fetchAllData();
         }
-    }, [selectedLocation, isDataLoaded, chartData, setChartData, setGlobalPage, fetchAllData]);
+    }, [selectedLocation]);
 
-    // Organize locations into sections
-    const organizedLocations = useMemo(() => {
-        if (!locationSearchQuery.trim()) {
-            // If no search, we can organize by recents and all
-            const recent = locations.filter(loc => recentLocations.includes(loc.id_lokasi));
-            const all = locations.filter(loc => !recentLocations.includes(loc.id_lokasi));
-            return { recent, all };
-        }
-
-        // When searching, just filter all locations
-        return {
-            recent: [],
-            all: locations.filter(loc =>
-                loc.nama_sungai.toLowerCase().includes(locationSearchQuery.toLowerCase()) ||
-                loc.alamat.toLowerCase().includes(locationSearchQuery.toLowerCase())
-            )
-        };
-    }, [locations, locationSearchQuery, recentLocations]);
+    // Fungsi untuk memfilter lokasi berdasarkan search query
+    const filteredLocations = useMemo(() => {
+        if (!locationSearchQuery.trim()) return locations;
+        return locations.filter(loc =>
+            loc.nama_sungai.toLowerCase().includes(locationSearchQuery.toLowerCase()) ||
+            loc.alamat.toLowerCase().includes(locationSearchQuery.toLowerCase())
+        );
+    }, [locations, locationSearchQuery]);
 
     return (<>
         <View style={styles.container}>
@@ -1382,15 +1217,11 @@ const FeedsScreen: React.FC = () => {
             {/* Location Filter using proper BottomSheet component */}
             <BottomSheet>
                 <BottomSheetPortal
-                    snapPoints={["80%"]}
+                    snapPoints={["75%"]}
                     backdropComponent={(props) => (
                         <BottomSheetBackdrop {...props} onPress={closeLocationSheet} />
                     )}
-                    handleComponent={() => (
-                        <View style={styles.bottomSheetHandle}>
-                            <View style={styles.bottomSheetHandleBar} />
-                        </View>
-                    )}
+                    handleComponent={BottomSheetDragIndicator}
                     enablePanDownToClose={true}
                     index={showLocationModal ? 0 : -1}
                     onChange={(index) => {
@@ -1399,130 +1230,151 @@ const FeedsScreen: React.FC = () => {
                         }
                     }}
                 >
-                    <LocationFilterHeader
-                        onClose={closeLocationSheet}
-                        searchQuery={locationSearchQuery}
-                        setSearchQuery={setLocationSearchQuery}
-                        locationsCount={locations.length}
-                    />
-
-                    <AnimatedSearchBar
-                        value={locationSearchQuery}
-                        onChangeText={setLocationSearchQuery}
-                        onClear={() => setLocationSearchQuery('')}
-                    />
-
-                    {locationsState === 'loading' ? (
-                        <LocationsLoadingState />
-                    ) : locationsState === 'error' ? (
-                        <LocationsErrorState
-                            error={locationError}
-                            onRetry={retryFetchLocations}
-                        />
-                    ) : locations.length === 0 ? (
-                        <LocationsEmptyState debugInfo={`No locations found. State: ${locationsState}`} />
-                    ) : organizedLocations.all.length === 0 && organizedLocations.recent.length === 0 ? (
-                        <LocationsEmptySearch
-                            query={locationSearchQuery}
-                            onClear={() => setLocationSearchQuery('')}
-                        />
-                    ) : (
-                        <BottomSheetScrollView contentContainerStyle={styles.locationListContainer}>
-                            {/* All Locations option */}
-                            <MotiView
-                                from={{ opacity: 0, translateY: 10 }}
-                                animate={{ opacity: 1, translateY: 0 }}
-                                transition={{ type: 'timing', duration: 300, delay: 100 }}
-                                style={styles.allLocationsWrapper}
-                            >
+                    <BottomSheetScrollView
+                        style={[styles.locationScrollView, { flex: 1 }]}
+                        contentContainerStyle={{ paddingBottom: 20 }}
+                    >
+                        <BottomSheetContent style={{ flex: 1, backgroundColor: '#fff' }}>
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Pilih Lokasi</Text>
                                 <TouchableOpacity
-                                    style={[
-                                        styles.allLocationsButton,
-                                        selectedLocation === '' && styles.allLocationsButtonSelected
-                                    ]}
-                                    onPress={() => handleLocationChange('')}
-                                    activeOpacity={0.7}
+                                    onPress={closeLocationSheet}
+                                    hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                                 >
-                                    <View style={styles.allLocationsIconContainer}>
-                                        <Ionicons
-                                            name={selectedLocation === '' ? "globe" : "globe-outline"}
-                                            size={24}
-                                            color={selectedLocation === '' ? "#fff" : "#1e88e5"}
-                                        />
-                                    </View>
-                                    <Text
-                                        style={[
-                                            styles.allLocationsText,
-                                            selectedLocation === '' && styles.allLocationsTextSelected
-                                        ]}
-                                    >
-                                        Semua Lokasi
-                                    </Text>
-                                    {selectedLocation === '' && (
-                                        <MotiView
-                                            from={{ opacity: 0, scale: 0.5 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                                            style={styles.selectedCheckmark}
-                                        >
-                                            <Ionicons name="checkmark-circle" size={24} color="#fff" />
-                                        </MotiView>
-                                    )}
+                                    <Ionicons name="close" size={24} color="#666" />
                                 </TouchableOpacity>
-                            </MotiView>
+                            </View>
 
-                            {/* Recent Locations */}
-                            {!locationSearchQuery && organizedLocations.recent.length > 0 && (
-                                <View style={styles.locationSection}>
-                                    <Text style={styles.locationSectionTitle}>
-                                        Lokasi Terakhir Dipilih
-                                    </Text>
-                                    {organizedLocations.recent.map((location, index) => (
-                                        <MotiView
-                                            key={location.id_lokasi}
-                                            from={{ opacity: 0, translateY: 10 }}
-                                            animate={{ opacity: 1, translateY: 0 }}
-                                            transition={{ type: 'timing', duration: 300, delay: 150 + (index * 50) }}
-                                        >
-                                            <LocationCard
-                                                location={location}
-                                                isSelected={selectedLocation === String(location.id_lokasi)}
-                                                onPress={() => handleLocationChange(location.id_lokasi)}
+                            {/* Search Input with improved styling */}
+                            <View style={styles.searchContainer}>
+                                <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
+                                <TextInput
+                                    style={styles.searchInput}
+                                    placeholder="Cari lokasi..."
+                                    value={locationSearchQuery}
+                                    onChangeText={setLocationSearchQuery}
+                                    clearButtonMode="while-editing"
+                                    autoCorrect={false}
+                                    autoCapitalize="none"
+                                    placeholderTextColor="#999"
+                                />
+                                {locationSearchQuery.length > 0 && (
+                                    <TouchableOpacity
+                                        onPress={() => setLocationSearchQuery('')}
+                                        style={styles.clearButton}
+                                        activeOpacity={0.6}
+                                        hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                                    >
+                                        <Ionicons name="close-circle" size={20} color="#666" />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            {/* Locations list with different states */}
+                            {locationsState === 'loading' ? (
+                                <LocationsLoadingState />
+                            ) : locationsState === 'error' ? (
+                                <LocationsErrorState
+                                    error={locationError}
+                                    onRetry={retryFetchLocations}
+                                />
+                            ) : locations.length === 0 ? (
+                                <LocationsEmptyState debugInfo={`No locations found. State: ${locationsState}`} />
+                            ) : filteredLocations.length === 0 ? (
+                                <LocationsEmptySearch
+                                    query={locationSearchQuery}
+                                    onClear={() => setLocationSearchQuery('')}
+                                />
+                            ) : (
+                                <View style={[styles.locationOptionsContainer, { flex: 1 }]}>
+                                    {/* Semua Lokasi with enhanced styling */}
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.locationOptionSpecial,
+                                            selectedLocation === '' && styles.locationOptionSelected
+                                        ]}
+                                        onPress={() => handleLocationChange('')}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={styles.locationIconContainerSpecial}>
+                                            <Ionicons
+                                                name="globe-outline"
+                                                size={24}
+                                                color={selectedLocation === '' ? "#fff" : "#1e88e5"}
                                             />
+                                        </View>
+                                        <Text
+                                            style={[
+                                                styles.locationOptionTextSpecial,
+                                                selectedLocation === '' && styles.locationOptionTextSelected
+                                            ]}
+                                        >
+                                            Semua Lokasi
+                                        </Text>
+                                        {selectedLocation === '' && (
+                                            <Ionicons name="checkmark-circle" size={22} color="#fff" style={styles.selectedIcon} />
+                                        )}
+                                    </TouchableOpacity>
+
+                                    <Text style={styles.locationSectionTitle}>Lokasi Tersedia</Text>
+                                    <Divider style={styles.sectionDivider} />
+
+                                    {/* Grouped locations list */}
+                                    {filteredLocations.map((loc) => (
+                                        <MotiView
+                                            key={loc.id_lokasi}
+                                            from={{ opacity: 0, translateY: 5 }}
+                                            animate={{ opacity: 1, translateY: 0 }}
+                                            transition={{ type: 'timing', duration: 300, delay: filteredLocations.indexOf(loc) * 50 }}
+                                        >
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.locationOption,
+                                                    selectedLocation === String(loc.id_lokasi) && styles.locationOptionSelected
+                                                ]}
+                                                onPress={() => handleLocationChange(loc.id_lokasi)}
+                                                activeOpacity={0.7}
+                                            >
+                                                <View style={styles.locationContent}>
+                                                    <View style={styles.locationIconContainer}>
+                                                        <Ionicons
+                                                            name="location"
+                                                            size={22}
+                                                            color={selectedLocation === String(loc.id_lokasi) ? "#fff" : "#1e88e5"}
+                                                        />
+                                                    </View>
+                                                    <View style={styles.locationTextContainer}>
+                                                        <Text
+                                                            style={[
+                                                                styles.locationOptionText,
+                                                                selectedLocation === String(loc.id_lokasi) && styles.locationOptionTextSelected
+                                                            ]}
+                                                            numberOfLines={1}
+                                                        >
+                                                            {loc.nama_sungai}
+                                                        </Text>
+                                                        <Text
+                                                            style={[
+                                                                styles.locationAddress,
+                                                                selectedLocation === String(loc.id_lokasi) && styles.locationAddressSelected
+                                                            ]}
+                                                            numberOfLines={2}
+                                                        >
+                                                            {loc.alamat}
+                                                        </Text>
+                                                    </View>
+                                                </View>
+
+                                                {selectedLocation === String(loc.id_lokasi) && (
+                                                    <Ionicons name="checkmark-circle" size={22} color="#fff" style={styles.selectedIcon} />
+                                                )}
+                                            </TouchableOpacity>
                                         </MotiView>
                                     ))}
                                 </View>
                             )}
-
-                            {/* All or Filtered Locations */}
-                            <View style={styles.locationSection}>
-                                {!locationSearchQuery && organizedLocations.all.length > 0 && (
-                                    <Text style={styles.locationSectionTitle}>
-                                        Semua Lokasi
-                                    </Text>
-                                )}
-
-                                {organizedLocations.all.map((location, index) => (
-                                    <MotiView
-                                        key={location.id_lokasi}
-                                        from={{ opacity: 0, translateY: 10 }}
-                                        animate={{ opacity: 1, translateY: 0 }}
-                                        transition={{
-                                            type: 'timing',
-                                            duration: 300,
-                                            delay: 200 + (index * 30) // Staggered animation
-                                        }}
-                                    >
-                                        <LocationCard
-                                            location={location}
-                                            isSelected={selectedLocation === String(location.id_lokasi)}
-                                            onPress={() => handleLocationChange(location.id_lokasi)}
-                                        />
-                                    </MotiView>
-                                ))}
-                            </View>
-                        </BottomSheetScrollView>
-                    )}
+                        </BottomSheetContent>
+                    </BottomSheetScrollView>
                 </BottomSheetPortal>
             </BottomSheet>
 
@@ -1715,7 +1567,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 15,
         borderRadius: 12,
         marginHorizontal: 15,
-        marginBottom: 15,
+        marginVertical: 16,
         height: 50,
         borderWidth: 1,
         borderColor: '#eaeaea',
@@ -1735,9 +1587,41 @@ const styles = StyleSheet.create({
         paddingHorizontal: 15,
     },
     locationOptionsContainer: {
+        paddingHorizontal: 15,
         paddingBottom: 20,
     },
+    locationSectionTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#666',
+        marginTop: 20,
+        marginBottom: 8,
+        paddingHorizontal: 5,
+    },
+    sectionDivider: {
+        height: 1,
+        backgroundColor: '#f0f0f0',
+        marginBottom: 15,
+    },
+    locationOptionSpecial: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        backgroundColor: '#e3f2fd',
+        borderRadius: 12,
+        marginVertical: 5,
+        width: '100%',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        justifyContent: 'space-between',
+    },
     locationOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingVertical: 14,
         paddingHorizontal: 16,
         backgroundColor: '#f8f9fa',
@@ -1749,6 +1633,12 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.1,
         shadowRadius: 1,
+        justifyContent: 'space-between',
+    },
+    locationContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
     },
     locationOptionSelected: {
         backgroundColor: '#1e88e5',
@@ -1758,35 +1648,69 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 3,
     },
+    locationIconContainer: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(30, 136, 229, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    locationIconContainerSpecial: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(30, 136, 229, 0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
     locationOptionText: {
         color: '#333',
         fontSize: 16,
         fontWeight: '500',
     },
+    locationOptionTextSpecial: {
+        color: '#1e88e5',
+        fontSize: 16,
+        fontWeight: '600',
+        flex: 1,
+    },
     locationOptionTextSelected: {
         color: '#fff',
+    },
+    locationTextContainer: {
+        flexDirection: 'column',
+        flex: 1,
     },
     locationAddress: {
         color: '#666',
         fontSize: 12,
         marginTop: 4,
     },
-    noResultContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 30,
+    locationAddressSelected: {
+        color: 'rgba(255, 255, 255, 0.8)',
     },
-    noResultText: {
-        marginTop: 10,
-        color: '#999',
-        fontSize: 16,
+    selectedIcon: {
+        marginLeft: 8,
+    },
+    clearButton: {
+        padding: 5,
     },
     bottomSheetHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingVertical: 10,
-        paddingHorizontal: 15,
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f0f0f0',
+    },
+    bottomSheetTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
     },
     modalTitle: {
         fontSize: 18,
@@ -2047,18 +1971,6 @@ const styles = StyleSheet.create({
     closeButton: {
         padding: 5,
     },
-    locationIconContainer: {
-        marginRight: 10,
-    },
-    locationTextContainer: {
-        flexDirection: 'column',
-    },
-    locationAddressSelected: {
-        color: '#1e88e5',
-    },
-    clearButton: {
-        padding: 5,
-    },
     locationStateContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -2087,169 +1999,6 @@ const styles = StyleSheet.create({
         color: '#2196f3',
         fontSize: 14,
         fontWeight: '500',
-    },
-    // New styles for improved location filter
-    locationFilterHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eeeeee',
-    },
-    locationFilterHeaderContent: {
-        flex: 1,
-    },
-    locationFilterTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#333333',
-    },
-    locationFilterSubtitle: {
-        fontSize: 13,
-        color: '#757575',
-        marginTop: 4,
-    },
-    locationFilterCloseButton: {
-        padding: 8,
-        borderRadius: 20,
-        backgroundColor: '#f5f5f5',
-    },
-    searchBarContainer: {
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-    },
-    searchInputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#f5f5f5',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        height: 52,
-        borderWidth: 1,
-        borderColor: '#eeeeee',
-    },
-    searchInputEnhanced: {
-        flex: 1,
-        height: 52,
-        fontSize: 16,
-        color: '#333333',
-        marginLeft: 10,
-    },
-    locationListContainer: {
-        paddingHorizontal: 20,
-        paddingBottom: 40,
-    },
-    locationSection: {
-        marginTop: 16,
-    },
-    locationSectionTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#757575',
-        marginBottom: 12,
-        paddingLeft: 4,
-    },
-    locationCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        backgroundColor: '#ffffff',
-        borderRadius: 12,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: '#eeeeee',
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.08,
-        shadowRadius: 2,
-        elevation: 1,
-    },
-    locationCardSelected: {
-        backgroundColor: '#e3f2fd',
-        borderColor: '#bbdefb',
-        shadowColor: '#1976d2',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    locationIconBadge: {
-        width: 42,
-        height: 42,
-        borderRadius: 21,
-        backgroundColor: '#f5f5f5',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 16,
-    },
-    locationCardContent: {
-        flex: 1,
-    },
-    locationCardTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333333',
-        marginBottom: 4,
-    },
-    locationCardTitleSelected: {
-        color: '#1976d2',
-    },
-    locationCardAddress: {
-        fontSize: 13,
-        color: '#757575',
-    },
-    locationCardAddressSelected: {
-        color: '#2196f3',
-    },
-    selectedCheckmark: {
-        marginLeft: 10,
-    },
-    allLocationsWrapper: {
-        marginBottom: 16,
-    },
-    allLocationsButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        backgroundColor: '#f5f5f5',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#e0e0e0',
-    },
-    allLocationsButtonSelected: {
-        backgroundColor: '#1e88e5',
-        borderColor: '#1565c0',
-    },
-    allLocationsIconContainer: {
-        width: 42,
-        height: 42,
-        borderRadius: 21,
-        backgroundColor: '#e0e0e0',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 16,
-    },
-    allLocationsText: {
-        flex: 1,
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333333',
-    },
-    allLocationsTextSelected: {
-        color: '#ffffff',
-    },
-    bottomSheetHandle: {
-        paddingVertical: 12,
-        alignItems: 'center',
-    },
-    bottomSheetHandleBar: {
-        width: 40,
-        height: 5,
-        borderRadius: 3,
-        backgroundColor: '#bdbdbd',
     },
 });
 
