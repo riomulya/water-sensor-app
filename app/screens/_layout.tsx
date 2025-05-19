@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { View, TouchableOpacity, StyleSheet, StatusBar, Platform, Image } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -28,6 +28,7 @@ import { Button, ButtonText } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
 import { Center } from "@/components/ui/center";
 import { HStack } from "@/components/ui/hstack";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type RootStackParamList = {
     Home: undefined;
@@ -40,6 +41,23 @@ const BottomTab = createBottomTabNavigator<RootStackParamList>();
 
 // Custom AppBar component with menu button
 const AppBar = ({ onMenuPress, onLogoutPress }: { onMenuPress: () => void, onLogoutPress: () => void }) => {
+    const [userData, setUserData] = useState<{ role: string } | null>(null);
+
+    useEffect(() => {
+        const loadUserData = async () => {
+            try {
+                const storedUserData = await AsyncStorage.getItem('userData');
+                if (storedUserData) {
+                    setUserData(JSON.parse(storedUserData));
+                }
+            } catch (error) {
+                console.error('Error loading user data:', error);
+            }
+        };
+
+        loadUserData();
+    }, []);
+
     return (
         <LinearGradient
             colors={['pink', '#ffffff']}
@@ -47,9 +65,11 @@ const AppBar = ({ onMenuPress, onLogoutPress }: { onMenuPress: () => void, onLog
             end={{ x: 0.5, y: 1 }}
             style={styles.appBar}
         >
-            <TouchableOpacity onPress={onMenuPress} style={styles.menuButton}>
-                <AntDesign name="menuunfold" size={22} color="#333" />
-            </TouchableOpacity>
+            {userData?.role !== 'guest' && (
+                <TouchableOpacity onPress={onMenuPress} style={styles.menuButton}>
+                    <AntDesign name="menuunfold" size={22} color="#333" />
+                </TouchableOpacity>
+            )}
 
             <View style={styles.logoContainer}>
                 <Image

@@ -56,12 +56,8 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const toast = useToast();
     const [visible, setVisible] = useState(false);
-    // const { user } = useAuth(); // Commented out for testing
-
-    // State untuk menyimpan data user dari AsyncStorage
     const [userData, setUserData] = useState<UserData | null>(null);
 
-    // Load user data from AsyncStorage on component mount
     useEffect(() => {
         const loadUserData = async () => {
             try {
@@ -69,7 +65,6 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
                 if (storedUserData) {
                     setUserData(JSON.parse(storedUserData));
                 } else {
-                    // Default to guest user if no data is found
                     setUserData({
                         id: -1,
                         username: 'Guest User',
@@ -79,7 +74,6 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
                 }
             } catch (error) {
                 console.error('Error loading user data:', error);
-                // Default to guest user if error occurs
                 setUserData({
                     id: -1,
                     username: 'Guest User',
@@ -90,18 +84,16 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
         };
 
         loadUserData();
-    }, [isOpen]);  // Reload user data each time drawer opens
+    }, [isOpen]);
 
     const getInitials = (name: string | undefined) => {
         if (!name) return 'WS';
 
-        // Split the name by spaces and get the first letter of each part
         const parts = name.split(' ');
         if (parts.length === 1) {
             return name.charAt(0).toUpperCase();
         }
 
-        // Get first letter of first name and first letter of last name
         return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
     };
 
@@ -137,6 +129,11 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
             });
         }
     }, [isOpen, slideAnim, fadeAnim]);
+
+    // Move the guest check here, after all hooks are initialized
+    if (userData?.role === 'guest') {
+        return null;
+    }
 
     const handleBackdropPress = () => {
         onClose();
