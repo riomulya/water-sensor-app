@@ -151,6 +151,18 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
         }
     };
 
+    const handleNavigateToSensors = () => {
+        onClose();
+        try {
+            setTimeout(() => {
+                // @ts-ignore - Ignoring TypeScript errors for navigation paths
+                router.push('sensors');
+            }, 300);
+        } catch (error) {
+            console.error('Navigation error:', error);
+        }
+    };
+
     const navigateToUserManagement = () => {
         onClose();
         try {
@@ -172,10 +184,8 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
         },
         {
             icon: <MaterialCommunityIcons name="water-outline" size={22} color="#64748b" />,
-            label: "Data Sensor",
-            onPress: () => {
-                onClose();
-            }
+            label: "Anomali Sensor",
+            onPress: handleNavigateToSensors
         },
         {
             icon: <MaterialIcons name="location-on" size={22} color="#64748b" />,

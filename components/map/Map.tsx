@@ -177,27 +177,6 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
             // Add explicit connection monitoring and debugging
             socketRef.current.on('connect', () => {
                 console.log('Socket connected successfully from React Native');
-                // Test the socket with a fake MQTT message
-                setTimeout(() => {
-                    console.log('Sending test MQTT data');
-                    const testData = {
-                        message: {
-                            latitude: -6.354952,
-                            longitude: 106.659897,
-                            ph: 7.0,
-                            temperature: 25.0,
-                            turbidity: 5.0,
-                            speed: 1.2,
-                            accel_x: 0.1,
-                            accel_y: 0.2,
-                            accel_z: 9.8,
-                        },
-                        timestamp: new Date().toISOString()
-                    };
-
-                    // Process the test data directly
-                    socketRef.current.emit('mqttData', testData);
-                }, 5000);
             });
 
             socketRef.current.on('connect_error', (error) => {
