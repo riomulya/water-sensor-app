@@ -158,7 +158,13 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
     // Initialize socket separately to ensure it's available
     useEffect(() => {
         console.log('Initializing socket connection');
-        const newSocket = io(port);
+        // Fix XHR polling errors by adding transport options
+        const newSocket = io(port, {
+            transports: ['websocket', 'polling'],
+            reconnectionAttempts: 5,
+            reconnectionDelay: 2000,
+            timeout: 10000
+        });
         socketRef.current = newSocket;
 
         return () => {
@@ -181,6 +187,17 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
 
             socketRef.current.on('connect_error', (error) => {
                 console.error('Socket connection error:', error);
+            });
+
+            // Listen for real-time sensor data from the server
+            socketRef.current.on('new-sensor-data', (sensorData) => {
+                console.log('Received new-sensor-data event:', sensorData);
+                handleNewSensorData(sensorData);
+            });
+
+            socketRef.current.on('sensor-update', (sensorData) => {
+                console.log('Received sensor-update event:', sensorData);
+                handleNewSensorData(sensorData);
             });
 
             // Update listener untuk data MQTT
@@ -225,6 +242,7 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
                         tanggal: data.timestamp || new Date().toISOString()
                     };
 
+                    // Create IOT marker directly
                     webViewRef.current?.injectJavaScript(`
                         try {
                             const exactLatLng = [${lat}, ${lon}];
@@ -321,6 +339,9 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
                         true;
                     `);
 
+                    // Also create a normal sensor marker for this data
+                    handleNewSensorData(formattedData);
+
                 } catch (error) {
                     console.error('Error processing MQTT data in React Native:', error);
                 }
@@ -329,7 +350,7 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
             socketRef.current.on('new-location', fetchLocationData);
             socketRef.current.on('update-location', fetchLocationData);
             socketRef.current.on('delete-location', fetchLocationData);
-            socketRef.current.on('sensor-data-changed', fetchSensorData);
+            socketRef.current.on('sensor-data-changed', handleSensorDataChanged);
         }
 
         return () => {
@@ -338,6 +359,8 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
                 socketRef.current.off('connect');
                 socketRef.current.off('connect_error');
                 socketRef.current.off('mqttData');
+                socketRef.current.off('new-sensor-data');
+                socketRef.current.off('sensor-update');
                 socketRef.current.off('new-location');
                 socketRef.current.off('update-location');
                 socketRef.current.off('delete-location');
@@ -346,6 +369,69 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
         };
     }, [socketRef]);
 
+    // Special handler for sensor-data-changed events
+    const handleSensorDataChanged = (data) => {
+        console.log('Received sensor-data-changed event:', data);
+
+        if (data && Array.isArray(data.data)) {
+            // Handle bulk data update
+            console.log('Processing bulk sensor data update');
+
+            // Format data with proper speed values
+            const formattedData = data.data.map(item => {
+                // Ensure speed is properly parsed
+                const speedValue = typeof item.nilai_speed === 'string'
+                    ? parseFloat(item.nilai_speed)
+                    : (typeof item.nilai_speed === 'number' ? item.nilai_speed : 0);
+
+                return {
+                    lat: item.lat.toString(),
+                    lon: item.lon.toString(),
+                    nilai_accel_x: parseFloat(item.nilai_accel_x || 0),
+                    nilai_accel_y: parseFloat(item.nilai_accel_y || 0),
+                    nilai_accel_z: parseFloat(item.nilai_accel_z || 0),
+                    nilai_ph: parseFloat(item.nilai_ph || 0),
+                    nilai_temperature: parseFloat(item.nilai_temperature || 0),
+                    nilai_turbidity: parseFloat(item.nilai_turbidity || 0),
+                    nilai_speed: speedValue,
+                    tanggal: item.tanggal
+                };
+            });
+
+            // Log speed values for troubleshooting
+            if (formattedData.length > 0) {
+                console.log('First bulk item speed:', formattedData[0].nilai_speed);
+            }
+
+            // Update React state
+            setSensorData(formattedData);
+
+            // Update map markers
+            webViewRef.current?.injectJavaScript(`
+                try {
+                    console.log('Updating map with bulk sensor data...');
+                    currentSensorData = ${JSON.stringify(formattedData)};
+                    
+                    // Clear existing markers and add new ones
+                    markerClusterGroup.clearLayers();
+                    const geoJsonLayer = createSensorLayer(currentSensorData);
+                    markerClusterGroup.addLayer(geoJsonLayer);
+                    
+                    console.log('Map updated with bulk sensor data');
+                } catch(err) {
+                    console.error('Error updating map with bulk data:', err);
+                }
+                true;
+            `);
+        } else if (data && data.type === 'add' && data.sensor) {
+            // Handle single sensor addition
+            handleNewSensorData(data.sensor);
+        } else {
+            // Fallback to fetch all data
+            fetchSensorData();
+        }
+    };
+
     // Fetch data sensor
     const fetchSensorData = async () => {
         try {
@@ -353,20 +439,26 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
             const response = await fetch(`${port}data_combined`);
             // console.log('Response status:', response.status);
             const data = await response.json();
-            // console.log('Received sensor data:', data);
+            console.log('Received sensor data:', data.data[0]); // Log first item to debug
 
-            // Pastikan struktur data sesuai
+            // Pastikan struktur data sesuai dan nilai speed diambil dengan benar
             const formattedData = data.data.map((item: any) => ({
                 lat: item.lat.toString(),
                 lon: item.lon.toString(),
-                nilai_accel_x: item.nilai_accel_x,
-                nilai_accel_y: item.nilai_accel_y,
-                nilai_accel_z: item.nilai_accel_z,
-                nilai_ph: item.nilai_ph,
-                nilai_temperature: item.nilai_temperature,
-                nilai_turbidity: item.nilai_turbidity,
+                nilai_accel_x: parseFloat(item.nilai_accel_x || 0),
+                nilai_accel_y: parseFloat(item.nilai_accel_y || 0),
+                nilai_accel_z: parseFloat(item.nilai_accel_z || 0),
+                nilai_ph: parseFloat(item.nilai_ph || 0),
+                nilai_temperature: parseFloat(item.nilai_temperature || 0),
+                nilai_turbidity: parseFloat(item.nilai_turbidity || 0),
+                nilai_speed: parseFloat(item.nilai_speed || 0), // Ensure speed is parsed as float
                 tanggal: item.tanggal
             }));
+
+            // Log the first formatted item to debug speed values
+            if (formattedData.length > 0) {
+                console.log('First formatted sensor data item:', formattedData[0]);
+            }
 
             webViewRef.current?.injectJavaScript(`
               window.updateSensorData(${JSON.stringify(formattedData)});
@@ -642,6 +734,132 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
             color: '#3b82f6'
         }
     });
+
+    // Function to handle new sensor data from any source
+    const handleNewSensorData = (sensorData) => {
+        if (!sensorData) return;
+
+        try {
+            console.log('Processing new sensor data with speed:',
+                sensorData.nilai_speed || sensorData.speed);
+
+            // Extract and ensure speed value is properly handled
+            let speedValue;
+            if (typeof sensorData.nilai_speed !== 'undefined') {
+                // If nilai_speed exists, use it
+                speedValue = typeof sensorData.nilai_speed === 'string'
+                    ? parseFloat(sensorData.nilai_speed)
+                    : (typeof sensorData.nilai_speed === 'number' ? sensorData.nilai_speed : 0);
+            } else if (typeof sensorData.speed !== 'undefined') {
+                // If speed exists (common in MQTT data), use it
+                speedValue = typeof sensorData.speed === 'string'
+                    ? parseFloat(sensorData.speed)
+                    : (typeof sensorData.speed === 'number' ? sensorData.speed : 0);
+            } else {
+                // Fallback
+                speedValue = 0;
+            }
+
+            // Ensure data is properly formatted
+            const formattedSensor = {
+                id: sensorData.id || Date.now().toString(),
+                lat: typeof sensorData.lat === 'number' ? sensorData.lat.toString() : sensorData.lat,
+                lon: typeof sensorData.lon === 'number' ? sensorData.lon.toString() : sensorData.lon,
+                nilai_accel_x: parseFloat(sensorData.nilai_accel_x || 0),
+                nilai_accel_y: parseFloat(sensorData.nilai_accel_y || 0),
+                nilai_accel_z: parseFloat(sensorData.nilai_accel_z || 0),
+                nilai_ph: parseFloat(sensorData.nilai_ph || 7),
+                nilai_temperature: parseFloat(sensorData.nilai_temperature || 25),
+                nilai_turbidity: parseFloat(sensorData.nilai_turbidity || 0),
+                nilai_speed: speedValue,
+                tanggal: sensorData.tanggal || new Date().toISOString()
+            };
+
+            console.log('Formatted speed value:', formattedSensor.nilai_speed);
+
+            // Validate coordinates
+            const lat = parseFloat(formattedSensor.lat);
+            const lon = parseFloat(formattedSensor.lon);
+            if (isNaN(lat) || isNaN(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+                console.error('Invalid coordinates in sensor data:', formattedSensor);
+                return;
+            }
+
+            // Add to the map using JavaScript directly
+            webViewRef.current?.injectJavaScript(`
+                try {
+                    // Format the data as GeoJSON feature
+                    const sensorFeature = {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [${lon}, ${lat}]
+                        },
+                        "properties": ${JSON.stringify(formattedSensor)}
+                    };
+                    
+                    // Determine water quality for marker style
+                    const waterQuality = assessWaterQuality(sensorFeature.properties);
+                    let markerIcon;
+                    
+                    if (waterQuality === "good") {
+                        markerIcon = markerWaterGood.getIcon();
+                    } else if (waterQuality === "medium") {
+                        markerIcon = markerWaterMedium.getIcon();
+                    } else {
+                        markerIcon = markerWaterBad.getIcon();
+                    }
+                    
+                    // Create the marker directly
+                    const marker = L.marker([${lat}, ${lon}], {
+                        icon: markerIcon,
+                        title: 'Sensor Data'
+                    }).bindPopup(createSensorPopup(${JSON.stringify(formattedSensor)}));
+                    
+                    // Add to marker cluster
+                    markerClusterGroup.addLayer(marker);
+                    
+                    // Store in current data if not already there
+                    let exists = false;
+                    for (let i = 0; i < currentSensorData.length; i++) {
+                        if (currentSensorData[i].lat === "${formattedSensor.lat}" && 
+                            currentSensorData[i].lon === "${formattedSensor.lon}" &&
+                            currentSensorData[i].tanggal === "${formattedSensor.tanggal}") {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!exists) {
+                        currentSensorData.push(${JSON.stringify(formattedSensor)});
+                        console.log('Added new sensor data to collection');
+                    }
+                    
+                    console.log('New sensor marker added successfully');
+                } catch(err) {
+                    console.error('Error adding new sensor marker:', err);
+                }
+                true;
+            `);
+
+            // Update React state
+            setSensorData(prevData => {
+                const exists = prevData.some(item =>
+                    item.lat === formattedSensor.lat &&
+                    item.lon === formattedSensor.lon &&
+                    item.tanggal === formattedSensor.tanggal
+                );
+
+                if (!exists) {
+                    return [...prevData, formattedSensor];
+                }
+                return prevData;
+            });
+
+        } catch (error) {
+            console.error('Error handling new sensor data:', error);
+        }
+    };
 
     if (!htmlString) {
         return (

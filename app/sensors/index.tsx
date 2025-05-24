@@ -132,22 +132,34 @@ const LocationBadge = ({ location }: { location: SensorLocation | undefined }) =
 };
 
 // Helper to determine sensor type from ID string
-const getSensorTypeFromId = (id: string): string | null => {
-    if (id.startsWith('id_ph') || id.includes('_ph_')) {
+const getSensorTypeFromId = (id: string | number): string | null => {
+    // Ubah ke string untuk memastikan konsistensi
+    const idStr = String(id).toLowerCase();
+
+    // Cek tipe sensor berdasarkan pola ID
+    if (idStr.includes('ph') || (idStr.startsWith('01') && idStr.length > 20)) {
         return 'ph';
-    } else if (id.startsWith('id_turbidity') || id.includes('_turbidity_')) {
+    } else if (idStr.includes('turbid')) {
         return 'turbidity';
-    } else if (id.startsWith('id_temperature') || id.includes('_temperature_')) {
+    } else if (idStr.includes('temp')) {
         return 'temperature';
-    } else if (id.startsWith('id_accel_x') || id.includes('_accel_x_')) {
+    } else if (idStr.includes('accel_x') || (idStr.includes('accel') && idStr.includes('x'))) {
         return 'accel_x';
-    } else if (id.startsWith('id_accel_y') || id.includes('_accel_y_')) {
+    } else if (idStr.includes('accel_y') || (idStr.includes('accel') && idStr.includes('y'))) {
         return 'accel_y';
-    } else if (id.startsWith('id_accel_z') || id.includes('_accel_z_')) {
+    } else if (idStr.includes('accel_z') || (idStr.includes('accel') && idStr.includes('z'))) {
         return 'accel_z';
-    } else if (id.startsWith('id_speed') || id.includes('_speed_')) {
+    } else if (idStr.includes('speed')) {
         return 'speed';
     }
+
+    // Jika tidak bisa menentukan tipe dari ID, coba deteksi dari struktur ID
+    // Untuk ID dari MongoDB/ObjectID format
+    if (idStr.match(/^[0-9a-f]{24}$/i)) {
+        return 'combined';
+    }
+
+    // ID generik dengan UUID / format lainnya
     return null;
 };
 
@@ -464,7 +476,8 @@ export default function AnomalyScreen() {
         setAnomalyFilter(anomalyFilter === type ? null : type);
     };
 
-    const handleDeleteSensor = async (sensorId: number, originalId: string) => {
+    const handleDeleteSensor = async (sensorId: number | string, originalId: string) => {
+        // Coba deteksi tipe sensor dari original ID jika ada
         const sensorType = getSensorTypeFromId(originalId) || 'combined';
 
         Alert.alert(
@@ -476,40 +489,68 @@ export default function AnomalyScreen() {
                     text: 'Hapus',
                     style: 'destructive',
                     onPress: async () => {
+                        setLoading(true);
                         try {
-                            const apiUrl = port.endsWith('/')
-                                ? `${port}data_${sensorType}/${originalId}`
-                                : `${port}/data_${sensorType}/${originalId}`;
+                            // Untuk mencoba beberapa kemungkinan endpoint
+                            const endpoints = [
+                                `data_${sensorType}/${originalId}`,
+                                `data_${sensorType}/${sensorId}`
+                            ];
 
-                            console.log(`Deleting sensor via: ${apiUrl}`);
+                            let success = false;
+                            let lastError = null;
 
-                            const response = await fetch(apiUrl, {
-                                method: 'DELETE',
-                            });
+                            // Coba semua kemungkinan endpoint untuk delete
+                            for (const endpoint of endpoints) {
+                                const apiUrl = port.endsWith('/') ? `${port}${endpoint}` : `${port}/${endpoint}`;
 
-                            if (!response.ok) {
-                                throw new Error('Failed to delete sensor data');
+                                console.log(`Trying to delete sensor via: ${apiUrl}`);
+
+                                try {
+                                    const response = await fetch(apiUrl, { method: 'DELETE' });
+
+                                    if (response.ok) {
+                                        success = true;
+                                        console.log(`Successfully deleted sensor via: ${apiUrl}`);
+                                        break;
+                                    } else {
+                                        const errorText = await response.text();
+                                        console.error(`Failed to delete sensor via ${apiUrl}:`, errorText);
+                                        lastError = new Error(`Status: ${response.status}, Error: ${errorText}`);
+                                    }
+                                } catch (error) {
+                                    console.error(`Error deleting sensor via ${apiUrl}:`, error);
+                                    lastError = error;
+                                }
                             }
 
-                            // Refresh all anomalies after deletion
-                            fetchAllAnomalies();
+                            if (success) {
+                                // Refresh all anomalies after deletion
+                                fetchAllAnomalies();
 
-                            toast.show({
-                                render: () => (
-                                    <View style={styles.successToast}>
-                                        <Text style={styles.toastText}>Data anomali berhasil dihapus</Text>
-                                    </View>
-                                ),
-                            });
+                                toast.show({
+                                    render: () => (
+                                        <View style={styles.successToast}>
+                                            <Text style={styles.toastText}>Data anomali berhasil dihapus</Text>
+                                        </View>
+                                    ),
+                                });
+                            } else {
+                                throw lastError || new Error('Failed to delete sensor data after all attempts');
+                            }
                         } catch (error) {
                             console.error('Error deleting sensor data:', error);
                             toast.show({
                                 render: () => (
                                     <View style={styles.errorToast}>
-                                        <Text style={styles.toastText}>Error saat menghapus data anomali</Text>
+                                        <Text style={styles.toastText}>
+                                            Error saat menghapus data anomali. {error.message}
+                                        </Text>
                                     </View>
                                 ),
                             });
+                        } finally {
+                            setLoading(false);
                         }
                     },
                 },
@@ -523,22 +564,31 @@ export default function AnomalyScreen() {
     };
 
     const navigateToSensorDetail = (sensor: SensorData) => {
-        // Determine which sensor type this is
-        let type = null;
-        for (const entry of [
-            { key: 'nilai_ph', type: 'ph' },
-            { key: 'nilai_turbidity', type: 'turbidity' },
-            { key: 'nilai_temperature', type: 'temperature' },
-            { key: 'nilai_accel_x', type: 'accel_x' },
-            { key: 'nilai_accel_y', type: 'accel_y' },
-            { key: 'nilai_accel_z', type: 'accel_z' },
-            { key: 'nilai_speed', type: 'speed' }
-        ]) {
-            if (sensor[entry.key as keyof typeof sensor] !== undefined) {
-                type = entry.type;
-                break;
+        // Gunakan getSensorTypeFromId yang sudah ada untuk menentukan tipe sensor
+        // ID sensor sering memiliki prefix sesuai dengan tipenya (id_ph, id_temperature, dsb)
+        let type = getSensorTypeFromId(sensor.id);
+
+        // Jika ID tidak bisa digunakan untuk menentukan tipe, coba dari nilai yang tersedia
+        if (!type) {
+            for (const entry of [
+                { key: 'nilai_ph', type: 'ph' },
+                { key: 'nilai_turbidity', type: 'turbidity' },
+                { key: 'nilai_temperature', type: 'temperature' }
+            ]) {
+                if (sensor[entry.key as keyof SensorData] !== undefined) {
+                    type = entry.type;
+                    break;
+                }
             }
         }
+
+        // Default ke "combined" jika tidak bisa menentukan tipe
+        if (!type) {
+            type = 'combined';
+            console.warn('Could not determine sensor type for:', sensor);
+        }
+
+        console.log(`Navigating to sensor detail with id ${sensor.id} and type ${type}`);
 
         router.push({
             pathname: "/sensors/[id]",
