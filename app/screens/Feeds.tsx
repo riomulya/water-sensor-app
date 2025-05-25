@@ -459,6 +459,144 @@ const FeedsScreen: React.FC = () => {
         </View>
     );
 
+    // Memoize the chart item to prevent unnecessary re-renders
+    const ChartItem = useMemo(() => memo(({ chart, index }: { chart: any, index: number }) => {
+        return (
+            <View style={styles.chartContainer} key={index}>
+                <HStack style={styles.chartHeader}>
+                    <Text style={styles.title}>{chart.title}</Text>
+                    {chart.hasError && (
+                        <TouchableOpacity
+                            onPress={() => Alert.alert('Error', chart.errorMessage)}
+                            style={styles.errorInfo}
+                        >
+                            <Ionicons name="alert-circle" size={18} color="#ff6b6b" />
+                        </TouchableOpacity>
+                    )}
+                </HStack>
+
+                {chart.loading ? (
+                    <ChartSkeleton />
+                ) : chart.hasError ? (
+                    <EmptyStateView
+                        message={
+                            chart.errorMessage.includes('tidak ditemukan') ?
+                                'Data tidak tersedia' :
+                                'Gagal memuat data'
+                        }
+                        technicalError={chart.errorMessage}
+                        onRetry={() => {
+                            // Set chart to loading state
+                            const updatedChartData = [...chartData];
+                            updatedChartData[index].loading = true;
+                            updatedChartData[index].hasError = false;
+                            setChartData(updatedChartData);
+
+                            // Fetch data for this specific chart
+                            fetchData(chart.url, chart.as, chart.page)
+                                .then(result => {
+                                    const updatedData = [...chartData];
+                                    updatedData[index] = {
+                                        ...updatedData[index],
+                                        data: result.formattedData,
+                                        loading: false,
+                                        totalPage: result.totalPage || 1,
+                                        hasError: result.hasError,
+                                        errorMessage: result.errorMessage
+                                    };
+                                    setChartData(updatedData);
+                                })
+                                .catch(error => {
+                                    const updatedData = [...chartData];
+                                    updatedData[index] = {
+                                        ...updatedData[index],
+                                        loading: false,
+                                        hasError: true,
+                                        errorMessage: error instanceof Error ? error.message : 'Terjadi kesalahan'
+                                    };
+                                    setChartData(updatedData);
+                                });
+                        }}
+                    />
+                ) : chart.data.length === 0 ? (
+                    <EmptyStateView message="Data tidak ditemukan" />
+                ) : (
+                    <MemoizedLineChart
+                        key={`${index}-${chart.page}-${selectedTimeRange}`}  // Added timeRange to key for proper re-render
+                        focusEnabled={false}  // Disable focus animation for performance
+                        isAnimated={false}  // Disable animations for large datasets
+                        data={chart.data}
+                        initialSpacing={20}
+                        spacing={50}
+                        thickness={5} // Reduce line thickness
+                        color={chart.color}
+                        dataPointsColor={'black'}
+                        dataPointLabelWidth={20}
+                        dataPointsRadius={3} // Smaller data points
+                        xAxisColor={'black'}
+                        yAxisColor={'black'}
+                        yAxisTextStyle={{ color: 'gray', fontSize: 15 }}
+                        xAxisLabelTextStyle={styles.italicLabel}
+                        xAxisLabelsHeight={20}
+                        xAxisIndicesWidth={10}
+                        maxValue={chart.maxValue}
+                        mostNegativeValue={-(chart.maxValue / 2)}
+                        startFillColor={'rgba(255, 154, 154, 0.4)'}
+                        endFillColor={'rgba(255, 154, 154, 0.1)'}
+                        startOpacity={0.4}
+                        endOpacity={0.1}
+                        areaChart
+                        rotateLabel={false}
+                        noOfSections={5}
+                        pointerConfig={{
+                            pointerStripHeight: 160,
+                            pointerStripColor: 'lightgray',
+                            stripOverPointer: true,
+                            pointerColor: chart.color,
+                            radius: 6,
+                            pointerLabelWidth: 100,
+                            activatePointersOnLongPress: true,
+                            autoAdjustPointerLabelPosition: true,
+                        }}
+                        dashWidth={5}
+                        labelsExtraHeight={60}
+                        rulesColor="rgba(0,0,0,0.1)"
+                    />
+                )}
+
+                {/* Pagination for individual chart */}
+                {!chart.hasError && chart.data.length > 0 && (
+                    <View style={styles.pagination}>
+                        <PaginationButton
+                            onPress={() => handlePageChange(index, 'first')}
+                            disabled={chart.page <= 1}
+                            text="First"
+                        />
+
+                        <PaginationButton
+                            onPress={() => handlePageChange(index, 'prev')}
+                            disabled={chart.page <= 1}
+                            text="Prev"
+                        />
+
+                        <Text>{`Page ${chart.page} of ${chart.totalPage || 1}`}</Text>
+                        <PaginationButton
+                            onPress={() => handlePageChange(index, 'next')}
+                            disabled={chart.page >= chart.totalPage}
+                            text="Next"
+                        />
+
+                        <PaginationButton
+                            onPress={() => handlePageChange(index, 'last')}
+                            disabled={chart.page >= chart.totalPage}
+                            text="Last"
+                        />
+                    </View>
+                )}
+            </View >
+        );
+    }), [chartData, selectedTimeRange]);
+
     const downloadExcel = async () => {
         try {
             setIsExporting(true);
@@ -748,26 +886,7 @@ const FeedsScreen: React.FC = () => {
 
         // Simpan posisi scroll terakhir
         lastScrollY.current = currentScrollY;
-
-        // Calculate visible charts for FlatList
-        const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-        const offsetY = contentOffset.y;
-        const height = layoutMeasurement.height;
-
-        // Estimate which charts are visible based on scroll position
-        // Assuming each chart container is roughly 400px tall
-        const chartHeight = 400;
-        const startChart = Math.max(0, Math.floor(offsetY / chartHeight));
-        const endChart = Math.min(chartData.length - 1, Math.ceil((offsetY + height) / chartHeight));
-
-        // Set buffer of one chart above and below viewport
-        const visibleIndices = [];
-        for (let i = Math.max(0, startChart - 1); i <= Math.min(chartData.length - 1, endChart + 1); i++) {
-            visibleIndices.push(i);
-        }
-
-        setVisibleCharts(visibleIndices);
-    }, [headerVisible, setVisibleCharts, chartData.length]);
+    }, [headerVisible]);
 
     // Handle notification response
     useEffect(() => {
@@ -949,6 +1068,85 @@ const FeedsScreen: React.FC = () => {
         );
     }, [locations, locationSearchQuery]);
 
+    // Optimize keyExtractor for FlatList
+    const keyExtractor = useCallback((item, index) => `chart-${index}-${item.title}`, []);
+
+    // Memoize the renderItem function to prevent it from being recreated on each render
+    const renderItem = useCallback(({ item, index }) => {
+        return <ChartItem chart={item} index={index} />;
+    }, [ChartItem]);
+
+    // Memoize the ListFooterComponent for FlatList
+    const ListFooterComponent = useCallback(() => (
+        <View style={styles.globalPagination}>
+            <HStack space="md" reversed={false}>
+                <VStack space="md" reversed={false}>
+                    <TouchableOpacity
+                        style={[
+                            styles.globalPaginationButton,
+                            globalPage === 1 && styles.globalPaginationButtonDisabled
+                        ]}
+                        onPress={() => handleGlobalPageChange('prev')}
+                        disabled={globalPage === 1}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.globalPaginationButtonText}>Prev All</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[
+                            styles.globalPaginationButton,
+                            globalPage === 1 && styles.globalPaginationButtonDisabled
+                        ]}
+                        onPress={() => handleGlobalPageChange('first')}
+                        disabled={globalPage === 1}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.globalPaginationButtonText}>First All</Text>
+                    </TouchableOpacity>
+                </VStack>
+
+                <Text style={styles.globalPageIndicator}>{`Global Page: ${globalPage}`}</Text>
+
+                <VStack space="md" reversed={false}>
+                    <TouchableOpacity
+                        style={[
+                            styles.globalPaginationButton,
+                            globalPage === chartData[0]?.totalPage && styles.globalPaginationButtonDisabled
+                        ]}
+                        onPress={() => handleGlobalPageChange('next')}
+                        disabled={globalPage === chartData[0]?.totalPage}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.globalPaginationButtonText}>Next All</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[
+                            styles.globalPaginationButton,
+                            globalPage === chartData[0]?.totalPage && styles.globalPaginationButtonDisabled
+                        ]}
+                        onPress={() => handleGlobalPageChange('last')}
+                        disabled={globalPage === chartData[0]?.totalPage}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.globalPaginationButtonText}>Last All</Text>
+                    </TouchableOpacity>
+                </VStack>
+            </HStack>
+        </View>
+    ), [globalPage, chartData, handleGlobalPageChange]);
+
+    // Fixed height for each chart item for getItemLayout optimization
+    const getItemLayout = useCallback((data, index) => {
+        const itemHeight = 400; // Approximate height of each chart container
+        return {
+            length: itemHeight,
+            offset: itemHeight * index,
+            index,
+        };
+    }, []);
+
     return (<>
         <View style={styles.container}>
             {/* Wrapper untuk tombol filter dengan animasi */}
@@ -1006,210 +1204,18 @@ const FeedsScreen: React.FC = () => {
                 style={styles.scrollView}
                 contentContainerStyle={styles.scrollViewContent}
                 data={chartData}
-                keyExtractor={(item, index) => `chart-${index}-${item.title}`}
+                keyExtractor={keyExtractor}
+                renderItem={renderItem}
+                getItemLayout={getItemLayout}
                 refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshData} />}
                 onScroll={handleScrollHeader}
                 scrollEventThrottle={16} // Increased for smoother header animation
-                windowSize={5} // Controls how many items to render outside of the visible area
+                windowSize={3} // Controls how many items to render outside of the visible area
                 maxToRenderPerBatch={2} // Limits the number of items rendered per batch
                 initialNumToRender={2} // Only render 2 charts initially for faster startup
                 updateCellsBatchingPeriod={50} // Batch updates to reduce rendering load
-                removeClippedSubviews={Platform.OS === 'android'} // Helps with memory usage on Android
-                renderItem={({ item: chart, index }) => (
-                    <View style={styles.chartContainer} key={index}>
-                        <HStack style={styles.chartHeader}>
-                            <Text style={styles.title}>{chart.title}</Text>
-                            {chart.hasError && (
-                                <TouchableOpacity
-                                    onPress={() => Alert.alert('Error', chart.errorMessage)}
-                                    style={styles.errorInfo}
-                                >
-                                    <Ionicons name="alert-circle" size={18} color="#ff6b6b" />
-                                </TouchableOpacity>
-                            )}
-                        </HStack>
-
-                        {chart.loading ? (
-                            <ChartSkeleton />
-                        ) : chart.hasError ? (
-                            <EmptyStateView
-                                message={
-                                    chart.errorMessage.includes('tidak ditemukan') ?
-                                        'Data tidak tersedia' :
-                                        'Gagal memuat data'
-                                }
-                                technicalError={chart.errorMessage}
-                                onRetry={() => {
-                                    // Set chart to loading state
-                                    const updatedChartData = [...chartData];
-                                    updatedChartData[index].loading = true;
-                                    updatedChartData[index].hasError = false;
-                                    setChartData(updatedChartData);
-
-                                    // Fetch data for this specific chart
-                                    fetchData(chart.url, chart.as, chart.page)
-                                        .then(result => {
-                                            const updatedData = [...chartData];
-                                            updatedData[index] = {
-                                                ...updatedData[index],
-                                                data: result.formattedData,
-                                                loading: false,
-                                                totalPage: result.totalPage || 1,
-                                                hasError: result.hasError,
-                                                errorMessage: result.errorMessage
-                                            };
-                                            setChartData(updatedData);
-                                        })
-                                        .catch(error => {
-                                            const updatedData = [...chartData];
-                                            updatedData[index] = {
-                                                ...updatedData[index],
-                                                loading: false,
-                                                hasError: true,
-                                                errorMessage: error instanceof Error ? error.message : 'Terjadi kesalahan'
-                                            };
-                                            setChartData(updatedData);
-                                        });
-                                }}
-                            />
-                        ) : chart.data.length === 0 ? (
-                            <EmptyStateView message="Data tidak ditemukan" />
-                        ) : visibleCharts.includes(index) ? (
-                            <MemoizedLineChart
-                                key={`${index}-${chart.page}-${selectedTimeRange}`}  // Added timeRange to key for proper re-render
-                                focusEnabled={false}  // Disable focus animation for performance
-                                isAnimated={false}  // Disable animations for large datasets
-                                data={chart.data}
-                                initialSpacing={20}
-                                spacing={50}
-                                thickness={5} // Reduce line thickness
-                                color={chart.color}
-                                dataPointsColor={'black'}
-                                dataPointLabelWidth={20}
-                                dataPointsRadius={3} // Smaller data points
-                                xAxisColor={'black'}
-                                yAxisColor={'black'}
-                                yAxisTextStyle={{ color: 'gray', fontSize: 15 }}
-                                xAxisLabelTextStyle={styles.italicLabel}
-                                xAxisLabelsHeight={20}
-                                xAxisIndicesWidth={10}
-                                maxValue={chart.maxValue}
-                                mostNegativeValue={-(chart.maxValue / 2)}
-                                startFillColor={'rgba(255, 154, 154, 0.4)'}
-                                endFillColor={'rgba(255, 154, 154, 0.1)'}
-                                startOpacity={0.4}
-                                endOpacity={0.1}
-                                areaChart
-                                rotateLabel={false}
-                                noOfSections={5}
-                                pointerConfig={{
-                                    pointerStripHeight: 160,
-                                    pointerStripColor: 'lightgray',
-                                    stripOverPointer: true,
-                                    pointerColor: chart.color,
-                                    radius: 6,
-                                    pointerLabelWidth: 100,
-                                    activatePointersOnLongPress: true,
-                                    autoAdjustPointerLabelPosition: true,
-                                }}
-                                dashWidth={5}
-                                labelsExtraHeight={60}
-                                rulesColor="rgba(0,0,0,0.1)"
-                            />
-                        ) : (
-                            <View style={styles.loadingContainer} />
-                        )}
-
-                        {/* Pagination for individual chart */}
-                        {!chart.hasError && chart.data.length > 0 && (
-                            <View style={styles.pagination}>
-                                <PaginationButton
-                                    onPress={() => handlePageChange(index, 'first')}
-                                    disabled={chart.page <= 1}
-                                    text="First"
-                                />
-
-                                <PaginationButton
-                                    onPress={() => handlePageChange(index, 'prev')}
-                                    disabled={chart.page <= 1}
-                                    text="Prev"
-                                />
-
-                                <Text>{`Page ${chart.page} of ${chart.totalPage || 1}`}</Text>
-                                <PaginationButton
-                                    onPress={() => handlePageChange(index, 'next')}
-                                    disabled={chart.page >= chart.totalPage}
-                                    text="Next"
-                                />
-
-                                <PaginationButton
-                                    onPress={() => handlePageChange(index, 'last')}
-                                    disabled={chart.page >= chart.totalPage}
-                                    text="Last"
-                                />
-                            </View>
-                        )}
-                    </View >
-                )}
-                ListFooterComponent={() => (
-                    <View style={styles.globalPagination}>
-                        <HStack space="md" reversed={false}>
-                            <VStack space="md" reversed={false}>
-                                <TouchableOpacity
-                                    style={[
-                                        styles.globalPaginationButton,
-                                        globalPage === 1 && styles.globalPaginationButtonDisabled
-                                    ]}
-                                    onPress={() => handleGlobalPageChange('prev')}
-                                    disabled={globalPage === 1}
-                                    activeOpacity={0.8}
-                                >
-                                    <Text style={styles.globalPaginationButtonText}>Prev All</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={[
-                                        styles.globalPaginationButton,
-                                        globalPage === 1 && styles.globalPaginationButtonDisabled
-                                    ]}
-                                    onPress={() => handleGlobalPageChange('first')}
-                                    disabled={globalPage === 1}
-                                    activeOpacity={0.8}
-                                >
-                                    <Text style={styles.globalPaginationButtonText}>First All</Text>
-                                </TouchableOpacity>
-                            </VStack>
-
-                            <Text style={styles.globalPageIndicator}>{`Global Page: ${globalPage}`}</Text>
-
-                            <VStack space="md" reversed={false}>
-                                <TouchableOpacity
-                                    style={[
-                                        styles.globalPaginationButton,
-                                        globalPage === chartData[0]?.totalPage && styles.globalPaginationButtonDisabled
-                                    ]}
-                                    onPress={() => handleGlobalPageChange('next')}
-                                    disabled={globalPage === chartData[0]?.totalPage}
-                                    activeOpacity={0.8}
-                                >
-                                    <Text style={styles.globalPaginationButtonText}>Next All</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={[
-                                        styles.globalPaginationButton,
-                                        globalPage === chartData[0]?.totalPage && styles.globalPaginationButtonDisabled
-                                    ]}
-                                    onPress={() => handleGlobalPageChange('last')}
-                                    disabled={globalPage === chartData[0]?.totalPage}
-                                    activeOpacity={0.8}
-                                >
-                                    <Text style={styles.globalPaginationButtonText}>Last All</Text>
-                                </TouchableOpacity>
-                            </VStack>
-                        </HStack>
-                    </View>
-                )}
+                removeClippedSubviews={true} // Help with memory usage
+                ListFooterComponent={ListFooterComponent}
             />
 
             <View style={{ height: 100 }}></View>

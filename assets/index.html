@@ -980,28 +980,52 @@
     }
 
     // Function to update the map location from React Native
-    const baseLocation = window.updateMapLocation = function (lat, lng) {
+    window.updateMapLocation = function (lat, lng) {
       // Validate inputs
       if (isNaN(lat) || isNaN(lng)) {
         console.error('Invalid coordinates received:', lat, lng);
         return;
       }
 
+      console.log('updateMapLocation called with:', lat, lng);
+
       // If marker exists, update position directly
       if (baseLocationMarker) {
+        console.log('Updating existing marker position');
         baseLocationMarker.setLatLng([lat, lng]);
-        baseLocationMarker.getPopup().setContent("Lokasi terkini anda <br>Lat: " + lat + "<br>Long: " + lng);
+
+        // Create or update popup content
+        if (!baseLocationMarker.getPopup()) {
+          baseLocationMarker.bindPopup("Lokasi terkini anda <br>Lat: " + lat + "<br>Long: " + lng);
+        } else {
+          baseLocationMarker.getPopup().setContent("Lokasi terkini anda <br>Lat: " + lat + "<br>Long: " + lng);
+        }
+
+        // Ensure popup is opened if not already
+        if (!baseLocationMarker.isPopupOpen()) {
+          baseLocationMarker.openPopup();
+        }
 
         // Update accuracy circle
         if (locationAccuracyCircle) {
           locationAccuracyCircle.setLatLng([lat, lng]);
+        } else {
+          // Create accuracy circle if it doesn't exist
+          locationAccuracyCircle = L.circle([lat, lng], {
+            color: '#3388ff',
+            fillColor: '#3388ff',
+            fillOpacity: 0.2,
+            radius: 50
+          }).addTo(map);
         }
       } else {
+        console.log('Creating new marker for current location');
         // Create new marker
         baseLocationMarker = L.marker([lat, lng], {
           icon: markerLocation,
           bubblingMouseEvents: false,
-          autoPanOnFocus: false
+          autoPanOnFocus: false,
+          zIndexOffset: 2000 // Ensure it's on top
         }).addTo(map)
           .bindPopup("Lokasi terkini anda <br>Lat: " + lat + "<br>Long: " + lng)
           .openPopup();
@@ -1014,6 +1038,9 @@
           radius: 50
         }).addTo(map);
       }
+
+      // Return true for WebView bridge
+      return true;
     };
 
     // Button to center on current location
@@ -1022,7 +1049,6 @@
         map.setView(baseLocationMarker.getLatLng(), 18, { animate: true });
       }
     };
-
 
     // Fungsi untuk membuat konten popup lokasi saat ini
     function createCurrentLocationPopup(lat, lng, address) {

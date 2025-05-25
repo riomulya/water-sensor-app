@@ -4,13 +4,17 @@ import Svg, { Circle, Path, Line, G, Text as SvgText } from 'react-native-svg';
 
 interface GaugeProps {
     value: number;
-    min: number;
-    max: number;
+    min?: number;
+    max?: number;
     segments?: Array<number | { value: number; color: string; label: string }>;
     colors?: string[];
     width?: number;
     height?: number;
     unit?: string;
+    size?: number;
+    thickness?: number;
+    color?: string;
+    endAngle?: number;
 }
 
 const Gauge: React.FC<GaugeProps> = ({
@@ -21,26 +25,31 @@ const Gauge: React.FC<GaugeProps> = ({
     colors = ['#00FF00', '#FFA500', '#FF0000'],
     width = 200,
     height = 200,
-    unit = ''
+    unit = '',
+    size,
+    thickness = 20,
+    color,
+    endAngle = 180
 }) => {
-    const radius = width / 2 - 10;
-    const center = width / 2;
-    const strokeWidth = 20;
-    const angle = 180; // Sudut 180 derajat
-    const startAngle = -90; // Mulai dari kiri
-    const endAngle = 180;    // Berakhir di kanan
+    const finalWidth = size || width;
+    const finalHeight = size || height;
+    const radius = finalWidth / 2 - 10;
+    const center = finalWidth / 2;
+    const strokeWidth = thickness;
+    const angle = endAngle === 330 ? 270 : 180;
+    const startAngle = -90;
+    const finalEndAngle = endAngle || 180;
 
-    // Konversi nilai ke sudut
+    const useColors = color ? [color] : colors;
+
     const clampedValue = Math.min(Math.max(value, min), max);
     const valueAngle = ((clampedValue - min) / (max - min)) * angle;
 
-    // Hitung koordinat jarum
     const needleAngle = startAngle + valueAngle;
     const needleLength = radius - strokeWidth - 10;
     const needleX = center + needleLength * Math.cos((needleAngle * Math.PI) / 180);
     const needleY = center + needleLength * Math.sin((needleAngle * Math.PI) / 180);
 
-    // Buat path untuk arc
     const createArcPath = (start: number, end: number) => {
         const startRad = (start * Math.PI) / 180;
         const endRad = (end * Math.PI) / 180;
@@ -54,10 +63,9 @@ const Gauge: React.FC<GaugeProps> = ({
 
     return (
         <View style={styles.container}>
-            <Svg width={width} height={height}>
-                {/* Background arc */}
+            <Svg width={finalWidth} height={finalHeight}>
                 <Path
-                    d={createArcPath(startAngle, endAngle)}
+                    d={createArcPath(startAngle, finalEndAngle)}
                     stroke="#e0e0e0"
                     strokeWidth={strokeWidth}
                     fill="none"
@@ -65,25 +73,34 @@ const Gauge: React.FC<GaugeProps> = ({
                 />
 
                 {/* Segments */}
-                {segments.map((segment, index) => {
-                    const segmentValue = typeof segment === 'number' ? segment : segment.value;
-                    const segmentAngle = ((segmentValue - min) / (max - min)) * angle;
-                    return (
-                        <Path
-                            key={index}
-                            d={createArcPath(
-                                startAngle,
-                                startAngle + segmentAngle
-                            )}
-                            stroke={colors[index]}
-                            strokeWidth={strokeWidth}
-                            fill="none"
-                            strokeLinecap="round"
-                        />
-                    );
-                })}
+                {color ? (
+                    <Path
+                        d={createArcPath(startAngle, startAngle + valueAngle)}
+                        stroke={color}
+                        strokeWidth={strokeWidth}
+                        fill="none"
+                        strokeLinecap="round"
+                    />
+                ) : (
+                    segments.map((segment, index) => {
+                        const segmentValue = typeof segment === 'number' ? segment : segment.value;
+                        const segmentAngle = ((segmentValue - min) / (max - min)) * angle;
+                        return (
+                            <Path
+                                key={index}
+                                d={createArcPath(
+                                    startAngle,
+                                    startAngle + segmentAngle
+                                )}
+                                stroke={useColors[index]}
+                                strokeWidth={strokeWidth}
+                                fill="none"
+                                strokeLinecap="round"
+                            />
+                        );
+                    })
+                )}
 
-                {/* Needle */}
                 <G>
                     <Line
                         x1={center}
@@ -97,10 +114,9 @@ const Gauge: React.FC<GaugeProps> = ({
                     <Circle cx={center} cy={center} r="4" fill="#2c3e50" />
                 </G>
 
-                {/* Center Text */}
                 <SvgText
                     x={center}
-                    y={center + 30} // Posisi text di bawah gauge
+                    y={center + 30}
                     textAnchor="middle"
                     fontSize="16"
                     fontWeight="bold"

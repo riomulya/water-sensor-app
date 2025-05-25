@@ -83,14 +83,20 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
 
             if (webViewRef.current) {
                 await webViewRef.current.injectJavaScript(`
-                    if (window.updateMapLocation) {
-                        window.updateMapLocation(${latitude}, ${longitude});
-                        map.setView([${latitude}, ${longitude}], 18, {
-                            animate: true,
-                            duration: 0.5
-                        });
+                    try {
+                        console.log('Updating current location:', ${latitude}, ${longitude});
+                        if (window.updateMapLocation) {
+                            window.updateMapLocation(${latitude}, ${longitude});
+                            map.setView([${latitude}, ${longitude}], 18, {
+                                animate: true,
+                                duration: 0.5
+                            });
+                        } else {
+                            console.error('updateMapLocation function not found in WebView');
+                        }
+                    } catch(err) {
+                        console.error('Error updating location in WebView:', err);
                     }
-                    document.documentElement.lang = '${Localization.locale}';
                     true;
                 `);
             }
@@ -99,6 +105,9 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
             if (onGetCurrentLocation) {
                 onGetCurrentLocation(getCurrentLocationFunc);
             }
+
+            // Start watching location after getting initial position
+            startLocationWatching();
 
         } catch (error) {
             console.error('Error getting location:', error);
@@ -577,10 +586,6 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
             `);
     };
 
-    React.useImperativeHandle(ref, () => ({
-        zoomToLocation
-    }));
-
     // Start or stop watching location based on app state changes
     const sendCurrentLocationToServer = async (socketToUse = null) => {
         try {
@@ -612,70 +617,84 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
         }
     }
 
-    // Fungsi untuk mulai memantau lokasi
+    // Improve the startLocationWatching function
     const startLocationWatching = async () => {
         try {
+            // Stop any existing watch first
+            if (locationWatchId.current) {
+                locationWatchId.current.remove();
+            }
+
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') return;
 
+            console.log('Starting location watching...');
             locationWatchId.current = await Location.watchPositionAsync(
                 {
                     accuracy: Location.Accuracy.Balanced,
-                    timeInterval: 5000,
-                    distanceInterval: 10
+                    timeInterval: 3000, // Update every 3 seconds
+                    distanceInterval: 5   // Or when moved 5 meters
                 },
-                (location) => {
-                    if (socketRef.current && socketRef.current.connected) {
-                        const { latitude, longitude, accuracy } = location.coords;
-                        console.log('Lokasi berubah, mengirim update:', { latitude, longitude });
+                (locationUpdate) => {
+                    const { latitude, longitude, accuracy } = locationUpdate.coords;
+                    console.log('Location updated:', latitude, longitude);
 
+                    // Update the map with new coordinates
+                    if (webViewRef.current) {
+                        webViewRef.current.injectJavaScript(`
+                            try {
+                                console.log('Injecting new location:', ${latitude}, ${longitude});
+                                if (window.updateMapLocation) {
+                                    window.updateMapLocation(${latitude}, ${longitude});
+                                } else {
+                                    console.error('updateMapLocation function not found');
+                                }
+                                true;
+                            } catch(err) {
+                                console.error('Error updating location:', err);
+                                true;
+                            }
+                        `);
+                    }
+
+                    // Also update React state
+                    setLocation([latitude, longitude]);
+
+                    // If socket is available, send to server
+                    if (socketRef.current && socketRef.current.connected) {
                         socketRef.current.emit('update_location', {
                             latitude,
                             longitude,
                             accuracy,
                             deviceName: 'Device_' + Math.floor(Math.random() * 1000)
                         });
-                    } else {
-                        console.log('Socket tidak tersedia untuk update lokasi otomatis');
                     }
                 }
             );
+            console.log('Location watching started successfully');
         } catch (error) {
             console.error('Error watching location:', error);
         }
     };
 
-    // Fungsi untuk berhenti memantau lokasi
-    const stopLocationWatching = () => {
-        if (locationWatchId.current) {
-            locationWatchId.current.remove();
-            locationWatchId.current = null;
-        }
-    };
-
+    // Make sure to add useEffect that handles app state changes and watchPosition
     useEffect(() => {
-        const handleAppStateChange = (nextAppState: AppStateStatus) => {
-            if (nextAppState === 'active') {
-                console.log('App kembali ke foreground, mencoba kirim lokasi');
-                // Pastikan socket terhubung kembali jika terputus
-                if (socketRef.current && !socketRef.current.connected) {
-                    console.log('Socket terputus, mencoba menghubungkan kembali');
-                    socketRef.current.connect();
-                } else if (socketRef.current && socketRef.current.connected) {
-                    console.log('Socket masih terhubung, mengirim lokasi');
-                    sendCurrentLocationToServer(socketRef.current);
-                }
+        // Start location tracking when component mounts
+        const initLocation = async () => {
+            await getCurrentLocation();
+        };
+
+        initLocation();
+
+        // Clean up location watch when component unmounts
+        return () => {
+            if (locationWatchId.current) {
+                console.log('Cleaning up location subscription');
+                locationWatchId.current.remove();
+                locationWatchId.current = null;
             }
         };
-
-        // Subscribe ke app state changes
-        const subscription = AppState.addEventListener('change', handleAppStateChange);
-
-        // Cleanup
-        return () => {
-            subscription.remove();
-        };
-    }, []);
+    }, []); // Empty dependency array to run only on mount
 
     // Tambahkan style sheet
     const styles = StyleSheet.create({

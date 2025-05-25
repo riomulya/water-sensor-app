@@ -163,6 +163,18 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
         }
     };
 
+    const handleNavigateToStatistics = () => {
+        onClose();
+        try {
+            setTimeout(() => {
+                // @ts-ignore - Ignoring TypeScript errors for navigation paths
+                router.push('statistic');
+            }, 300);
+        } catch (error) {
+            console.error('Navigation error:', error);
+        }
+    };
+
     const navigateToUserManagement = () => {
         onClose();
         try {
@@ -195,24 +207,22 @@ const CustomDrawer = ({ isOpen, onClose }: CustomDrawerProps) => {
         {
             icon: <Feather name="bar-chart-2" size={22} color="#64748b" />,
             label: "Statistik",
-            onPress: () => {
-                onClose();
-            }
+            onPress: handleNavigateToStatistics
         },
-        {
-            icon: <Ionicons name="notifications-outline" size={22} color="#64748b" />,
-            label: "Notifikasi",
-            onPress: () => {
-                onClose();
-            }
-        },
-        {
-            icon: <Ionicons name="settings-outline" size={22} color="#64748b" />,
-            label: "Pengaturan",
-            onPress: () => {
-                onClose();
-            }
-        },
+        // {
+        //     icon: <Ionicons name="notifications-outline" size={22} color="#64748b" />,
+        //     label: "Notifikasi",
+        //     onPress: () => {
+        //         onClose();
+        //     }
+        // },
+        // {
+        //     icon: <Ionicons name="settings-outline" size={22} color="#64748b" />,
+        //     label: "Pengaturan",
+        //     onPress: () => {
+        //         onClose();
+        //     }
+        // },
         {
             icon: <Ionicons name="people-outline" size={22} color="#64748b" />,
             label: "Manajemen User",
