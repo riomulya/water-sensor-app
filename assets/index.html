@@ -989,9 +989,10 @@
 
       console.log('updateMapLocation called with:', lat, lng);
 
-      // If marker exists, update position directly
+      // If marker exists, update position directly without animation
       if (baseLocationMarker) {
         console.log('Updating existing marker position');
+        // Set position without animation
         baseLocationMarker.setLatLng([lat, lng]);
 
         // Create or update popup content
@@ -1006,7 +1007,7 @@
           baseLocationMarker.openPopup();
         }
 
-        // Update accuracy circle
+        // Update accuracy circle without animation
         if (locationAccuracyCircle) {
           locationAccuracyCircle.setLatLng([lat, lng]);
         } else {
@@ -1046,7 +1047,7 @@
     // Button to center on current location
     window.centerOnLocation = function () {
       if (baseLocationMarker) {
-        map.setView(baseLocationMarker.getLatLng(), 18, { animate: true });
+        map.setView(baseLocationMarker.getLatLng(), 18, { animate: false });
       }
     };
 

@@ -3,6 +3,7 @@ import { port } from './https';
 export const API_URL = port;
 
 export const TIME_RANGE_OPTIONS = [
+    { label: 'Semua Data', value: 'all' },
     { label: '1 Hari', value: '1d' },
     { label: '7 Hari', value: '7d' },
     { label: '14 Hari', value: '14d' },

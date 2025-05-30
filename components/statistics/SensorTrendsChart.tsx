@@ -1,9 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { StyleSheet, View, Dimensions } from 'react-native';
+import { StyleSheet, View, Dimensions, TouchableOpacity } from 'react-native';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-gifted-charts';
 import moment from 'moment';
 import { SENSOR_LABELS, SENSOR_UNITS } from '@/constants/api';
+import { MotiView } from 'moti';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming, runOnJS } from 'react-native-reanimated';
 
 // Local components
 import { Text } from '@/components/ui/text';
@@ -34,10 +36,37 @@ interface SensorTrendsChartProps {
 }
 
 const { width } = Dimensions.get('window');
-const CHART_WIDTH = width - 40;
+const CHART_WIDTH = width - 64; // Adjusted to prevent overflow
 
 const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => {
     const [selectedSensor, setSelectedSensor] = useState<SensorType>('turbidity');
+    const chartOpacity = useSharedValue(0);
+    const chartTranslateY = useSharedValue(20);
+
+    const animatedChartStyle = useAnimatedStyle(() => {
+        return {
+            opacity: chartOpacity.value,
+            transform: [{ translateY: chartTranslateY.value }]
+        };
+    });
+
+    // Animate chart when sensor type changes
+    const handleSensorChange = (value: string) => {
+        const updateSelectedSensor = (val: string) => {
+            setSelectedSensor(val as SensorType);
+        };
+
+        chartOpacity.value = withTiming(0, { duration: 300 });
+        chartTranslateY.value = withTiming(20, { duration: 300 }, () => {
+            // Use runOnJS to call setState from the UI thread
+            runOnJS(updateSelectedSensor)(value);
+
+            setTimeout(() => {
+                chartOpacity.value = withTiming(1, { duration: 500 });
+                chartTranslateY.value = withTiming(0, { duration: 500 });
+            }, 100);
+        });
+    };
 
     const chartData = useMemo(() => {
         if (!sensorData || !Array.isArray(sensorData) || sensorData.length === 0) {
@@ -137,11 +166,22 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
         { label: SENSOR_LABELS.accel_z, value: 'accel_z' }
     ];
 
+    // Initialize animations when component mounts
+    React.useEffect(() => {
+        chartOpacity.value = withTiming(1, { duration: 800 });
+        chartTranslateY.value = withTiming(0, { duration: 800 });
+    }, []);
+
     if (!sensorData || sensorData.length === 0) {
         return (
-            <View style={styles.containerEmpty}>
+            <MotiView
+                style={styles.containerEmpty}
+                from={{ opacity: 0, translateY: 20 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 500 }}
+            >
                 <View style={styles.headerRow}>
-                    <Feather name="trending-up" size={24} color="#64748b" />
+                    <Feather name="trending-up" size={24} color="#3b82f6" />
                     <Text size="lg" bold style={styles.headerText}>
                         Tren Data Sensor
                     </Text>
@@ -151,192 +191,237 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                         Tidak ada data tersedia untuk ditampilkan
                     </Text>
                 </View>
-            </View>
+            </MotiView>
         );
     }
 
     return (
-        <View style={styles.container}>
-            <View style={styles.content}>
-                <View style={styles.headerContainer}>
-                    <View style={styles.headerRow}>
-                        <Feather name="trending-up" size={24} color="#64748b" />
-                        <Text size="lg" bold style={styles.headerText}>
-                            Tren Data Sensor
+        <MotiView
+            style={styles.container}
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 500, delay: 300 }}
+        >
+            <View style={styles.card}>
+                <View style={styles.content}>
+                    <View style={styles.headerContainer}>
+                        <View style={styles.headerRow}>
+                            <Feather name="trending-up" size={24} color="#3b82f6" />
+                            <Text size="lg" bold style={styles.headerText}>
+                                Tren Data Sensor
+                            </Text>
+                        </View>
+
+                        <View style={styles.selectorContainer}>
+                            <Select
+                                selectedValue={selectedSensor}
+                                onValueChange={handleSensorChange}
+                            >
+                                <SelectTrigger variant="outline" size="sm" style={styles.selectTrigger}>
+                                    <SelectInput placeholder="Pilih sensor" style={styles.selectInput} />
+                                </SelectTrigger>
+                                <SelectPortal>
+                                    <SelectBackdrop />
+                                    <SelectContent style={styles.selectContent}>
+                                        <SelectDragIndicatorWrapper>
+                                            <SelectDragIndicator />
+                                        </SelectDragIndicatorWrapper>
+                                        {sensorOptions.map(option => (
+                                            <SelectItem
+                                                key={option.value}
+                                                label={option.label}
+                                                value={option.value}
+                                            />
+                                        ))}
+                                    </SelectContent>
+                                </SelectPortal>
+                            </Select>
+                        </View>
+                    </View>
+
+                    <View style={styles.titleContainer}>
+                        <Text size="md" bold style={styles.title}>
+                            {SENSOR_LABELS[selectedSensor]}
+                            {sensorStats.unit ? ` (${sensorStats.unit})` : ''}
                         </Text>
                     </View>
 
-                    <Select
-                        selectedValue={selectedSensor}
-                        onValueChange={(value) => setSelectedSensor(value as SensorType)}
-                        className="w-[150px]"
-                    >
-                        <SelectTrigger variant="outline" size="sm">
-                            <SelectInput placeholder="Pilih sensor" />
-                        </SelectTrigger>
-                        <SelectPortal>
-                            <SelectBackdrop />
-                            <SelectContent>
-                                <SelectDragIndicatorWrapper>
-                                    <SelectDragIndicator />
-                                </SelectDragIndicatorWrapper>
-                                {sensorOptions.map(option => (
-                                    <SelectItem
-                                        key={option.value}
-                                        label={option.label}
-                                        value={option.value}
-                                    />
-                                ))}
-                            </SelectContent>
-                        </SelectPortal>
-                    </Select>
-                </View>
+                    <Animated.View style={[styles.chartContainer, animatedChartStyle]}>
+                        {chartData.length > 0 ? (
+                            <LineChart
+                                data={chartData}
+                                height={180}
+                                width={CHART_WIDTH}
+                                noOfSections={5}
+                                areaChart
+                                yAxisTextStyle={{ color: '#64748b', fontSize: 10 }}
+                                color={getChartColor()}
+                                startFillColor={getChartColor()}
+                                endFillColor={`${getChartColor()}00`}
+                                startOpacity={0.8}
+                                endOpacity={0.1}
+                                spacing={chartData.length > 20 ? 8 : 16}
+                                thickness={2}
+                                hideDataPoints={chartData.length > 15}
+                                hideRules
+                                adjustToWidth
+                                curved
+                            />
+                        ) : (
+                            <View style={styles.noDataContainer}>
+                                <Text size="sm" style={styles.noDataText}>
+                                    Tidak cukup data untuk membuat grafik
+                                </Text>
+                            </View>
+                        )}
+                    </Animated.View>
 
-                <View style={styles.titleContainer}>
-                    <Text size="md" bold style={styles.title}>
-                        {SENSOR_LABELS[selectedSensor]}
-                        {sensorStats.unit ? ` (${sensorStats.unit})` : ''}
-                    </Text>
-                </View>
+                    <View style={styles.statsContainer}>
+                        <View style={styles.statItem}>
+                            <Text size="xs" style={styles.statLabel}>Saat ini:</Text>
+                            <Text size="sm" bold style={styles.statValue}>
+                                {typeof sensorStats.current === 'number' ? sensorStats.current.toFixed(2) : 'N/A'}
+                                {sensorStats.unit ? ` ${sensorStats.unit}` : ''}
+                            </Text>
+                        </View>
 
-                <View style={styles.chartContainer}>
-                    {chartData.length > 0 && (
-                        <LineChart
-                            data={chartData}
-                            height={180}
-                            width={CHART_WIDTH}
-                            noOfSections={5}
-                            areaChart
-                            yAxisTextStyle={{ color: '#64748b', fontSize: 10 }}
-                            xAxisLabelTextStyle={{ color: '#64748b', fontSize: 8 }}
-                            color={getChartColor()}
-                            startFillColor={getChartColor()}
-                            endFillColor={'transparent'}
-                            startOpacity={0.6}
-                            endOpacity={0.1}
-                            spacing={CHART_WIDTH / (chartData.length > 1 ? chartData.length - 1 : 2)}
-                            thickness={2}
-                            hideRules
-                            hideYAxisText={false}
-                            yAxisColor="#e2e8f0"
-                            xAxisColor="#e2e8f0"
-                            dataPointsHeight={6}
-                            dataPointsWidth={6}
-                            dataPointsColor={getChartColor()}
-                            curved
-                        />
-                    )}
-                </View>
+                        <View style={styles.statItem}>
+                            <Text size="xs" style={styles.statLabel}>Rata-rata:</Text>
+                            <Text size="sm" bold style={styles.statValue}>
+                                {typeof sensorStats.avg === 'number' ? sensorStats.avg.toFixed(2) : 'N/A'}
+                                {sensorStats.unit ? ` ${sensorStats.unit}` : ''}
+                            </Text>
+                        </View>
 
-                <View style={styles.statsContainer}>
-                    <View style={styles.statItem}>
-                        <Text size="xs" style={styles.statLabel}>Terkini</Text>
-                        <Text size="sm" bold style={styles.statValue}>
-                            {typeof sensorStats.current === 'number' ? sensorStats.current.toFixed(2) : '0.00'} {sensorStats.unit}
-                        </Text>
-                    </View>
+                        <View style={styles.statItem}>
+                            <Text size="xs" style={styles.statLabel}>Min:</Text>
+                            <Text size="sm" bold style={styles.statValue}>
+                                {typeof sensorStats.min === 'number' ? sensorStats.min.toFixed(2) : 'N/A'}
+                                {sensorStats.unit ? ` ${sensorStats.unit}` : ''}
+                            </Text>
+                        </View>
 
-                    <View style={styles.statItem}>
-                        <Text size="xs" style={styles.statLabel}>Minimum</Text>
-                        <Text size="sm" bold style={styles.statValue}>
-                            {typeof sensorStats.min === 'number' ? sensorStats.min.toFixed(2) : '0.00'} {sensorStats.unit}
-                        </Text>
-                    </View>
-
-                    <View style={styles.statItem}>
-                        <Text size="xs" style={styles.statLabel}>Rata-rata</Text>
-                        <Text size="sm" bold style={styles.statValue}>
-                            {typeof sensorStats.avg === 'number' ? sensorStats.avg.toFixed(2) : '0.00'} {sensorStats.unit}
-                        </Text>
-                    </View>
-
-                    <View style={styles.statItem}>
-                        <Text size="xs" style={styles.statLabel}>Maksimum</Text>
-                        <Text size="sm" bold style={styles.statValue}>
-                            {typeof sensorStats.max === 'number' ? sensorStats.max.toFixed(2) : '0.00'} {sensorStats.unit}
-                        </Text>
+                        <View style={styles.statItem}>
+                            <Text size="xs" style={styles.statLabel}>Max:</Text>
+                            <Text size="sm" bold style={styles.statValue}>
+                                {typeof sensorStats.max === 'number' ? sensorStats.max.toFixed(2) : 'N/A'}
+                                {sensorStats.unit ? ` ${sensorStats.unit}` : ''}
+                            </Text>
+                        </View>
                     </View>
                 </View>
             </View>
-        </View>
+        </MotiView>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: 'white',
-        padding: 16,
-        borderRadius: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
-        marginBottom: 24,
+        marginVertical: 16,
+        width: '100%',
     },
     containerEmpty: {
         backgroundColor: 'white',
         padding: 16,
-        borderRadius: 8,
-        marginBottom: 16,
+        borderRadius: 16,
+        marginVertical: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    card: {
+        backgroundColor: 'white',
+        borderRadius: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
+        overflow: 'hidden',
     },
     content: {
-        flex: 1,
+        padding: 16,
     },
     headerContainer: {
         flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 8,
+        alignItems: 'center',
+        marginBottom: 16,
     },
     headerRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 12,
     },
     headerText: {
         marginLeft: 8,
         color: '#334155',
     },
+    selectorContainer: {
+        zIndex: 50,
+        minWidth: 120,
+    },
+    selectTrigger: {
+        borderColor: '#e2e8f0',
+        backgroundColor: '#f8fafc',
+    },
+    selectInput: {
+        fontSize: 13,
+    },
+    selectContent: {
+        zIndex: 1000,
+    },
     titleContainer: {
-        marginBottom: 12,
+        marginBottom: 16,
     },
     title: {
         color: '#334155',
     },
-    emptyContainer: {
-        backgroundColor: '#f1f5f9',
-        padding: 16,
-        borderRadius: 6,
+    chartContainer: {
         alignItems: 'center',
+        marginBottom: 16,
+        paddingRight: 8,
+    },
+    noDataContainer: {
+        height: 180,
+        width: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f8fafc',
+        borderRadius: 8,
+    },
+    noDataText: {
+        color: '#64748b',
+    },
+    emptyContainer: {
+        backgroundColor: '#f8fafc',
+        padding: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+        marginTop: 16,
     },
     emptyText: {
         color: '#64748b',
     },
-    chartContainer: {
-        height: 200,
-    },
     statsContainer: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         justifyContent: 'space-between',
-        backgroundColor: '#f1f5f9',
+        backgroundColor: '#f8fafc',
+        borderRadius: 12,
         padding: 12,
-        borderRadius: 6,
-        marginTop: 8,
     },
     statItem: {
-        alignItems: 'center',
+        width: '48%',
+        marginBottom: 8,
     },
     statLabel: {
         color: '#64748b',
+        marginBottom: 2,
     },
     statValue: {
-        color: '#1e293b',
+        color: '#334155',
     },
 });
 

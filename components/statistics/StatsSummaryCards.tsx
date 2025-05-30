@@ -1,13 +1,13 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, View, FlatList, Dimensions } from 'react-native';
+import { StyleSheet, View, Dimensions } from 'react-native';
 import { MaterialIcons, FontAwesome5, Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { SENSOR_LABELS, SENSOR_UNITS } from '@/constants/api';
+import { MotiView } from 'moti';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 // Local components
 import { Text } from '@/components/ui/text';
-import { Box } from '@/components/ui/box';
-import { HStack } from '@/components/ui/hstack';
-import { VStack } from '@/components/ui/vstack';
 
 // Types
 interface SensorData {
@@ -28,7 +28,14 @@ interface StatsSummaryCardsProps {
 }
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = width * 0.43;
+// Increase card width to 46% of screen width
+const CARD_WIDTH = width * 0.46;
+
+// Group sensors by type for better organization
+const SENSOR_GROUPS = {
+    water: ['turbidity', 'ph', 'temperature', 'speed'],
+    motion: ['accel_x', 'accel_y', 'accel_z']
+};
 
 const StatsSummaryCards: React.FC<StatsSummaryCardsProps> = ({ sensorData }) => {
     const sensorStats = useMemo(() => {
@@ -43,29 +50,64 @@ const StatsSummaryCards: React.FC<StatsSummaryCardsProps> = ({ sensorData }) => 
                     name: 'turbidity',
                     label: SENSOR_LABELS.turbidity,
                     unit: SENSOR_UNITS.turbidity,
-                    iconComponent: <FontAwesome5 name="water" size={18} color="#3b82f6" />,
-                    color: '#3b82f6'
+                    icon: "water-outline",
+                    color: '#3b82f6',
+                    bgColor: 'rgba(59, 130, 246, 0.1)',
+                    group: 'water'
                 },
                 {
                     name: 'ph',
                     label: SENSOR_LABELS.ph,
                     unit: SENSOR_UNITS.ph,
-                    iconComponent: <MaterialIcons name="science" size={18} color="#8b5cf6" />,
-                    color: '#8b5cf6'
+                    icon: "flask-outline",
+                    color: '#8b5cf6',
+                    bgColor: 'rgba(139, 92, 246, 0.1)',
+                    group: 'water'
                 },
                 {
                     name: 'temperature',
                     label: SENSOR_LABELS.temperature,
                     unit: SENSOR_UNITS.temperature,
-                    iconComponent: <FontAwesome5 name="temperature-high" size={18} color="#ef4444" />,
-                    color: '#ef4444'
+                    icon: "thermometer-outline",
+                    color: '#ef4444',
+                    bgColor: 'rgba(239, 68, 68, 0.1)',
+                    group: 'water'
                 },
                 {
                     name: 'speed',
                     label: SENSOR_LABELS.speed,
                     unit: SENSOR_UNITS.speed,
-                    iconComponent: <MaterialIcons name="speed" size={18} color="#10b981" />,
-                    color: '#10b981'
+                    icon: "speedometer-outline",
+                    color: '#10b981',
+                    bgColor: 'rgba(16, 185, 129, 0.1)',
+                    group: 'water'
+                },
+                {
+                    name: 'accel_x',
+                    label: SENSOR_LABELS.accel_x,
+                    unit: SENSOR_UNITS.accel_x,
+                    icon: "move-outline",
+                    color: '#f59e0b',
+                    bgColor: 'rgba(245, 158, 11, 0.1)',
+                    group: 'motion'
+                },
+                {
+                    name: 'accel_y',
+                    label: SENSOR_LABELS.accel_y,
+                    unit: SENSOR_UNITS.accel_y,
+                    icon: "move-outline",
+                    color: '#d97706',
+                    bgColor: 'rgba(217, 119, 6, 0.1)',
+                    group: 'motion'
+                },
+                {
+                    name: 'accel_z',
+                    label: SENSOR_LABELS.accel_z,
+                    unit: SENSOR_UNITS.accel_z,
+                    icon: "move-outline",
+                    color: '#b45309',
+                    bgColor: 'rgba(180, 83, 9, 0.1)',
+                    group: 'motion'
                 },
             ].map(sensor => {
                 try {
@@ -118,7 +160,12 @@ const StatsSummaryCards: React.FC<StatsSummaryCardsProps> = ({ sensorData }) => 
 
     if (!sensorData || sensorData.length === 0) {
         return (
-            <View style={styles.containerEmpty}>
+            <MotiView
+                style={styles.containerEmpty}
+                from={{ opacity: 0, translateY: 20 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 500, delay: 200 }}
+            >
                 <Text size="md" bold style={styles.title}>
                     Ringkasan Statistik
                 </Text>
@@ -127,150 +174,275 @@ const StatsSummaryCards: React.FC<StatsSummaryCardsProps> = ({ sensorData }) => 
                         Tidak ada data tersedia
                     </Text>
                 </View>
-            </View>
+            </MotiView>
         );
     }
 
-    return (
-        <View style={styles.container}>
-            <View style={styles.headerRow}>
-                <Feather name="bar-chart-2" size={24} color="#64748b" />
-                <Text size="lg" bold style={styles.headerText}>
-                    Ringkasan Statistik
-                </Text>
-            </View>
+    // Group water sensors and motion sensors
+    const waterSensors = sensorStats.filter(sensor => SENSOR_GROUPS.water.includes(sensor.name));
+    const motionSensors = sensorStats.filter(sensor => SENSOR_GROUPS.motion.includes(sensor.name));
 
-            <View style={styles.cardsContainer}>
-                {sensorStats.map((item) => (
-                    <View key={item.name} style={styles.card}>
-                        <View style={styles.cardHeader}>
-                            {item.iconComponent}
-                            <Text size="sm" bold style={styles.cardTitle}>
-                                {item.label}
+    // Organize sensors to ensure pairs per row
+    const organizedSensors = [
+        ...waterSensors.slice(0, 2),  // First row: turbidity, ph
+        ...waterSensors.slice(2, 4),  // Second row: temperature, speed
+        ...motionSensors.slice(0, 2), // Third row: accel_x, accel_y
+        motionSensors[2],             // Fourth row: accel_z (centered)
+    ];
+
+    return (
+        <MotiView
+            style={styles.container}
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 500, delay: 400 }}
+        >
+            <View style={styles.card}>
+                <View style={styles.headerRow}>
+                    <Feather name="bar-chart-2" size={24} color="#3b82f6" />
+                    <Text size="lg" bold style={styles.headerText}>
+                        Ringkasan Statistik
+                    </Text>
+                </View>
+
+                {/* Water parameters section */}
+                <View style={styles.sectionHeader}>
+                    <Ionicons name="water" size={18} color="#3b82f6" />
+                    <Text size="sm" style={styles.sectionTitle}>Parameter Air</Text>
+                </View>
+
+                <View style={styles.gridContainer}>
+                    {waterSensors.map((item, index) => renderSensorCard(item, index))}
+                </View>
+
+                {/* Motion parameters section */}
+                <View style={[styles.sectionHeader, { marginTop: 16 }]}>
+                    <Ionicons name="analytics-outline" size={18} color="#f59e0b" />
+                    <Text size="sm" style={[styles.sectionTitle, { color: '#f59e0b' }]}>Parameter Gerak</Text>
+                </View>
+
+                <View style={styles.gridContainer}>
+                    {motionSensors.map((item, index) => renderSensorCard(item, index + waterSensors.length))}
+                </View>
+            </View>
+        </MotiView>
+    );
+
+    function renderSensorCard(item: any, index: number) {
+        return (
+            <Animated.View
+                key={item.name}
+                style={[
+                    styles.statCard,
+                    // Center last card if it's alone in a row
+                    item.name === 'accel_z' ? styles.centeredCard : null
+                ]}
+                entering={FadeInDown.delay(300 + (index * 80)).duration(500)}
+            >
+                <View style={[styles.cardHeader, { backgroundColor: item.bgColor }]}>
+                    <View style={[styles.iconContainer, { backgroundColor: item.color }]}>
+                        <Ionicons name={item.icon as any} size={22} color="white" />
+                    </View>
+                    <Text size="sm" bold style={styles.cardTitle}>
+                        {item.label}
+                    </Text>
+                </View>
+
+                <View style={styles.cardBody}>
+                    <View style={styles.currentValueContainer}>
+                        <Text size="xl" bold style={[styles.currentValue, { color: item.color }]}>
+                            {typeof item.current === 'number' ? item.current.toFixed(1) : 'N/A'}
+                        </Text>
+                        <Text size="xs" style={styles.unitText}>
+                            {item.unit}
+                        </Text>
+                    </View>
+
+                    <View style={styles.statsGrid}>
+                        <View style={styles.statsItem}>
+                            <Text size="xs" style={styles.statLabel}>Rata-rata</Text>
+                            <Text size="sm" bold style={styles.statValue}>
+                                {typeof item.avg === 'number' ? item.avg.toFixed(1) : 'N/A'}
                             </Text>
                         </View>
 
-                        <View style={styles.dividerLine} />
+                        <View style={styles.statsItem}>
+                            <Text size="xs" style={styles.statLabel}>Min</Text>
+                            <Text size="sm" bold style={styles.statValue}>
+                                {typeof item.min === 'number' ? item.min.toFixed(1) : 'N/A'}
+                            </Text>
+                        </View>
 
-                        <View style={styles.statsContainer}>
-                            <View style={styles.statRow}>
-                                <Text size="xs" style={styles.statLabel}>Terkini:</Text>
-                                <Text size="xs" bold style={styles.statValue}>
-                                    {typeof item.current === 'number' ? item.current.toFixed(2) : 'N/A'} {item.unit}
-                                </Text>
-                            </View>
-
-                            <View style={styles.statRow}>
-                                <Text size="xs" style={styles.statLabel}>Rata-rata:</Text>
-                                <Text size="xs" bold style={styles.statValue}>
-                                    {typeof item.avg === 'number' ? item.avg.toFixed(2) : 'N/A'} {item.unit}
-                                </Text>
-                            </View>
-
-                            <View style={styles.statRow}>
-                                <Text size="xs" style={styles.statLabel}>Min:</Text>
-                                <Text size="xs" bold style={styles.statValue}>
-                                    {typeof item.min === 'number' ? item.min.toFixed(2) : 'N/A'} {item.unit}
-                                </Text>
-                            </View>
-
-                            <View style={styles.statRow}>
-                                <Text size="xs" style={styles.statLabel}>Max:</Text>
-                                <Text size="xs" bold style={styles.statValue}>
-                                    {typeof item.max === 'number' ? item.max.toFixed(2) : 'N/A'} {item.unit}
-                                </Text>
-                            </View>
+                        <View style={styles.statsItem}>
+                            <Text size="xs" style={styles.statLabel}>Max</Text>
+                            <Text size="sm" bold style={styles.statValue}>
+                                {typeof item.max === 'number' ? item.max.toFixed(1) : 'N/A'}
+                            </Text>
                         </View>
                     </View>
-                ))}
-            </View>
-        </View>
-    );
+                </View>
+            </Animated.View>
+        );
+    }
 };
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 24,
+        marginVertical: 20,
+        width: '100%',
+    },
+    card: {
+        backgroundColor: 'white',
+        borderRadius: 16,
+        padding: 18,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        elevation: 4,
     },
     containerEmpty: {
         backgroundColor: 'white',
-        padding: 16,
-        borderRadius: 8,
-        marginBottom: 16,
+        padding: 18,
+        borderRadius: 16,
+        marginVertical: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
+        shadowRadius: 8,
+        elevation: 4,
     },
     headerRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 18,
     },
     headerText: {
-        marginLeft: 8,
+        marginLeft: 10,
         color: '#334155',
+        fontSize: 18,
+        fontWeight: '600',
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+        paddingBottom: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+    },
+    sectionTitle: {
+        marginLeft: 8,
+        color: '#3b82f6',
+        fontSize: 14,
+        fontWeight: '600',
     },
     title: {
-        marginBottom: 8,
+        marginBottom: 16,
         color: '#334155',
+        fontWeight: '600',
     },
     emptyBox: {
-        backgroundColor: '#f1f5f9',
+        backgroundColor: '#f8fafc',
         padding: 16,
-        borderRadius: 6,
+        borderRadius: 12,
         alignItems: 'center',
     },
     emptyText: {
         color: '#64748b',
     },
-    card: {
-        backgroundColor: 'white',
-        borderRadius: 8,
-        padding: 16,
+    gridContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 16,
+    },
+    statCard: {
         width: CARD_WIDTH,
-        marginBottom: 8,
-        marginRight: 8,
+        marginBottom: 16,
+        borderRadius: 16,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 3,
+        backgroundColor: 'white',
+    },
+    centeredCard: {
+        alignSelf: 'center',
+        marginHorizontal: 'auto',
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+    },
+    iconContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.1,
         shadowRadius: 2,
         elevation: 2,
     },
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
     cardTitle: {
-        marginLeft: 8,
         color: '#334155',
+        fontSize: 14,
+        fontWeight: '600',
+        flexShrink: 1,
     },
-    statsContainer: {
-        marginTop: 4,
+    cardBody: {
+        padding: 16,
     },
-    statRow: {
+    currentValueContainer: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        marginBottom: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+        paddingBottom: 14,
+        justifyContent: 'center',
+    },
+    currentValue: {
+        fontSize: 28,
+        marginRight: 6,
+        lineHeight: 34,
+        textAlign: 'center',
+    },
+    unitText: {
+        color: '#64748b',
+        fontSize: 12,
+        marginBottom: 2,
+    },
+    statsGrid: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginVertical: 2,
+        marginTop: 8,
+        gap: 8,
+    },
+    statsItem: {
+        alignItems: 'center',
+        flex: 1,
+        paddingVertical: 4,
     },
     statLabel: {
         color: '#64748b',
+        fontSize: 12,
+        marginBottom: 4,
     },
     statValue: {
-        color: '#1e293b',
-    },
-    cardsContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        paddingBottom: 8,
-    },
-    dividerLine: {
-        height: 1,
-        backgroundColor: '#e2e8f0',
-        marginVertical: 8,
+        color: '#334155',
+        fontSize: 14,
+        fontWeight: '600',
     },
 });
 

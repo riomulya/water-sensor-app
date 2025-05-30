@@ -88,8 +88,7 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
                         if (window.updateMapLocation) {
                             window.updateMapLocation(${latitude}, ${longitude});
                             map.setView([${latitude}, ${longitude}], 18, {
-                                animate: true,
-                                duration: 0.5
+                                animate: false
                             });
                         } else {
                             console.error('updateMapLocation function not found in WebView');
@@ -576,8 +575,7 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
     const zoomToLocation = (lat: number, lon: number) => {
         webViewRef.current?.injectJavaScript(`
                 map.setView([${lat}, ${lon}], 18, {
-                    animate: true,
-                    duration: 0.5
+                    animate: false
                 });
                 L.marker([${lat}, ${lon}], { 
                     icon: window.waterMarkerLocation 
@@ -631,15 +629,15 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
             console.log('Starting location watching...');
             locationWatchId.current = await Location.watchPositionAsync(
                 {
-                    accuracy: Location.Accuracy.Balanced,
-                    timeInterval: 3000, // Update every 3 seconds
-                    distanceInterval: 5   // Or when moved 5 meters
+                    accuracy: Location.Accuracy.BestForNavigation,
+                    timeInterval: 1000, // Update every 1 second for more responsive tracking
+                    distanceInterval: 1   // Or when moved 1 meter for more precision
                 },
                 (locationUpdate) => {
                     const { latitude, longitude, accuracy } = locationUpdate.coords;
                     console.log('Location updated:', latitude, longitude);
 
-                    // Update the map with new coordinates
+                    // Update the map with new coordinates without animation
                     if (webViewRef.current) {
                         webViewRef.current.injectJavaScript(`
                             try {
