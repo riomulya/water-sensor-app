@@ -1166,7 +1166,7 @@ const HomeScreen = () => {
                                                                     <HStack className="">
                                                                         <BottomSheetItem
                                                                             style={styles.actionButton}
-                                                                            closeOnSelect={true}
+                                                                            closeOnSelect={false}
                                                                             onPress={() => handleSelectExistingLocation(item)}
                                                                         >
                                                                             <BottomSheetItemText style={styles.actionButtonText}>
