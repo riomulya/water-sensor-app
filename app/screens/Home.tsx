@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useContext } from 'react';
 import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, RefreshControl, ActivityIndicator, Platform, LogBox, ScrollView } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 import { Marker } from 'react-native-maps'; // Import Marker
-import { BottomSheet, BottomSheetBackdrop, BottomSheetContent, BottomSheetDragIndicator, BottomSheetItem, BottomSheetPortal, BottomSheetScrollView, BottomSheetTrigger } from '@/components/ui/bottomsheet';
+import { BottomSheet, BottomSheetBackdrop, BottomSheetContent, BottomSheetDragIndicator, BottomSheetItem, BottomSheetItemText, BottomSheetPortal, BottomSheetScrollView, BottomSheetTrigger } from '@/components/ui/bottomsheet';
 import Donut from '@/components/Donut';
 import RealTimeClock from '@/components/RealTimeClock';
 import { Fab, FabIcon, FabLabel } from '@/components/ui/fab';
@@ -986,10 +986,10 @@ const HomeScreen = () => {
                                                 style={styles.activeTabIndicator}
                                             />
                                         </View>
-                                        <TouchableOpacity
+                                        <BottomSheetItem
                                             style={[styles.toggleTab, activeTab === 'location' ? styles.activeToggleTab : null]}
                                             onPress={() => setActiveTab('location')}
-                                            activeOpacity={0.7}
+                                            closeOnSelect={false}
                                         >
                                             <MotiView
                                                 animate={{
@@ -1003,20 +1003,20 @@ const HomeScreen = () => {
                                                     size={20}
                                                     color={activeTab === 'location' ? "#ea5757" : "#64748b"}
                                                 />
-                                                <Text
+                                                <BottomSheetItemText
                                                     style={[
                                                         styles.toggleText,
                                                         activeTab === 'location' ? styles.activeToggleText : null
                                                     ]}
                                                 >
                                                     Lokasi Monitoring
-                                                </Text>
+                                                </BottomSheetItemText>
                                             </MotiView>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
+                                        </BottomSheetItem>
+                                        <BottomSheetItem
                                             style={[styles.toggleTab, activeTab === 'sensor' ? styles.activeToggleTab : null]}
                                             onPress={() => setActiveTab('sensor')}
-                                            activeOpacity={0.7}
+                                            closeOnSelect={false}
                                         >
                                             <MotiView
                                                 animate={{
@@ -1030,16 +1030,16 @@ const HomeScreen = () => {
                                                     size={20}
                                                     color={activeTab === 'sensor' ? "#ea5757" : "#64748b"}
                                                 />
-                                                <Text
+                                                <BottomSheetItemText
                                                     style={[
                                                         styles.toggleText,
                                                         activeTab === 'sensor' ? styles.activeToggleText : null
                                                     ]}
                                                 >
                                                     Data Sensor
-                                                </Text>
+                                                </BottomSheetItemText>
                                             </MotiView>
-                                        </TouchableOpacity>
+                                        </BottomSheetItem>
                                     </View>
 
                                     <BottomSheetScrollView nestedScrollEnabled={true} style={{ zIndex: 1000, elevation: 1000 }}>
@@ -1092,17 +1092,19 @@ const HomeScreen = () => {
                                                             </View>
 
                                                             <HStack className="gap-2 mt-4">
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onPress={handleDeleteLocation}
-                                                                    className="flex-1 mt-3"
-                                                                >
-                                                                    <ButtonText>Hapus Lokasi</ButtonText>
-                                                                </Button>
                                                                 <BottomSheetItem
-                                                                    className='flex-1'
-                                                                    closeOnSelect
+                                                                    style={styles.outlineButton}
+                                                                    closeOnSelect={false}
+                                                                    onPress={handleDeleteLocation}
+                                                                >
+                                                                    <BottomSheetItemText style={styles.outlineButtonText}>
+                                                                        Hapus Lokasi
+                                                                    </BottomSheetItemText>
+                                                                </BottomSheetItem>
+
+                                                                <BottomSheetItem
+                                                                    style={styles.locationButton}
+                                                                    closeOnSelect={true}
                                                                     onPress={() => {
                                                                         if (savedLocation) {
                                                                             mapRef.current?.zoomToLocation(
@@ -1112,13 +1114,9 @@ const HomeScreen = () => {
                                                                         }
                                                                     }}
                                                                 >
-                                                                    <Button
-                                                                        size="sm"
-                                                                        disabled={true}
-                                                                        className="flex-1 bg-emerald-500"
-                                                                    >
-                                                                        <ButtonText>Lihat Lokasi</ButtonText>
-                                                                    </Button>
+                                                                    <BottomSheetItemText style={styles.locationButtonText}>
+                                                                        Lihat Lokasi
+                                                                    </BottomSheetItemText>
                                                                 </BottomSheetItem>
                                                             </HStack>
                                                         </View>
@@ -1166,17 +1164,19 @@ const HomeScreen = () => {
                                                                         </HStack>
                                                                     </View>
                                                                     <HStack className="">
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            size="sm"
-                                                                            className="flex-1 mt-3"
+                                                                        <BottomSheetItem
+                                                                            style={styles.actionButton}
+                                                                            closeOnSelect={true}
                                                                             onPress={() => handleSelectExistingLocation(item)}
                                                                         >
-                                                                            <ButtonText>Set sebagai Monitoring</ButtonText>
-                                                                        </Button>
+                                                                            <BottomSheetItemText style={styles.actionButtonText}>
+                                                                                Set sebagai Monitoring
+                                                                            </BottomSheetItemText>
+                                                                        </BottomSheetItem>
+
                                                                         <BottomSheetItem
-                                                                            className='flex-1'
-                                                                            closeOnSelect
+                                                                            style={styles.outlineButton}
+                                                                            closeOnSelect={true}
                                                                             onPress={() => {
                                                                                 if (item) {
                                                                                     mapRef.current?.zoomToLocation(
@@ -1186,17 +1186,10 @@ const HomeScreen = () => {
                                                                                 }
                                                                             }}
                                                                         >
-                                                                            <Button
-                                                                                size="sm"
-                                                                                variant="outline"
-                                                                                className="flex-1 text-center w-auto"
-                                                                                disabled={true}
-                                                                            >
-
-                                                                                <ButtonText className='text-center flex-1'>Lihat di Peta</ButtonText>
-                                                                            </Button>
+                                                                            <BottomSheetItemText style={styles.outlineButtonText}>
+                                                                                Lihat di Peta
+                                                                            </BottomSheetItemText>
                                                                         </BottomSheetItem>
-
                                                                     </HStack>
                                                                 </View>
                                                             )}
@@ -1227,7 +1220,7 @@ const HomeScreen = () => {
                         )}
                     </AnimatePresence>
                 </BottomSheetPortal>
-            </BottomSheet>
+            </BottomSheet >
 
             <Modal
                 isOpen={showExitModal}
@@ -1704,5 +1697,64 @@ const styles = StyleSheet.create({
     activeToggleText: {
         color: '#ea5757',
         fontWeight: '600',
+    },
+    locationButton: {
+        flex: 1,
+        backgroundColor: '#10b981', // emerald-500
+        borderRadius: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
+    },
+    locationButtonText: {
+        color: 'white',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    outlineButton: {
+        flex: 1,
+        backgroundColor: 'white',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        borderRadius: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 12,
+        marginLeft: 8,
+    },
+    outlineButtonText: {
+        color: '#0f172a',
+        fontWeight: '500',
+        fontSize: 14,
+    },
+    actionButton: {
+        flex: 1,
+        backgroundColor: '#3b82f6', // blue-500
+        borderRadius: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 12,
+        marginRight: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
+    },
+    actionButtonText: {
+        color: 'white',
+        fontWeight: '600',
+        fontSize: 14,
     },
 });

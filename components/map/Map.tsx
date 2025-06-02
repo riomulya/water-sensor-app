@@ -33,8 +33,11 @@ interface Props {
     onMapPress: (coordinates: [number, number]) => void;
     onGetCurrentLocation: (getCurrentLocationFunc: () => void) => void;
     onLocationSelect?: (locationData: any) => void;
+    zoomToLocation?: (lat: number, lon: number) => void;
     ref?: React.Ref<{
         zoomToLocation: (lat: number, lon: number) => void;
+        // centerOnUserLocation: () => void;
+        // zoomToLocationFromParent: (lat: number, lon: number) => void;
     }>;
 }
 
@@ -572,10 +575,52 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
         }
     };
 
+    // Add useImperativeHandle to expose methods to parent component
+    useImperativeHandle(ref, () => ({
+        zoomToLocation: (lat: number, lon: number) => {
+            console.log('zoomToLocation called with:', lat, lon);
+            if (webViewRef.current && isMapLoaded) {
+                const script = `
+                    try {
+                        console.log('Zooming to location:', ${lat}, ${lon});
+                        map.setView([${lat}, ${lon}], 18, {
+                            animate: true,
+                            duration: 0.5
+                        });
+                        
+                        // Add a temporary marker that disappears after a few seconds
+                        const marker = L.marker([${lat}, ${lon}], { 
+                            icon: window.waterMarkerLocation,
+                            zIndexOffset: 1000
+                        }).addTo(map);
+                        
+                        marker.bindPopup("Lokasi Monitoring").openPopup();
+                        
+                        // Remove marker after 5 seconds
+                        setTimeout(() => {
+                            map.removeLayer(marker);
+                        }, 5000);
+                        
+                        console.log('Map zoomed to location successfully');
+                    } catch(err) {
+                        console.error('Error zooming to location:', err);
+                    }
+                    true;
+                `;
+                webViewRef.current.injectJavaScript(script);
+                return true;
+            } else {
+                console.warn('WebView not ready for zooming');
+                return false;
+            }
+        }
+    }));
+
     const zoomToLocation = (lat: number, lon: number) => {
         webViewRef.current?.injectJavaScript(`
                 map.setView([${lat}, ${lon}], 18, {
-                    animate: false
+                    animate: true,
+                    duration: 0.5
                 });
                 L.marker([${lat}, ${lon}], { 
                     icon: window.waterMarkerLocation 
