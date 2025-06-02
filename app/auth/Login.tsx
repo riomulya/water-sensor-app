@@ -6,7 +6,6 @@ import {
     Image,
     ScrollView,
     TouchableOpacity,
-    ActivityIndicator,
     Dimensions,
     StatusBar,
     KeyboardAvoidingView,
@@ -22,6 +21,7 @@ import { MotiView, AnimatePresence } from 'moti';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { port } from '@/constants/https';
+import LottieView from 'lottie-react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -193,7 +193,12 @@ const LoginScreen = () => {
     if (checkingAuth) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#FF6B6B" />
+                <LottieView
+                    source={require('@/assets/animations/loading-animation-square.json')}
+                    autoPlay
+                    loop
+                    style={styles.lottieAnimation}
+                />
                 <Text style={styles.loadingText}>Memeriksa status login...</Text>
             </View>
         );
@@ -286,7 +291,12 @@ const LoginScreen = () => {
                                 activeOpacity={0.8}
                             >
                                 {loading ? (
-                                    <ActivityIndicator color="white" />
+                                    <LottieView
+                                        source={require('@/assets/animations/loading-animation-square.json')}
+                                        autoPlay
+                                        loop
+                                        style={{ width: 30, height: 30 }}
+                                    />
                                 ) : (
                                     <>
                                         <Text style={styles.buttonText}>
@@ -438,6 +448,10 @@ const styles = StyleSheet.create({
         fontSize: 12,
         textAlign: 'center',
         lineHeight: 18,
+    },
+    lottieAnimation: {
+        width: 120,
+        height: 120,
     },
 });
 
