@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, ScrollView, TouchableOpacity,
-    RefreshControl, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, Dimensions, TouchableWithoutFeedback, FlatList
+    RefreshControl, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, Dimensions, TouchableWithoutFeedback, FlatList, Pressable
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialIcons, Ionicons, Feather } from '@expo/vector-icons';
@@ -11,38 +11,118 @@ import { port } from '../../constants/https';
 // Define interfaces for the data structures
 interface Location {
     id_lokasi: number;
-    nama_lokasi?: string;
-    nama_sungai?: string; // Tambahkan ini karena API menggunakan nama_sungai, bukan nama_lokasi
-    alamat?: string;
-    tanggal?: string;
-    lat?: string;
-    lon?: string;
-    [key: string]: any; // Allow any additional properties
-}
-
-interface SensorLocation {
-    nama_lokasi?: string;
-    nama_sungai?: string; // Tambahkan ini karena API menggunakan nama_sungai, bukan nama_lokasi
-    alamat?: string;
-    id_lokasi: number;
-    [key: string]: any;
-}
-
-interface SensorData {
-    id: number;
-    id_lokasi: number;
-    nilai_accel_x?: number;
-    nilai_accel_y?: number;
-    nilai_accel_z?: number;
-    nilai_ph?: number;
-    nilai_temperature?: number;
-    nilai_turbidity?: number;
-    nilai_speed?: number;
+    nama_sungai: string;
+    alamat: string;
     tanggal: string;
     lat: string;
     lon: string;
-    location?: SensorLocation;
-    [key: string]: any; // Allow any additional properties for other sensor specific IDs
+    isAllOption?: boolean; // Add this for the "All Locations" option
+}
+
+interface AllLocationOption {
+    id_lokasi: number;
+    nama_sungai: string;
+    isAllOption: boolean;
+    alamat?: string; // Add optional alamat property
+}
+
+type LocationWithOption = Location | AllLocationOption;
+
+interface TransformedSensorData {
+    id: number;
+    id_lokasi: number;
+    nilai_ph: number;
+    nilai_temperature: number;
+    nilai_turbidity: number;
+    nilai_accel_x: number;
+    nilai_accel_y: number;
+    nilai_accel_z: number;
+    nilai_speed: number;
+    tanggal: string;
+    lat: string;
+    lon: string;
+    location: Location;
+}
+
+interface SensorData {
+    id_klasifikasi: number;
+    id_lokasi: number;
+    klasifikasi: string;
+    tanggal: string;
+    detail: string;
+    id_accel_x: string;
+    id_accel_y: string;
+    id_accel_z: string;
+    id_ph: string;
+    id_speed: string;
+    id_temperature: string;
+    id_turbidity: string;
+    data_lokasi: Location;
+    data_ph: {
+        id_ph: string;
+        id_lokasi: number;
+        tanggal: string;
+        nilai_ph: number;
+        lat: string;
+        lon: string;
+    };
+    data_temperature: {
+        id_temperature: string;
+        id_lokasi: number;
+        tanggal: string;
+        nilai_temperature: number;
+        lat: string;
+        lon: string;
+    };
+    data_turbidity: {
+        id_turbidity: string;
+        id_lokasi: number;
+        tanggal: string;
+        nilai_turbidity: number;
+        lat: string;
+        lon: string;
+    };
+    data_accel_x: {
+        id_accel_x: string;
+        id_lokasi: number;
+        tanggal: string;
+        nilai_accel_x: number;
+        lat: string;
+        lon: string;
+    };
+    data_accel_y: {
+        id_accel_y: string;
+        id_lokasi: number;
+        tanggal: string;
+        nilai_accel_y: number;
+        lat: string;
+        lon: string;
+    };
+    data_accel_z: {
+        id_accel_z: string;
+        id_lokasi: number;
+        tanggal: string;
+        nilai_accel_z: number;
+        lat: string;
+        lon: string;
+    };
+    data_speed: {
+        id_speed: string;
+        id_lokasi: number;
+        tanggal: string;
+        nilai_speed: number;
+        lat: string;
+        lon: string;
+    };
+    id?: number;
+    lat?: string;
+    lon?: string;
+}
+
+interface ApiResponse {
+    success: boolean;
+    data: SensorData[];
+    count: number;
 }
 
 // Define anomaly thresholds - fokus pada 3 parameter vital
@@ -53,14 +133,14 @@ const ANOMALY_THRESHOLDS = {
 };
 
 // Determine if a data point has any anomalies
-const hasAnomaly = (data: SensorData): { isAnomaly: boolean, anomalyTypes: string[] } => {
+const hasAnomaly = (data: TransformedSensorData): { isAnomaly: boolean, anomalyTypes: string[] } => {
     const anomalyTypes: string[] = [];
 
     for (const [key, threshold] of Object.entries(ANOMALY_THRESHOLDS)) {
         // Skip if sensor doesn't have this value
-        if (data[key as keyof SensorData] === undefined) continue;
+        if (data[key as keyof TransformedSensorData] === undefined) continue;
 
-        const value = Number(data[key as keyof SensorData]);
+        const value = Number(data[key as keyof TransformedSensorData]);
         if (isNaN(value)) continue; // Skip if not a number
 
         if ((threshold.min !== null && value < threshold.min) ||
@@ -76,13 +156,13 @@ const hasAnomaly = (data: SensorData): { isAnomaly: boolean, anomalyTypes: strin
 };
 
 // Get the anomaly details for a specific type
-const getAnomalyDetail = (data: SensorData, type: keyof typeof ANOMALY_THRESHOLDS) => {
+const getAnomalyDetail = (data: TransformedSensorData, type: keyof typeof ANOMALY_THRESHOLDS) => {
     // Skip if sensor doesn't have this value
-    if (data[type as keyof SensorData] === undefined) {
+    if (data[type as keyof TransformedSensorData] === undefined) {
         return { value: null, isAnomaly: false, message: "Data tidak tersedia" };
     }
 
-    const value = Number(data[type as keyof SensorData]);
+    const value = Number(data[type as keyof TransformedSensorData]);
     if (isNaN(value)) {
         return { value: null, isAnomaly: false, message: "Data tidak valid" };
     }
@@ -115,11 +195,11 @@ const getSafe = (obj: any, key: string, defaultValue: string = ''): string => {
 };
 
 // Helper component for location display
-const LocationBadge = ({ location }: { location: SensorLocation | undefined }) => {
+const LocationBadge = ({ location }: { location: Location | undefined }) => {
     if (!location) return null;
 
     // Try to get location name from both possible fields
-    const locationName = location.nama_sungai || location.nama_lokasi || 'Lokasi tidak diketahui';
+    const locationName = location.nama_sungai || 'Lokasi tidak diketahui';
 
     return (
         <View style={styles.locationBadge}>
@@ -198,8 +278,8 @@ const AnomalyStatusBadge = ({ detail, paramName }: { detail: any, paramName: str
 };
 
 export default function AnomalyScreen() {
-    const [allSensors, setAllSensors] = useState<SensorData[]>([]);
-    const [allAnomalies, setAllAnomalies] = useState<SensorData[]>([]);
+    const [allSensors, setAllSensors] = useState<TransformedSensorData[]>([]);
+    const [allAnomalies, setAllAnomalies] = useState<TransformedSensorData[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingProgress, setLoadingProgress] = useState<string>('');
     const [refreshing, setRefreshing] = useState(false);
@@ -210,6 +290,8 @@ export default function AnomalyScreen() {
     const [locationSearchQuery, setLocationSearchQuery] = useState('');
     const toast = useToast();
     const windowHeight = Dimensions.get('window').height;
+    const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+    const [sensorToDelete, setSensorToDelete] = useState<{ id: number | string, originalId: string } | null>(null);
 
     useEffect(() => {
         fetchLocations();
@@ -271,188 +353,95 @@ export default function AnomalyScreen() {
         }
 
         // Map to standard format with location info
-        return sensorData.map(item => {
-            const standardItem: SensorData = {
-                id: item[`id_${sensorType}`] || item.id,
+        return sensorData.map(item => ({
+            id_klasifikasi: item[`id_${sensorType}`] || item.id,
+            id_lokasi: location.id_lokasi,
+            tanggal: item.tanggal,
+            data_lokasi: {
+                id_lokasi: location.id_lokasi,
+                nama_sungai: location.nama_sungai,
+                alamat: location.alamat,
+                tanggal: location.tanggal,
+                lat: location.lat,
+                lon: location.lon
+            },
+            [`data_${sensorType}`]: {
+                [`id_${sensorType}`]: item[`id_${sensorType}`] || item.id,
                 id_lokasi: location.id_lokasi,
                 tanggal: item.tanggal,
+                [`nilai_${sensorType}`]: item[`nilai_${sensorType}`],
                 lat: item.lat,
-                lon: item.lon,
-                location: {
-                    nama_sungai: location.nama_sungai,
-                    alamat: location.alamat,
-                    id_lokasi: location.id_lokasi
-                }
-            };
-
-            // Add the specific sensor value
-            standardItem[`nilai_${sensorType}`] = item[`nilai_${sensorType}`];
-
-            return standardItem;
-        });
+                lon: item.lon
+            }
+        }));
     };
 
     const fetchAllAnomalies = async () => {
-        setLoading(true);
-        setLoadingProgress('Memulai pengambilan data...');
         try {
-            // First, fetch all locations
-            const apiLocationsUrl = port.endsWith('/') ? `${port}data_lokasi` : `${port}/data_lokasi`;
-            setLoadingProgress('Mengambil data lokasi...');
-            console.log('Fetching locations from:', apiLocationsUrl);
+            setLoading(true);
+            setLoadingProgress('Fetching sensor data...');
 
-            const locationsResponse = await fetch(apiLocationsUrl);
-            if (!locationsResponse.ok) {
-                throw new Error(`HTTP error! Status: ${locationsResponse.status}`);
+            const response = await fetch('https://server-water-sensors.onrender.com/klasifikasi/all');
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
             }
 
-            const locationsData = await locationsResponse.json();
-            console.log('Locations fetched:', locationsData.length);
+            const result: ApiResponse = await response.json();
 
-            setLocations(locationsData);
-
-            // Then fetch all sensor types for all locations
-            let allSensorData: SensorData[] = [];
-
-            // List of vital sensor types to fetch
-            const sensorTypes = [
-                { type: 'ph', idPrefix: 'id_ph', valuePrefix: 'nilai_ph' },
-                { type: 'turbidity', idPrefix: 'id_turbidity', valuePrefix: 'nilai_turbidity' },
-                { type: 'temperature', idPrefix: 'id_temperature', valuePrefix: 'nilai_temperature' }
-            ];
-
-            // Fetch each sensor type independently with pagination
-            for (const sensorType of sensorTypes) {
-                try {
-                    setLoadingProgress(`Mengambil data ${sensorType.type}...`);
-                    console.log(`Fetching all ${sensorType.type} data with pagination`);
-                    let currentPage = 1;
-                    let totalPages = 1;
-                    let allItems: any[] = [];
-
-                    // Loop through all pages
-                    do {
-                        const apiUrl = port.endsWith('/')
-                            ? `${port}data_${sensorType.type}?page=${currentPage}`
-                            : `${port}/data_${sensorType.type}?page=${currentPage}`;
-
-                        setLoadingProgress(`Mengambil data ${sensorType.type} halaman ${currentPage}/${totalPages}...`);
-                        console.log(`Fetching ${sensorType.type} data page ${currentPage} from: ${apiUrl}`);
-
-                        const response = await fetch(apiUrl);
-                        if (!response.ok) {
-                            console.error(`Error fetching ${sensorType.type} data for page ${currentPage}: Status ${response.status}`);
-                            break;
-                        }
-
-                        const result = await response.json();
-
-                        // Check if the response has the expected pagination structure
-                        if (result.success && Array.isArray(result.data)) {
-                            allItems = [...allItems, ...result.data];
-                            totalPages = result.totalPage || 1;
-                            console.log(`Fetched ${result.data.length} items from ${sensorType.type} page ${currentPage}/${totalPages}`);
-                        } else if (Array.isArray(result)) {
-                            allItems = [...allItems, ...result];
-                            console.log(`Fetched ${result.length} items from ${sensorType.type} page ${currentPage} (no pagination info)`);
-                            break; // No pagination info, assuming all data is in one response
-                        } else {
-                            console.error(`Unexpected API response structure for ${sensorType.type}`, result);
-                            break;
-                        }
-
-                        currentPage++;
-
-                        // Safety check to avoid infinite loops, max 50 pages (5000 items)
-                        if (currentPage > 50) {
-                            console.warn(`Reached safety limit of 50 pages for ${sensorType.type}`);
-                            break;
-                        }
-
-                    } while (currentPage <= totalPages);
-
-                    console.log(`Total ${sensorType.type} items fetched across all pages: ${allItems.length}`);
-
-                    // Map to standard format including location info from our locations data
-                    setLoadingProgress(`Memproses ${allItems.length} data ${sensorType.type}...`);
-                    const standardItems = allItems.map(item => {
-                        const matchingLocation = locationsData.find(loc =>
-                            Number(loc.id_lokasi) === Number(item.id_lokasi)
-                        );
-
-                        const locationInfo = matchingLocation ? {
-                            id_lokasi: matchingLocation.id_lokasi,
-                            nama_sungai: matchingLocation.nama_sungai,
-                            alamat: matchingLocation.alamat
-                        } : {
-                            id_lokasi: item.id_lokasi
-                        };
-
-                        // Create standardized item
-                        const standardItem: SensorData = {
-                            id: item[sensorType.idPrefix],
-                            id_lokasi: Number(item.id_lokasi),
-                            tanggal: item.tanggal,
-                            lat: item.lat,
-                            lon: item.lon,
-                            location: locationInfo
-                        };
-
-                        // Add the specific sensor value
-                        standardItem[sensorType.valuePrefix as keyof SensorData] = item[sensorType.valuePrefix];
-
-                        return standardItem;
-                    });
-
-                    allSensorData = [...allSensorData, ...standardItems];
-                } catch (error) {
-                    console.error(`Error processing ${sensorType.type} data:`, error);
-                }
+            if (!result.success) {
+                throw new Error('API returned unsuccessful response');
             }
 
-            console.log(`Total sensor data collected across all types: ${allSensorData.length}`);
-
-            // Filter for anomalies
-            setLoadingProgress(`Mendeteksi anomali dari ${allSensorData.length} data...`);
-            const allAnomalyData = allSensorData.filter(data => {
-                const anomalyCheck = hasAnomaly(data);
-                return anomalyCheck.isAnomaly;
+            // Transform the data to match our existing structure
+            const transformedData: TransformedSensorData[] = result.data.map(item => {
+                const transformed: TransformedSensorData = {
+                    id: item.id_klasifikasi,
+                    id_lokasi: item.id_lokasi,
+                    nilai_ph: item.data_ph.nilai_ph,
+                    nilai_temperature: item.data_temperature.nilai_temperature,
+                    nilai_turbidity: item.data_turbidity.nilai_turbidity,
+                    nilai_accel_x: item.data_accel_x.nilai_accel_x,
+                    nilai_accel_y: item.data_accel_y.nilai_accel_y,
+                    nilai_accel_z: item.data_accel_z.nilai_accel_z,
+                    nilai_speed: item.data_speed.nilai_speed,
+                    tanggal: item.tanggal,
+                    lat: item.data_lokasi.lat,
+                    lon: item.data_lokasi.lon,
+                    location: {
+                        id_lokasi: item.data_lokasi.id_lokasi,
+                        nama_sungai: item.data_lokasi.nama_sungai,
+                        alamat: item.data_lokasi.alamat,
+                        tanggal: item.data_lokasi.tanggal,
+                        lat: item.data_lokasi.lat,
+                        lon: item.data_lokasi.lon
+                    }
+                };
+                return transformed;
             });
 
-            console.log(`Found ${allAnomalyData.length} anomalies out of ${allSensorData.length} data points`);
-            console.log('Anomaly breakdown:');
-            const anomalyTypes = {};
-            allAnomalyData.forEach(data => {
-                const check = hasAnomaly(data);
-                check.anomalyTypes.forEach(type => {
-                    if (!anomalyTypes[type]) anomalyTypes[type] = 0;
-                    anomalyTypes[type]++;
-                });
-            });
-            console.log(anomalyTypes);
-
-            setAllSensors(allSensorData);
-            setAllAnomalies(allAnomalyData);
-            setLoadingProgress('');
+            setAllSensors(transformedData);
+            setAllAnomalies(transformedData.filter(data => hasAnomaly(data).isAnomaly));
         } catch (error) {
-            console.error('Error fetching anomaly data:', error);
+            console.error('Error fetching anomalies:', error);
             toast.show({
                 render: () => (
                     <View style={styles.errorToast}>
-                        <Text style={styles.toastText}>Error saat mengambil data anomali</Text>
+                        <Text style={styles.toastText}>Error saat mengambil data sensor</Text>
                     </View>
                 ),
             });
-            setLoadingProgress('');
         } finally {
             setLoading(false);
-            setRefreshing(false);
+            setRefreshing(false); // Make sure to reset refreshing state
         }
     };
 
     const handleRefresh = () => {
         setRefreshing(true);
-        fetchAllAnomalies();
+        fetchAllAnomalies().catch(() => {
+            // Ensure refreshing is reset even if fetchAllAnomalies fails
+            setRefreshing(false);
+        });
     };
 
     const handleLocationChange = (locationId: number | null) => {
@@ -461,15 +450,15 @@ export default function AnomalyScreen() {
         setShowLocationModal(false);
     };
 
-    // Filter locations based on search query
+    // Update the location filtering logic
     const filteredLocations = locations.filter(location => {
-        const locationName = location.nama_sungai || location.nama_lokasi || `Lokasi ${location.id_lokasi}`;
-        const locationAddress = location.alamat || '';
+        if ('isAllOption' in location) {
+            return true; // Always include the "All Locations" option
+        }
+        const locationName = location.nama_sungai || 'Lokasi tidak diketahui';
+        const locationAddress = 'alamat' in location ? location.alamat || '' : '';
         const query = locationSearchQuery.toLowerCase();
-
-        return locationName.toLowerCase().includes(query) ||
-            locationAddress.toLowerCase().includes(query) ||
-            location.id_lokasi.toString().includes(query);
+        return locationName.toLowerCase().includes(query) || locationAddress.toLowerCase().includes(query);
     });
 
     const toggleAnomalyFilter = (type: string | null) => {
@@ -477,85 +466,81 @@ export default function AnomalyScreen() {
     };
 
     const handleDeleteSensor = async (sensorId: number | string, originalId: string) => {
-        // Coba deteksi tipe sensor dari original ID jika ada
-        const sensorType = getSensorTypeFromId(originalId) || 'combined';
+        setLoading(true);
+        try {
+            console.log(`Attempting to delete sensor with ID: ${sensorId}`);
 
-        Alert.alert(
-            'Konfirmasi Hapus',
-            'Apakah Anda yakin ingin menghapus data anomali ini?',
-            [
-                { text: 'Batal', style: 'cancel' },
-                {
-                    text: 'Hapus',
-                    style: 'destructive',
-                    onPress: async () => {
-                        setLoading(true);
-                        try {
-                            // Untuk mencoba beberapa kemungkinan endpoint
-                            const endpoints = [
-                                `data_${sensorType}/${originalId}`,
-                                `data_${sensorType}/${sensorId}`
-                            ];
+            // Extract the klasifikasi ID
+            let klasifikasiId = sensorId;
+            if (typeof originalId === 'string' && originalId.includes('_')) {
+                // Extract the number after the last underscore
+                const parts = originalId.split('_');
+                klasifikasiId = parts[parts.length - 1];
+            }
 
-                            let success = false;
-                            let lastError = null;
+            console.log(`Using klasifikasiId: ${klasifikasiId} for deletion`);
 
-                            // Coba semua kemungkinan endpoint untuk delete
-                            for (const endpoint of endpoints) {
-                                const apiUrl = port.endsWith('/') ? `${port}${endpoint}` : `${port}/${endpoint}`;
+            // Use klasifikasi endpoint to delete all related sensor data
+            const endpoint = `klasifikasi/${klasifikasiId}`;
+            const apiUrl = port.endsWith('/')
+                ? `${port}${endpoint}`
+                : `${port}/${endpoint}`;
 
-                                console.log(`Trying to delete sensor via: ${apiUrl}`);
+            console.log(`DELETE request to: ${apiUrl}`);
 
-                                try {
-                                    const response = await fetch(apiUrl, { method: 'DELETE' });
+            const response = await fetch(apiUrl, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
 
-                                    if (response.ok) {
-                                        success = true;
-                                        console.log(`Successfully deleted sensor via: ${apiUrl}`);
-                                        break;
-                                    } else {
-                                        const errorText = await response.text();
-                                        console.error(`Failed to delete sensor via ${apiUrl}:`, errorText);
-                                        lastError = new Error(`Status: ${response.status}, Error: ${errorText}`);
-                                    }
-                                } catch (error) {
-                                    console.error(`Error deleting sensor via ${apiUrl}:`, error);
-                                    lastError = error;
-                                }
-                            }
+            console.log(`Delete response status: ${response.status}`);
 
-                            if (success) {
-                                // Refresh all anomalies after deletion
-                                fetchAllAnomalies();
+            const responseText = await response.text();
+            console.log(`Delete response body: ${responseText}`);
 
-                                toast.show({
-                                    render: () => (
-                                        <View style={styles.successToast}>
-                                            <Text style={styles.toastText}>Data anomali berhasil dihapus</Text>
-                                        </View>
-                                    ),
-                                });
-                            } else {
-                                throw lastError || new Error('Failed to delete sensor data after all attempts');
-                            }
-                        } catch (error) {
-                            console.error('Error deleting sensor data:', error);
-                            toast.show({
-                                render: () => (
-                                    <View style={styles.errorToast}>
-                                        <Text style={styles.toastText}>
-                                            Error saat menghapus data anomali. {error.message}
-                                        </Text>
-                                    </View>
-                                ),
-                            });
-                        } finally {
-                            setLoading(false);
-                        }
-                    },
-                },
-            ]
-        );
+            // Parse the response if it's JSON
+            let result;
+            try {
+                result = JSON.parse(responseText);
+            } catch (e) {
+                console.error('Error parsing response as JSON:', e);
+                throw new Error(`Invalid response format: ${responseText}`);
+            }
+
+            if (!response.ok) {
+                throw new Error(`Server responded with status ${response.status}: ${result?.error || responseText}`);
+            }
+
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to delete sensor data');
+            }
+
+            // Refresh all anomalies after deletion
+            fetchAllAnomalies();
+
+            toast.show({
+                render: () => (
+                    <View style={styles.successToast}>
+                        <Text style={styles.toastText}>Data anomali berhasil dihapus</Text>
+                    </View>
+                ),
+            });
+        } catch (error) {
+            console.error('Error deleting sensor data:', error);
+            toast.show({
+                render: () => (
+                    <View style={styles.errorToast}>
+                        <Text style={styles.toastText}>
+                            Error saat menghapus data anomali: {error instanceof Error ? error.message : 'Unknown error'}
+                        </Text>
+                    </View>
+                ),
+            });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const formatDate = (dateString: string) => {
@@ -563,38 +548,48 @@ export default function AnomalyScreen() {
         return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
     };
 
-    const navigateToSensorDetail = (sensor: SensorData) => {
-        // Gunakan getSensorTypeFromId yang sudah ada untuk menentukan tipe sensor
-        // ID sensor sering memiliki prefix sesuai dengan tipenya (id_ph, id_temperature, dsb)
+    const navigateToSensorDetail = (sensor: TransformedSensorData) => {
+        // First try to get sensor type from the ID format
         let type = getSensorTypeFromId(sensor.id);
 
-        // Jika ID tidak bisa digunakan untuk menentukan tipe, coba dari nilai yang tersedia
+        // If type not found from ID, try to determine from available values
         if (!type) {
             for (const entry of [
                 { key: 'nilai_ph', type: 'ph' },
                 { key: 'nilai_turbidity', type: 'turbidity' },
-                { key: 'nilai_temperature', type: 'temperature' }
+                { key: 'nilai_temperature', type: 'temperature' },
+                { key: 'nilai_accel_x', type: 'accel_x' },
+                { key: 'nilai_accel_y', type: 'accel_y' },
+                { key: 'nilai_accel_z', type: 'accel_z' },
+                { key: 'nilai_speed', type: 'speed' }
             ]) {
-                if (sensor[entry.key as keyof SensorData] !== undefined) {
+                if (sensor[entry.key as keyof TransformedSensorData] !== undefined) {
                     type = entry.type;
                     break;
                 }
             }
         }
 
-        // Default ke "combined" jika tidak bisa menentukan tipe
+        // If still no type found, use combined
         if (!type) {
             type = 'combined';
             console.warn('Could not determine sensor type for:', sensor);
         }
 
-        console.log(`Navigating to sensor detail with id ${sensor.id} and type ${type}`);
+        // Get the original ID format based on type
+        let originalId: string | number = sensor.id;
+        if (typeof originalId === 'number') {
+            originalId = `id_${type}_${originalId}`;
+        }
+
+        console.log(`Navigating to sensor detail with id ${originalId} and type ${type}`);
 
         router.push({
             pathname: "/sensors/[id]",
             params: {
-                id: sensor.id.toString(),
-                sensorType: type
+                id: originalId.toString(),
+                sensorType: type,
+                timestamp: sensor.tanggal // Pass timestamp for classification
             }
         });
     };
@@ -608,19 +603,19 @@ export default function AnomalyScreen() {
             if (!anomalyFilter) return true;
 
             const threshold = ANOMALY_THRESHOLDS[anomalyFilter as keyof typeof ANOMALY_THRESHOLDS];
-            const value = data[anomalyFilter as keyof SensorData] as number;
+            const value = data[anomalyFilter as keyof TransformedSensorData] as number;
 
             return (threshold.min !== null && value < threshold.min) ||
                 (threshold.max !== null && value > threshold.max);
         });
 
     // Count anomalies by type to display in filter buttons
-    const countAnomaliesByType = (anomalies: SensorData[], type: keyof typeof ANOMALY_THRESHOLDS) => {
+    const countAnomaliesByType = (anomalies: TransformedSensorData[], type: keyof typeof ANOMALY_THRESHOLDS) => {
         return anomalies.filter(data => {
-            if (data[type as keyof SensorData] === undefined) return false;
+            if (data[type as keyof TransformedSensorData] === undefined) return false;
 
             const threshold = ANOMALY_THRESHOLDS[type];
-            const value = Number(data[type as keyof SensorData]);
+            const value = Number(data[type as keyof TransformedSensorData]);
             if (isNaN(value)) return false;
 
             return (threshold.min !== null && value < threshold.min) ||
@@ -631,7 +626,7 @@ export default function AnomalyScreen() {
     // Get location name helper
     const getLocationName = (id_lokasi: number, locations: Location[]): string => {
         const location = locations.find(loc => loc.id_lokasi === id_lokasi);
-        return location ? (location.nama_sungai || location.nama_lokasi || `Lokasi ${id_lokasi}`) : `Lokasi ${id_lokasi}`;
+        return location ? (location.nama_sungai || 'Lokasi tidak diketahui') : `Lokasi ${id_lokasi}`;
     };
 
     return (
@@ -713,7 +708,7 @@ export default function AnomalyScreen() {
 
                                         <FlatList
                                             data={[
-                                                { id_lokasi: -1, nama_lokasi: 'Semua Lokasi', isAllOption: true },
+                                                { id_lokasi: -1, nama_sungai: 'Semua Lokasi', isAllOption: true },
                                                 ...filteredLocations
                                             ]}
                                             keyExtractor={item => item.isAllOption ? 'all' : item.id_lokasi.toString()}
@@ -741,9 +736,9 @@ export default function AnomalyScreen() {
                                                                     ? styles.selectedLocationItemText : {}
                                                             ]}>
                                                                 {item.isAllOption ? 'Semua Lokasi' :
-                                                                    item.nama_sungai || item.nama_lokasi || `Lokasi ${item.id_lokasi}`}
+                                                                    item.nama_sungai || `Lokasi ${item.id_lokasi}`}
                                                             </Text>
-                                                            {!item.isAllOption && item.alamat && (
+                                                            {!item.isAllOption && 'alamat' in item && item.alamat && (
                                                                 <Text style={styles.locationItemAddress}>
                                                                     {item.alamat}
                                                                 </Text>
@@ -900,7 +895,7 @@ export default function AnomalyScreen() {
                                     <View style={styles.sensorData}>
                                         {Object.entries(ANOMALY_THRESHOLDS).map(([key, threshold]) => {
                                             // Skip if sensor doesn't have this value
-                                            if (sensor[key as keyof SensorData] === undefined) return null;
+                                            if (sensor[key as keyof TransformedSensorData] === undefined) return null;
 
                                             const detail = getAnomalyDetail(sensor, key as keyof typeof ANOMALY_THRESHOLDS);
 
@@ -941,7 +936,10 @@ export default function AnomalyScreen() {
 
                                         <TouchableOpacity
                                             style={styles.deleteIcon}
-                                            onPress={() => handleDeleteSensor(sensor.id, sensor.id.toString())}
+                                            onPress={() => {
+                                                setDeleteModalVisible(true);
+                                                setSensorToDelete({ id: sensor.id, originalId: sensor.id.toString() });
+                                            }}
                                         >
                                             <MaterialIcons name="delete" size={20} color="#64748b" />
                                         </TouchableOpacity>
@@ -962,6 +960,50 @@ export default function AnomalyScreen() {
                     </View>
                 )}
             </ScrollView>
+
+            {/* Custom Delete Confirmation Modal */}
+            <Modal
+                visible={deleteModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setDeleteModalVisible(false)}
+            >
+                <View style={styles.deleteModalOverlay}>
+                    <View style={styles.deleteModalContainer}>
+                        <View style={styles.deleteModalIconContainer}>
+                            <MaterialIcons name="warning" size={24} color="#FFF" />
+                        </View>
+
+                        <Text style={styles.deleteModalTitle}>Konfirmasi Hapus</Text>
+
+                        <Text style={styles.deleteModalText}>
+                            Apakah Anda yakin ingin menghapus data sensor ini dan semua data sensor terkait? Tindakan ini tidak dapat dibatalkan.
+                        </Text>
+
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity
+                                style={styles.deleteModalCancelButton}
+                                onPress={() => setDeleteModalVisible(false)}
+                            >
+                                <Text style={styles.deleteModalCancelText}>Batal</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.deleteModalDeleteButton}
+                                onPress={() => {
+                                    setDeleteModalVisible(false);
+                                    if (sensorToDelete) {
+                                        handleDeleteSensor(sensorToDelete.id, sensorToDelete.originalId);
+                                    }
+                                }}
+                            >
+                                <MaterialIcons name="delete-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+                                <Text style={styles.deleteModalDeleteText}>Hapus Data</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -1406,5 +1448,85 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#64748b',
         marginTop: 2,
+    },
+    deleteModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 16,
+    },
+    deleteModalContainer: {
+        backgroundColor: 'white',
+        borderRadius: 16,
+        width: '90%',
+        maxWidth: 340,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
+        padding: 24,
+    },
+    deleteModalIconContainer: {
+        backgroundColor: '#ef4444',
+        borderRadius: 50,
+        padding: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
+        width: 56,
+        height: 56,
+    },
+    deleteModalTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#1e293b',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    deleteModalText: {
+        color: '#64748b',
+        fontSize: 14,
+        marginBottom: 20,
+        textAlign: 'center',
+        lineHeight: 20,
+    },
+    deleteModalActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        width: '100%',
+    },
+    deleteModalCancelButton: {
+        flex: 1,
+        padding: 12,
+        borderRadius: 8,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+        marginRight: 8,
+        height: 44,
+        justifyContent: 'center',
+    },
+    deleteModalCancelText: {
+        color: '#64748b',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    deleteModalDeleteButton: {
+        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 8,
+        backgroundColor: '#ef4444',
+        marginLeft: 8,
+        height: 44,
+    },
+    deleteModalDeleteText: {
+        color: '#fff',
+        fontWeight: '600',
+        fontSize: 14,
     },
 }); 

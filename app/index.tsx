@@ -31,7 +31,7 @@ export default function App() {
     // Navigate to login screen after animation completes
     const timer = setTimeout(() => {
       router.replace('./auth/Login');
-    }, 10000); // 10 seconds, adjust based on your animation length
+    }, 5000); // 5 seconds, adjusted for 2x speed animation
 
     return () => clearTimeout(timer);
   }, []);
@@ -43,6 +43,7 @@ export default function App() {
           ref={lottieRef}
           source={require('../assets/animations/splash-screen.json')}
           autoPlay
+          speed={1.5}
           loop={false}
           resizeMode="cover"
           style={styles.lottieAnimation}

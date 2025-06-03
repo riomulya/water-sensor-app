@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import {
     View, Text, StyleSheet, ScrollView,
     TextInput, TouchableOpacity, ActivityIndicator,
-    Alert, KeyboardAvoidingView, Platform
+    Alert, KeyboardAvoidingView, Platform, Modal,
+    Pressable
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useToast } from '@/components/ui/toast';
@@ -39,7 +40,7 @@ interface SensorData {
 
 // Define thresholds for the three vital parameters
 const ANOMALY_THRESHOLDS = {
-    nilai_turbidity: { min: -1.0, max: 1000, label: "Turbidity", icon: "opacity" },
+    nilai_turbidity: { min: -1.0, max: 25, label: "Turbidity", icon: "opacity" },
     nilai_ph: { min: 6.0, max: 9.0, label: "pH", icon: "science" },
     nilai_temperature: { min: 10, max: 35, label: "Temperature", icon: "thermostat" }
 };
@@ -133,17 +134,22 @@ export default function SensorDetailScreen() {
     const toast = useToast();
     const [locationData, setLocationData] = useState<Location | null>(null);
     const [detectedType, setDetectedType] = useState<string | null>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedValues, setEditedValues] = useState<Record<string, number>>({});
+    const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+
+    // New state for prediction update
+    const [isPredictionEditing, setIsPredictionEditing] = useState(false);
+    const [predictionValues, setPredictionValues] = useState({
+        ph: 0,
+        temperature: 0,
+        turbidity: 0
+    });
+    const [showPredictionUpdateModal, setShowPredictionUpdateModal] = useState(false);
 
     useEffect(() => {
         fetchSensorData();
     }, [id, sensorType]);
-
-    // Get corresponding location data
-    useEffect(() => {
-        if (sensorData?.id_lokasi) {
-            fetchLocationData(sensorData.id_lokasi);
-        }
-    }, [sensorData]);
 
     const fetchLocationData = async (id_lokasi: number) => {
         try {
@@ -182,34 +188,37 @@ export default function SensorDetailScreen() {
             // Examine ID format if no type provided
             if (!type && typeof id === 'string') {
                 // Try to detect sensor type from id format
-                if (id.startsWith('id_ph_')) {
+                if (id.includes('id_ph_')) {
                     type = 'ph';
-                } else if (id.startsWith('id_turbidity_')) {
+                } else if (id.includes('id_turbidity_')) {
                     type = 'turbidity';
-                } else if (id.startsWith('id_temperature_')) {
+                } else if (id.includes('id_temperature_')) {
                     type = 'temperature';
-                } else if (id.startsWith('id_accel_x_')) {
+                } else if (id.includes('id_accel_x_')) {
                     type = 'accel_x';
-                } else if (id.startsWith('id_accel_y_')) {
+                } else if (id.includes('id_accel_y_')) {
                     type = 'accel_y';
-                } else if (id.startsWith('id_accel_z_')) {
+                } else if (id.includes('id_accel_z_')) {
                     type = 'accel_z';
-                } else if (id.startsWith('id_speed_')) {
+                } else if (id.includes('id_speed_')) {
                     type = 'speed';
                 }
             }
 
             setDetectedType(type);
 
-            // If we have a specific type, use that endpoint
-            let endpoint = 'combined';
-            if (type) {
-                endpoint = type;
+            // Extract the numeric ID part if it contains a sensor type prefix
+            let klasifikasiId = id;
+            if (typeof id === 'string' && id.includes('_')) {
+                // Extract the number after the last underscore
+                const parts = id.split('_');
+                klasifikasiId = parts[parts.length - 1];
             }
 
+            // Use the klasifikasi endpoint to get all sensor data
             const apiUrl = port.endsWith('/')
-                ? `${port}data_${endpoint}/${id}`
-                : `${port}/data_${endpoint}/${id}`;
+                ? `${port}klasifikasi/${klasifikasiId}`
+                : `${port}/klasifikasi/${klasifikasiId}`;
 
             console.log('Fetching sensor detail from:', apiUrl);
 
@@ -223,15 +232,43 @@ export default function SensorDetailScreen() {
             let sensorDetail: SensorData | null = null;
 
             if (result.success && result.data) {
-                // Handle API response with success property
-                sensorDetail = Array.isArray(result.data) && result.data.length > 0
-                    ? result.data[0]
-                    : result.data;
+                // Transform the klasifikasi API response to match our SensorData interface
+                sensorDetail = {
+                    id: result.data.id_klasifikasi,
+                    id_lokasi: result.data.id_lokasi,
+                    tanggal: result.data.tanggal,
+                    lat: result.data.data_lokasi?.lat || "",
+                    lon: result.data.data_lokasi?.lon || "",
+                    location: result.data.data_lokasi,
+                };
+
+                // Add all sensor values to the sensorDetail object
+                if (result.data.data_ph) {
+                    sensorDetail.nilai_ph = result.data.data_ph.nilai_ph;
+                }
+                if (result.data.data_temperature) {
+                    sensorDetail.nilai_temperature = result.data.data_temperature.nilai_temperature;
+                }
+                if (result.data.data_turbidity) {
+                    sensorDetail.nilai_turbidity = result.data.data_turbidity.nilai_turbidity;
+                }
+                if (result.data.data_accel_x) {
+                    sensorDetail.nilai_accel_x = result.data.data_accel_x.nilai_accel_x;
+                }
+                if (result.data.data_accel_y) {
+                    sensorDetail.nilai_accel_y = result.data.data_accel_y.nilai_accel_y;
+                }
+                if (result.data.data_accel_z) {
+                    sensorDetail.nilai_accel_z = result.data.data_accel_z.nilai_accel_z;
+                }
+                if (result.data.data_speed) {
+                    sensorDetail.nilai_speed = result.data.data_speed.nilai_speed;
+                }
             } else if (Array.isArray(result) && result.length > 0) {
-                // Handle direct array response
+                // Handle direct array response (fallback)
                 sensorDetail = result[0];
             } else if (typeof result === 'object' && result !== null) {
-                // Handle single object response
+                // Handle single object response (fallback)
                 sensorDetail = result;
             } else {
                 throw new Error('Unexpected API response format');
@@ -244,6 +281,19 @@ export default function SensorDetailScreen() {
                 const anomalyCheck = hasAnomaly(sensorDetail);
                 setAnomalyInfo(anomalyCheck);
             }
+
+            // Initialize edited values with current values
+            const initialValues: Record<string, number> = {};
+            if (type && sensorDetail[`nilai_${type}` as keyof SensorData]) {
+                initialValues[`nilai_${type}`] = sensorDetail[`nilai_${type}` as keyof SensorData] as number;
+            }
+            setEditedValues(initialValues);
+
+            // No need to fetch location data separately as it's included in the response
+            if (result.data?.data_lokasi) {
+                setLocationData(result.data.data_lokasi);
+            }
+
         } catch (error) {
             console.error('Error fetching sensor data:', error);
             setError('Gagal mengambil data sensor. Silakan coba lagi.');
@@ -252,50 +302,146 @@ export default function SensorDetailScreen() {
         }
     };
 
-    const handleDelete = () => {
-        if (!sensorData) return;
+    const handleUpdate = async () => {
+        try {
+            if (!sensorType || !sensorData) {
+                toast.show({
+                    render: () => (
+                        <View style={styles.errorToast}>
+                            <Text style={styles.toastText}>Tidak dapat mengidentifikasi jenis sensor</Text>
+                        </View>
+                    ),
+                });
+                return;
+            }
 
-        Alert.alert(
-            'Konfirmasi Hapus',
-            'Apakah Anda yakin ingin menghapus data anomali ini?',
-            [
-                { text: 'Batal', style: 'cancel' },
-                {
-                    text: 'Hapus',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            // Use the specific sensor type for deletion if available
-                            const endpoint = detectedType || 'combined';
+            setLoading(true);
 
-                            const apiUrl = port.endsWith('/')
-                                ? `${port}data_${endpoint}/${id}`
-                                : `${port}/data_${endpoint}/${id}`;
+            // Get the specific sensor ID from the klasifikasi data
+            const sensorId = sensorData[`id_${sensorType}`];
+            if (!sensorId) {
+                throw new Error(`Could not find ID for ${sensorType} sensor`);
+            }
 
-                            console.log('Deleting sensor via:', apiUrl);
-
-                            const response = await fetch(apiUrl, {
-                                method: 'DELETE',
-                            });
-
-                            if (!response.ok) {
-                                throw new Error('Failed to delete sensor data');
-                            }
-
-                            // Navigate back after successful deletion
-                            router.back();
-
-                        } catch (error) {
-                            console.error('Error deleting sensor data:', error);
-                            Alert.alert(
-                                'Error',
-                                'Gagal menghapus data anomali. Silakan coba lagi.'
-                            );
-                        }
-                    },
+            const endpoint = `data_${sensorType}/${sensorId}`;
+            const response = await fetch(`${port}/${endpoint}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
                 },
-            ]
-        );
+                body: JSON.stringify({
+                    [`nilai_${sensorType}`]: editedValues[`nilai_${sensorType}`],
+                    tanggal: sensorData.tanggal,
+                    id_lokasi: sensorData.id_lokasi,
+                }),
+            });
+
+            if (!response.ok) throw new Error('Failed to update sensor data');
+
+            const result = await response.json();
+            if (!result.success) throw new Error(result.error || 'Failed to update sensor data');
+
+            toast.show({
+                render: () => (
+                    <View style={styles.successToast}>
+                        <Text style={styles.toastText}>Data sensor berhasil diperbarui</Text>
+                    </View>
+                ),
+            });
+            setIsEditing(false);
+            fetchSensorData(); // Refresh data
+        } catch (error) {
+            console.error('Error updating sensor data:', error);
+            toast.show({
+                render: () => (
+                    <View style={styles.errorToast}>
+                        <Text style={styles.toastText}>Error saat memperbarui data sensor</Text>
+                    </View>
+                ),
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDelete = () => {
+        setDeleteModalVisible(true);
+    };
+
+    const confirmDelete = async () => {
+        try {
+            setLoading(true);
+            setDeleteModalVisible(false);
+
+            // Extract the klasifikasi ID
+            let klasifikasiId = id;
+            if (typeof id === 'string' && id.includes('_')) {
+                // Extract the number after the last underscore
+                const parts = id.split('_');
+                klasifikasiId = parts[parts.length - 1];
+            }
+
+            console.log(`Attempting to delete klasifikasi with ID: ${klasifikasiId}`);
+
+            // Use klasifikasi endpoint to delete all related sensor data
+            const endpoint = `klasifikasi/${klasifikasiId}`;
+            const apiUrl = port.endsWith('/')
+                ? `${port}${endpoint}`
+                : `${port}/${endpoint}`;
+
+            console.log(`DELETE request to: ${apiUrl}`);
+
+            const response = await fetch(apiUrl, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            console.log(`Delete response status: ${response.status}`);
+
+            const responseText = await response.text();
+            console.log(`Delete response body: ${responseText}`);
+
+            // Parse the response if it's JSON
+            let result;
+            try {
+                result = JSON.parse(responseText);
+            } catch (e) {
+                console.error('Error parsing response as JSON:', e);
+                throw new Error(`Invalid response format: ${responseText}`);
+            }
+
+            if (!response.ok) {
+                throw new Error(`Server responded with status ${response.status}: ${result?.error || responseText}`);
+            }
+
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to delete sensor data');
+            }
+
+            toast.show({
+                render: () => (
+                    <View style={styles.successToast}>
+                        <Text style={styles.toastText}>Data sensor dan semua data terkait berhasil dihapus</Text>
+                    </View>
+                ),
+            });
+            router.back(); // Navigate back to the list
+        } catch (error) {
+            console.error('Error deleting sensor data:', error);
+            toast.show({
+                render: () => (
+                    <View style={styles.errorToast}>
+                        <Text style={styles.toastText}>
+                            Error saat menghapus data sensor: {error instanceof Error ? error.message : 'Unknown error'}
+                        </Text>
+                    </View>
+                ),
+            });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const formatDate = (dateString: string): string => {
@@ -310,6 +456,94 @@ export default function SensorDetailScreen() {
             second: '2-digit'
         });
     };
+
+    // Function to handle updating all three vital parameters at once
+    const handlePredictionUpdate = async () => {
+        try {
+            setLoading(true);
+
+            // Extract the klasifikasi ID
+            let klasifikasiId = id;
+            if (typeof id === 'string' && id.includes('_')) {
+                // Extract the number after the last underscore
+                const parts = id.split('_');
+                klasifikasiId = parts[parts.length - 1];
+            }
+
+            // Use klasifikasi endpoint to update sensor values and get new prediction
+            const endpoint = `klasifikasi/${klasifikasiId}/prediction`;
+            const apiUrl = port.endsWith('/')
+                ? `${port}${endpoint}`
+                : `${port}/${endpoint}`;
+
+            console.log(`PUT request to: ${apiUrl}`, predictionValues);
+
+            const response = await fetch(apiUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ph: predictionValues.ph,
+                    temperature: predictionValues.temperature,
+                    turbidity: predictionValues.turbidity,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`Failed to update prediction: ${response.status}`, errorText);
+                throw new Error(`Server responded with status ${response.status}: ${errorText}`);
+            }
+
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to update prediction data');
+            }
+
+            toast.show({
+                render: () => (
+                    <View style={styles.successToast}>
+                        <Text style={styles.toastText}>
+                            Data sensor berhasil diperbarui. Prediksi baru: {result.prediction.klasifikasi}
+                        </Text>
+                    </View>
+                ),
+            });
+
+            setShowPredictionUpdateModal(false);
+            setPredictionValues({
+                ph: 0,
+                temperature: 0,
+                turbidity: 0
+            });
+            fetchSensorData(); // Refresh data
+        } catch (error) {
+            console.error('Error updating prediction data:', error);
+            toast.show({
+                render: () => (
+                    <View style={styles.errorToast}>
+                        <Text style={styles.toastText}>
+                            Error saat memperbarui prediksi: {error instanceof Error ? error.message : 'Unknown error'}
+                        </Text>
+                    </View>
+                ),
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Set initial prediction values when sensor data is loaded
+    useEffect(() => {
+        if (sensorData) {
+            setPredictionValues({
+                ph: sensorData.nilai_ph || 0,
+                temperature: sensorData.nilai_temperature || 0,
+                turbidity: sensorData.nilai_turbidity || 0
+            });
+        }
+    }, [sensorData]);
 
     if (loading) {
         return (
@@ -492,6 +726,23 @@ export default function SensorDetailScreen() {
                     </View>
                 </View>
 
+                {/* Update Prediction Button */}
+                <TouchableOpacity
+                    style={styles.updatePredictionButton}
+                    onPress={() => setShowPredictionUpdateModal(true)}
+                >
+                    <View style={styles.updatePredictionButtonContent}>
+                        <MaterialIcons name="update" size={22} color="#3b82f6" style={styles.updatePredictionIcon} />
+                        <View style={styles.updatePredictionTextContainer}>
+                            <Text style={styles.updatePredictionTitle}>Update Parameter & Prediksi</Text>
+                            <Text style={styles.updatePredictionDescription}>
+                                Update nilai pH, Temperatur, dan Kekeruhan untuk mendapatkan prediksi kualitas air terbaru
+                            </Text>
+                        </View>
+                        <MaterialIcons name="arrow-forward-ios" size={16} color="#64748b" />
+                    </View>
+                </TouchableOpacity>
+
                 {/* Actions */}
                 <View style={styles.actions}>
                     <TouchableOpacity
@@ -511,6 +762,160 @@ export default function SensorDetailScreen() {
                     </TouchableOpacity>
                 </View>
             </ScrollView>
+
+            {/* Custom Delete Confirmation Modal */}
+            <Modal
+                visible={deleteModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setDeleteModalVisible(false)}
+            >
+                <View style={styles.deleteModalOverlay}>
+                    <View style={styles.deleteModalContainer}>
+                        <View style={styles.deleteModalIconContainer}>
+                            <MaterialIcons name="warning" size={24} color="#FFF" />
+                        </View>
+
+                        <Text style={styles.deleteModalTitle}>Konfirmasi Hapus</Text>
+
+                        <Text style={styles.deleteModalText}>
+                            Apakah Anda yakin ingin menghapus data sensor ini dan semua data sensor terkait? Tindakan ini tidak dapat dibatalkan.
+                        </Text>
+
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity
+                                style={styles.deleteModalCancelButton}
+                                onPress={() => setDeleteModalVisible(false)}
+                            >
+                                <Text style={styles.deleteModalCancelText}>Batal</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.deleteModalDeleteButton}
+                                onPress={confirmDelete}
+                            >
+                                <MaterialIcons name="delete-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+                                <Text style={styles.deleteModalDeleteText}>Hapus Data</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Prediction Update Modal */}
+            <Modal
+                visible={showPredictionUpdateModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowPredictionUpdateModal(false)}
+            >
+                <View style={styles.predictionModalOverlay}>
+                    <View style={styles.predictionModalContainer}>
+                        <View style={styles.predictionModalHeader}>
+                            <Text style={styles.predictionModalTitle}>Update Parameter Vital</Text>
+                            <TouchableOpacity
+                                onPress={() => setShowPredictionUpdateModal(false)}
+                                style={styles.closeButton}
+                            >
+                                <Ionicons name="close" size={24} color="#64748b" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.predictionModalContent}>
+                            <Text style={styles.predictionModalDescription}>
+                                Update nilai parameter vital untuk mendapatkan prediksi kualitas air terbaru
+                            </Text>
+
+                            {/* pH Input */}
+                            <View style={styles.inputGroup}>
+                                <View style={styles.inputLabel}>
+                                    <MaterialIcons name="science" size={20} color="#3b82f6" />
+                                    <Text style={styles.inputLabelText}>Nilai pH</Text>
+                                </View>
+                                <TextInput
+                                    style={styles.input}
+                                    keyboardType="decimal-pad"
+                                    value={predictionValues.ph.toString()}
+                                    onChangeText={(text) => {
+                                        // Only allow numbers and one decimal point
+                                        if (/^\d*\.?\d*$/.test(text)) {
+                                            setPredictionValues(prev => ({
+                                                ...prev,
+                                                ph: text === '' ? 0 : parseFloat(text)
+                                            }));
+                                        }
+                                    }}
+                                    placeholder="Masukkan nilai pH"
+                                    placeholderTextColor="#94a3b8"
+                                />
+                            </View>
+
+                            {/* Temperature Input */}
+                            <View style={styles.inputGroup}>
+                                <View style={styles.inputLabel}>
+                                    <MaterialIcons name="thermostat" size={20} color="#3b82f6" />
+                                    <Text style={styles.inputLabelText}>Temperatur (°C)</Text>
+                                </View>
+                                <TextInput
+                                    style={styles.input}
+                                    keyboardType="decimal-pad"
+                                    value={predictionValues.temperature.toString()}
+                                    onChangeText={(text) => {
+                                        // Only allow numbers and one decimal point
+                                        if (/^\d*\.?\d*$/.test(text)) {
+                                            setPredictionValues(prev => ({
+                                                ...prev,
+                                                temperature: text === '' ? 0 : parseFloat(text)
+                                            }));
+                                        }
+                                    }}
+                                    placeholder="Masukkan nilai temperatur"
+                                    placeholderTextColor="#94a3b8"
+                                />
+                            </View>
+
+                            {/* Turbidity Input */}
+                            <View style={styles.inputGroup}>
+                                <View style={styles.inputLabel}>
+                                    <MaterialIcons name="opacity" size={20} color="#3b82f6" />
+                                    <Text style={styles.inputLabelText}>Kekeruhan (NTU)</Text>
+                                </View>
+                                <TextInput
+                                    style={styles.input}
+                                    keyboardType="decimal-pad"
+                                    value={predictionValues.turbidity.toString()}
+                                    onChangeText={(text) => {
+                                        // Only allow numbers and one decimal point
+                                        if (/^\d*\.?\d*$/.test(text)) {
+                                            setPredictionValues(prev => ({
+                                                ...prev,
+                                                turbidity: text === '' ? 0 : parseFloat(text)
+                                            }));
+                                        }
+                                    }}
+                                    placeholder="Masukkan nilai kekeruhan"
+                                    placeholderTextColor="#94a3b8"
+                                />
+                            </View>
+
+                            <TouchableOpacity
+                                style={styles.updateButton}
+                                onPress={handlePredictionUpdate}
+                                disabled={loading}
+                            >
+                                {loading ? (
+                                    <ActivityIndicator size="small" color="#ffffff" />
+                                ) : (
+                                    <>
+                                        <MaterialIcons name="update" size={18} color="#fff" style={{ marginRight: 8 }} />
+                                        <Text style={styles.updateButtonText}>Update & Dapatkan Prediksi</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </KeyboardAvoidingView>
     );
 }
@@ -794,5 +1199,199 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontWeight: '600',
         marginLeft: 4,
+    },
+    successToast: {
+        backgroundColor: '#dcfce7',
+        padding: 12,
+        borderRadius: 8,
+        borderLeftWidth: 4,
+        borderLeftColor: '#22c55e',
+    },
+    errorToast: {
+        backgroundColor: '#fee2e2',
+        padding: 12,
+        borderRadius: 8,
+        borderLeftWidth: 4,
+        borderLeftColor: '#ef4444',
+    },
+    toastText: {
+        color: '#1e293b',
+        fontWeight: '500',
+    },
+    deleteModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    deleteModalContainer: {
+        backgroundColor: 'white',
+        padding: 24,
+        borderRadius: 20,
+        width: '80%',
+        alignItems: 'center',
+    },
+    deleteModalIconContainer: {
+        backgroundColor: '#ef4444',
+        borderRadius: 50,
+        padding: 10,
+        marginBottom: 16,
+    },
+    deleteModalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 16,
+        color: '#1e293b',
+    },
+    deleteModalText: {
+        fontSize: 14,
+        marginBottom: 20,
+        textAlign: 'center',
+        color: '#64748b',
+        lineHeight: 20,
+    },
+    deleteModalActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        width: '100%',
+        marginTop: 8,
+    },
+    deleteModalCancelButton: {
+        backgroundColor: '#f1f5f9',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 8,
+        flex: 1,
+        marginRight: 8,
+        alignItems: 'center',
+    },
+    deleteModalCancelText: {
+        color: '#64748b',
+        fontWeight: '600',
+    },
+    deleteModalDeleteButton: {
+        backgroundColor: '#ef4444',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 8,
+        flex: 1,
+        marginLeft: 8,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    deleteModalDeleteText: {
+        color: '#fff',
+        fontWeight: '600',
+        marginLeft: 8,
+    },
+    predictionModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 16,
+    },
+    predictionModalContainer: {
+        backgroundColor: 'white',
+        padding: 24,
+        borderRadius: 16,
+        width: '90%',
+        maxWidth: 400,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
+    },
+    predictionModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+        marginBottom: 16,
+    },
+    predictionModalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#1e293b',
+    },
+    closeButton: {
+        padding: 8,
+    },
+    predictionModalContent: {
+        width: '100%',
+    },
+    predictionModalDescription: {
+        fontSize: 14,
+        marginBottom: 24,
+        color: '#64748b',
+        lineHeight: 20,
+    },
+    inputGroup: {
+        marginBottom: 16,
+    },
+    inputLabel: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    inputLabelText: {
+        fontSize: 14,
+        color: '#1e293b',
+        fontWeight: '500',
+        marginLeft: 8,
+    },
+    input: {
+        padding: 12,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        borderRadius: 8,
+        fontSize: 16,
+        color: '#1e293b',
+        backgroundColor: '#f8fafc',
+    },
+    updateButton: {
+        backgroundColor: '#3b82f6',
+        padding: 16,
+        borderRadius: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 8,
+    },
+    updateButtonText: {
+        color: '#fff',
+        fontWeight: '600',
+        fontSize: 16,
+    },
+    updatePredictionButton: {
+        backgroundColor: '#f8fafc',
+        padding: 16,
+        borderRadius: 12,
+        marginTop: 16,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    updatePredictionButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    updatePredictionIcon: {
+        marginRight: 12,
+    },
+    updatePredictionTextContainer: {
+        flex: 1,
+    },
+    updatePredictionTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1e293b',
+        marginBottom: 4,
+    },
+    updatePredictionDescription: {
+        fontSize: 13,
+        color: '#64748b',
     },
 }); 
