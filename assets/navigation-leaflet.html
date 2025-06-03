@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/x-icon" href="https://openlayers.org/favicon.ico" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-gesture-handling@0.6.0/dist/leaflet-gesture-handling.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Navigation</title>
+
+    <style>
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        .navigation-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            padding: 12px 20px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .destination-info {
+            flex-grow: 1;
+            margin-left: 15px;
+        }
+
+        .destination-name {
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .destination-address {
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 200px;
+        }
+
+        .navigation-close {
+            background: #ff5252;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            margin-left: 10px;
+        }
+
+        .back-button {
+            background: rgba(255, 255, 255, 0.25);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .navigation-info {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 400px;
+            z-index: 1000;
+        }
+
+        .instruction {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .turn-icon {
+            background: #f0f9ff;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+
+        .turn-icon svg {
+            width: 24px;
+            height: 24px;
+            fill: #3b82f6;
+        }
+
+        .instruction-text {
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .distance-time {
+            display: flex;
+            justify-content: space-between;
+            padding-top: 10px;
+            border-top: 1px solid #f1f5f9;
+            margin-top: 10px;
+        }
+
+        .distance,
+        .time {
+            text-align: center;
+        }
+
+        .value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #0f172a;
+        }
+
+        .label {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .animate-route {
+            stroke-dasharray: 10;
+            animation: dash 60s linear infinite;
+        }
+
+        @keyframes dash {
+            from {
+                stroke-dashoffset: 1000;
+            }
+
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        /* Pulsing marker animation */
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+                box-shadow: 0 0 0 0 rgba(51, 136, 255, 0.5);
+            }
+
+            50% {
+                transform: scale(1.05);
+                opacity: 0.8;
+                box-shadow: 0 0 0 8px rgba(51, 136, 255, 0);
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+                box-shadow: 0 0 0 0 rgba(51, 136, 255, 0);
+            }
+        }
+
+        .pulsing-marker {
+            animation: pulse 1.5s ease-in-out infinite;
+            transform-origin: center bottom;
+            filter: drop-shadow(0 0 3px rgba(51, 136, 255, 0.7));
+            opacity: 0;
+            animation-name: pulse, fade-in;
+            animation-duration: 1.5s, 0.3s;
+            animation-iteration-count: infinite, 1;
+            animation-timing-function: ease-in-out, ease-out;
+            animation-fill-mode: none, forwards;
+        }
+
+        @keyframes fade-in {
+            0% {
+                opacity: 0;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        /* Alternative routes styling */
+        .leaflet-routing-alternatives-container {
+            display: none;
+            /* Hide alternatives list */
+        }
+
+        /* Style the route lines */
+        .leaflet-routing-alt,
+        .leaflet-routing-geocoders,
+        .leaflet-routing-error {
+            display: none;
+        }
+
+        /* Custom accuracy circle */
+        .accuracy-circle {
+            transition: all 0.5s ease-in-out;
+            stroke-dasharray: 5, 5;
+            animation: circle-pulse 3s ease-in-out infinite;
+        }
+
+        @keyframes circle-pulse {
+            0% {
+                stroke-opacity: 0.7;
+                stroke-width: 1;
+            }
+
+            50% {
+                stroke-opacity: 0.3;
+                stroke-width: 2;
+            }
+
+            100% {
+                stroke-opacity: 0.7;
+                stroke-width: 1;
+            }
+        }
+
+        .recenter-button {
+            position: absolute;
+            bottom: 130px;
+            right: 20px;
+            background: white;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            border: none;
+            cursor: pointer;
+        }
+
+        .recenter-button:active {
+            transform: scale(0.98);
+        }
+
+        .recenter-button svg {
+            fill: #3b82f6;
+            width: 24px;
+            height: 24px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <div class="navigation-header">
+        <button class="back-button" onclick="returnToMainMap()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+            </svg>
+        </button>
+        <div class="destination-info">
+            <div class="destination-name" id="destination-name">Loading destination...</div>
+            <div class="destination-address" id="destination-address">...</div>
+        </div>
+        <button class="navigation-close" onclick="exitNavigation()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                <path fill="currentColor"
+                    d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+            </svg>
+        </button>
+    </div>
+
+    <div class="navigation-info" id="navigation-info">
+        <div class="instruction">
+            <div class="turn-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <path fill="currentColor"
+                        d="M17,12L12,17V14H8V10H12V7L17,12M2,12A10,10 0 0,1 12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12M4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4A8,8 0 0,0 4,12Z" />
+                </svg>
+            </div>
+            <div class="instruction-text" id="instruction-text">Menghitung rute terbaik...</div>
+        </div>
+        <div class="distance-time">
+            <div class="distance">
+                <div class="value" id="distance-value">--</div>
+                <div class="label">Jarak</div>
+            </div>
+            <div class="time">
+                <div class="value" id="time-value">--</div>
+                <div class="label">Waktu</div>
+            </div>
+        </div>
+    </div>
+
+    <button class="recenter-button" onclick="centerOnLocation()">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path
+                d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
+        </svg>
+    </button>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <script src="https://unpkg.com/leaflet-gesture-handling@0.6.0/dist/leaflet-gesture-handling.js"></script>
+    <script>
+        // Global variables for navigation
+        let map, currentLocationMarker, destinationMarker, locationAccuracyCircle, routeControl;
+        let userLatitude, userLongitude, destinationLatitude, destinationLongitude;
+        let destinationName, destinationAddress;
+        let autoCenterMap = true;
+        let followUserLocation = true;
+
+        // Icons definition
+        const currentLocationIcon = L.icon({
+            iconUrl: 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/markerBaseLocation.png',
+            iconSize: [40, 40],
+            iconAnchor: [20, 20],
+        });
+
+        const destinationIcon = L.icon({
+            iconUrl: 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/waterSelected.png',
+            iconSize: [40, 40],
+            iconAnchor: [20, 40],
+        });
+
+        // Initialize map
+        function initMap() {
+            map = L.map('map', {
+                renderer: L.canvas(),
+                gestureHandling: true,
+                zoomControl: false
+            }).setView([-6.354952, 106.659897], 15);
+
+            // Add tile layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?lang=id').addTo(map);
+
+            // Move zoom control to right
+            L.control.zoom({
+                position: 'bottomright'
+            }).addTo(map);
+
+            // Listen for messages from React Native
+            setupMessageListener();
+
+            return true;
+        }
+
+        // Handle messages from React Native
+        function setupMessageListener() {
+            window.addEventListener('message', function (event) {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    if (data.type === 'navigationData') {
+                        // Validate data first
+                        const userLat = parseFloat(data.userLatitude);
+                        const userLng = parseFloat(data.userLongitude);
+                        const destLat = parseFloat(data.destinationLatitude);
+                        const destLng = parseFloat(data.destinationLongitude);
+
+                        if (isNaN(userLat) || isNaN(userLng) || isNaN(destLat) || isNaN(destLng)) {
+                            console.error('Invalid coordinates in navigationData:', data);
+                            return;
+                        }
+
+                        // Initialize navigation with the provided data
+                        initNavigation(
+                            userLat,
+                            userLng,
+                            destLat,
+                            destLng,
+                            data.destinationName || 'Tujuan',
+                            data.destinationAddress || 'Tidak ada alamat'
+                        );
+                    }
+                    else if (data.type === 'updateUserLocation') {
+                        // Validate data first
+                        const lat = parseFloat(data.latitude);
+                        const lng = parseFloat(data.longitude);
+                        const accuracy = parseFloat(data.accuracy);
+
+                        if (isNaN(lat) || isNaN(lng)) {
+                            console.error('Invalid coordinates in updateUserLocation:', data);
+                            return;
+                        }
+
+                        // Update user location during navigation
+                        updateUserLocation(lat, lng, accuracy);
+                    }
+                } catch (error) {
+                    console.error('Error processing message from React Native:', error);
+                }
+            });
+        }
+
+        // Initialize navigation
+        function initNavigation(userLat, userLng, destLat, destLng, destName, destAddress) {
+            // Validate and convert coordinates to numbers
+            userLatitude = parseFloat(userLat);
+            userLongitude = parseFloat(userLng);
+            destinationLatitude = parseFloat(destLat);
+            destinationLongitude = parseFloat(destLng);
+
+            // Validate coordinates
+            if (isNaN(userLatitude) || isNaN(userLongitude) ||
+                isNaN(destinationLatitude) || isNaN(destinationLongitude)) {
+                console.error('Invalid coordinates for navigation:',
+                    { userLat, userLng, destLat, destLng });
+                return;
+            }
+
+            destinationName = destName || 'Tujuan';
+            destinationAddress = destAddress || 'Tidak ada alamat';
+
+            // Set initial UI elements
+            document.getElementById('destination-name').textContent = destinationName;
+            document.getElementById('destination-address').textContent = destinationAddress;
+
+            // Add user location marker
+            addUserLocationMarker(userLatitude, userLongitude);
+
+            // Add destination marker
+            addDestinationMarker(destinationLatitude, destinationLongitude);
+
+            // Calculate and display route
+            calculateRoute(
+                [userLatitude, userLongitude],
+                [destinationLatitude, destinationLongitude]
+            );
+
+            // Center map to show both points
+            const bounds = L.latLngBounds(
+                L.latLng(userLatitude, userLongitude),
+                L.latLng(destinationLatitude, destinationLongitude)
+            );
+            map.fitBounds(bounds, { padding: [50, 50] });
+        }
+
+        // Add user's current location marker
+        function addUserLocationMarker(lat, lng) {
+            if (currentLocationMarker) {
+                currentLocationMarker.setLatLng([lat, lng]);
+            } else {
+                currentLocationMarker = L.marker([lat, lng], {
+                    icon: currentLocationIcon,
+                    zIndexOffset: 1000
+                }).addTo(map);
+
+                // Add accuracy circle
+                locationAccuracyCircle = L.circle([lat, lng], {
+                    color: '#3388ff',
+                    fillColor: '#3388ff',
+                    fillOpacity: 0.2,
+                    radius: 20,
+                    className: 'accuracy-circle'
+                }).addTo(map);
+            }
+        }
+
+        // Add destination marker
+        function addDestinationMarker(lat, lng) {
+            if (destinationMarker) {
+                destinationMarker.setLatLng([lat, lng]);
+            } else {
+                destinationMarker = L.marker([lat, lng], {
+                    icon: destinationIcon,
+                    zIndexOffset: 900
+                }).addTo(map)
+                    .bindPopup(`<b>${destinationName}</b><br>${destinationAddress || ''}`)
+                    .openPopup();
+            }
+        }
+
+        // Calculate and display route
+        function calculateRoute(start, end) {
+            try {
+                // If we already have a route control, remove it first
+                if (routeControl) {
+                    map.removeControl(routeControl);
+                }
+
+                // Create new route control
+                routeControl = L.Routing.control({
+                    waypoints: [
+                        L.latLng(start[0], start[1]),
+                        L.latLng(end[0], end[1])
+                    ],
+                    router: L.Routing.osrmv1({
+                        serviceUrl: 'https://router.project-osrm.org/route/v1',
+                        profile: 'driving'
+                    }),
+                    lineOptions: {
+                        styles: [
+                            { color: '#3388ff', opacity: 0.8, weight: 5 },
+                            { color: '#1056db', opacity: 0.3, weight: 8 }
+                        ],
+                        className: 'animate-route'
+                    },
+                    createMarker: function () { return null; }, // Don't create default markers
+                    addWaypoints: false,
+                    draggableWaypoints: false,
+                    fitSelectedRoutes: false,
+                    showAlternatives: false
+                }).addTo(map);
+
+                // Update navigation info when route is calculated
+                routeControl.on('routesfound', function (e) {
+                    const routes = e.routes;
+                    if (!routes || !routes.length) {
+                        console.error('No routes found');
+                        document.getElementById('distance-value').textContent = '0km';
+                        document.getElementById('time-value').textContent = '0 min';
+                        return;
+                    }
+
+                    const summary = routes[0].summary;
+
+                    // Format distance with safe checks
+                    let formattedDistance;
+                    const totalDistance = summary && typeof summary.totalDistance === 'number' ?
+                        summary.totalDistance : 0;
+
+                    if (totalDistance < 1000) {
+                        formattedDistance = `${Math.round(totalDistance)}m`;
+                    } else {
+                        formattedDistance = `${(totalDistance / 1000).toFixed(1)}km`;
+                    }
+
+                    // Format time with safe checks
+                    const totalTime = summary && typeof summary.totalTime === 'number' ?
+                        summary.totalTime : 0;
+
+                    const mins = Math.floor(totalTime / 60);
+                    const formattedTime = mins < 60 ?
+                        `${mins} min` :
+                        `${Math.floor(mins / 60)}h ${mins % 60}min`;
+
+                    // Update UI
+                    document.getElementById('distance-value').textContent = formattedDistance;
+                    document.getElementById('time-value').textContent = formattedTime;
+
+                    // Get next instruction
+                    if (routes[0].instructions) {
+                        updateNextInstruction(routes[0].instructions);
+                    }
+                });
+
+                // Error handling
+                routeControl.on('routingerror', function (e) {
+                    console.error('Routing error:', e.error);
+
+                    // Update UI with error information
+                    document.getElementById('instruction-text').textContent = 'Tidak dapat menghitung rute';
+                    document.getElementById('distance-value').textContent = '?';
+                    document.getElementById('time-value').textContent = '?';
+
+                    // Notify React Native of the error
+                    window.ReactNativeWebView?.postMessage(JSON.stringify({
+                        type: 'routingError',
+                        error: e.error.message || 'Gagal menghitung rute'
+                    }));
+                });
+            } catch (error) {
+                console.error('Error in calculateRoute:', error);
+
+                // Fallback UI updates
+                document.getElementById('instruction-text').textContent = 'Error menghitung rute';
+                document.getElementById('distance-value').textContent = '--';
+                document.getElementById('time-value').textContent = '--';
+            }
+        }
+
+        // Update next instruction for navigation
+        function updateNextInstruction(instructions) {
+            if (!instructions || instructions.length === 0) {
+                return;
+            }
+
+            // Find the next instruction (first one that's not 'reached' status)
+            const nextInstruction = instructions.find(instr => !instr.done) || instructions[0];
+
+            // Update instruction text
+            document.getElementById('instruction-text').textContent = nextInstruction.text || 'Menuju tujuan';
+
+            // Update turn icon based on direction
+            const turnIcon = document.querySelector('.turn-icon');
+
+            // Map OSRM direction type to SVG icons
+            const directionIcons = {
+                'straight': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                              <path fill="#3b82f6" d="M12,2L12,13L9,13L13,17L17,13L14,13L14,2L12,2Z"/>
+                            </svg>`,
+                'right': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                            <path fill="#3b82f6" d="M4,12L8,8L8,11L20,11L20,13L8,13L8,16L4,12Z"/>
+                          </svg>`,
+                'left': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                            <path fill="#3b82f6" d="M20,12L16,16L16,13L4,13L4,11L16,11L16,8L20,12Z"/>
+                          </svg>`,
+                'arrive': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                            <path fill="#3b82f6" d="M12,12A2,2 0 0,0 10,14A2,2 0 0,0 12,16A2,2 0 0,0 14,14A2,2 0 0,0 12,12M6,22A4,4 0 0,1 2,18V6C2,4.89 2.9,4 4,4H7V2H9V4H15V2H17V4H20A2,2 0 0,1 22,6V12H20V6H4V18H12V20H6M17,16V19H14V21H17V24L21,20L17,16Z"/>
+                          </svg>`
+            };
+
+            // Determine icon based on instruction type
+            let icon = directionIcons['straight']; // Default
+
+            if (nextInstruction.type === 'arrive') {
+                icon = directionIcons['arrive'];
+            } else if (nextInstruction.direction) {
+                if (nextInstruction.direction.indexOf('right') !== -1) {
+                    icon = directionIcons['right'];
+                } else if (nextInstruction.direction.indexOf('left') !== -1) {
+                    icon = directionIcons['left'];
+                }
+            }
+
+            // Set the icon
+            turnIcon.innerHTML = icon;
+        }
+
+        // Update user location during navigation
+        function updateUserLocation(lat, lng, accuracy) {
+            if (!currentLocationMarker || !map) return;
+
+            // Validate coordinates
+            if (isNaN(lat) || isNaN(lng)) {
+                console.error('Invalid coordinates for user location update:', lat, lng);
+                return;
+            }
+
+            // Ensure lat and lng are numbers
+            userLatitude = parseFloat(lat);
+            userLongitude = parseFloat(lng);
+
+            // Update marker
+            currentLocationMarker.setLatLng([lat, lng]);
+
+            // Update accuracy circle
+            if (locationAccuracyCircle) {
+                locationAccuracyCircle.setLatLng([lat, lng]);
+                if (accuracy && !isNaN(accuracy) && accuracy > 0) {
+                    locationAccuracyCircle.setRadius(accuracy);
+                }
+            }
+
+            // Recalculate route if needed
+            if (routeControl) {
+                routeControl.setWaypoints([
+                    L.latLng(lat, lng),
+                    L.latLng(destinationLatitude, destinationLongitude)
+                ]);
+            }
+
+            // Auto-center map if enabled
+            if (autoCenterMap) {
+                centerOnLocation();
+            }
+        }
+
+        // Center map on current location
+        function centerOnLocation() {
+            if (!map || !currentLocationMarker) return;
+
+            map.setView(currentLocationMarker.getLatLng(), 18, {
+                animate: true,
+                duration: 0.5
+            });
+
+            autoCenterMap = true;
+        }
+
+        // Exit navigation and inform React Native
+        function exitNavigation() {
+            window.ReactNativeWebView?.postMessage(JSON.stringify({
+                type: 'exitNavigation'
+            }));
+        }
+
+        // Return to main map (stops navigation but stays in navigation view)
+        function returnToMainMap() {
+            window.ReactNativeWebView?.postMessage(JSON.stringify({
+                type: 'returnToMainMap'
+            }));
+        }
+
+        // Disable auto centering when user pans the map
+        function onMapDrag() {
+            autoCenterMap = false;
+        }
+
+        // Initialize the map when the page loads
+        window.onload = function () {
+            initMap();
+
+            // Add event listener to disable auto centering when user interacts with map
+            map.on('dragstart', onMapDrag);
+        };
+
+        // Make functions accessible to React Native
+        window.updateNavigation = function (userLat, userLng, destLat, destLng, destName, destAddress) {
+            initNavigation(userLat, userLng, destLat, destLng, destName, destAddress);
+            return true;
+        };
+
+        window.updateUserPosition = function (lat, lng, accuracy) {
+            updateUserLocation(lat, lng, accuracy);
+            return true;
+        };
+
+        // Manual testing data
+        window.testNavigation = function () {
+            initNavigation(
+                -6.355, 106.658,  // Starting point
+                -6.365, 106.670,  // Destination
+                'Testing Location',
+                'Jl. Testing 123, Jakarta Barat'
+            );
+        };
+    </script>
+</body>
+
+</html>

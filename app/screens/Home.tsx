@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useContext } from 'react';
 
-import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, RefreshControl, ActivityIndicator, Platform, LogBox, ScrollView } from 'react-native';
-import { AntDesign } from '@expo/vector-icons';
+import { StyleSheet, View, Alert, TextInput, FlatList, TouchableOpacity, SafeAreaView, RefreshControl, ActivityIndicator, Platform, LogBox, ScrollView, Text as RNText } from 'react-native';
+import { AntDesign, MaterialIcons } from '@expo/vector-icons';
 import { Marker } from 'react-native-maps'; // Import Marker
 import { BottomSheet, BottomSheetBackdrop, BottomSheetContent, BottomSheetDragIndicator, BottomSheetItem, BottomSheetItemText, BottomSheetPortal, BottomSheetScrollView, BottomSheetTrigger } from '@/components/ui/bottomsheet';
 import Donut from '@/components/Donut';
@@ -52,6 +52,8 @@ import { logout } from '@/controllers/auth';
 import { router } from 'expo-router';
 import CustomDrawer from '../../components/CustomDrawer';
 import { Switch } from '@/components/ui/switch';
+import WebView from 'react-native-webview';
+import * as Location from 'expo-location';
 
 // Notifications.setNotificationHandler({
 //     handleNotification: async () => ({
@@ -198,6 +200,496 @@ interface SensorData {
     speed: number;
 }
 
+// Simple NavigationScreen component implemented directly in the file
+interface NavigationScreenProps {
+    destination: {
+        latitude: number;
+        longitude: number;
+        name: string;
+        address?: string;
+    };
+    onClose: () => void;
+    onReturn: () => void;
+}
+
+const NavigationScreen: React.FC<NavigationScreenProps> = ({ destination, onClose, onReturn }) => {
+    const webViewRef = useRef<WebView>(null);
+    const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
+    const [locationWatchId, setLocationWatchId] = useState<Location.LocationSubscription | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Get user location when component mounts
+    useEffect(() => {
+        const getUserLocation = async () => {
+            try {
+                const { status } = await Location.requestForegroundPermissionsAsync();
+                if (status !== 'granted') {
+                    Alert.alert('Izin Lokasi Diperlukan', 'Aplikasi membutuhkan akses lokasi untuk navigasi');
+                    onClose();
+                    return;
+                }
+
+                setIsLoading(true);
+                const location = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.BestForNavigation,
+                });
+                setUserLocation(location);
+
+                // Start watching location
+                const subscription = await Location.watchPositionAsync(
+                    {
+                        accuracy: Location.Accuracy.BestForNavigation,
+                        distanceInterval: 5,
+                        timeInterval: 3000,
+                    },
+                    (location) => {
+                        setUserLocation(location);
+
+                        // Update the navigation UI with the new location
+                        if (webViewRef.current) {
+                            const { latitude, longitude, accuracy } = location.coords;
+                            const updateScript = `
+                                try {
+                                    window.updateUserPosition(${latitude}, ${longitude}, ${accuracy || 0});
+                                    true;
+                                } catch(e) {
+                                    console.error('Error updating position:', e);
+                                    true;
+                                }
+                            `;
+                            webViewRef.current.injectJavaScript(updateScript);
+                        }
+                    }
+                );
+
+                setLocationWatchId(subscription);
+                setIsLoading(false);
+            } catch (error) {
+                console.error('Error starting navigation:', error);
+                Alert.alert('Error', 'Gagal memulai navigasi. Coba lagi.');
+                onClose();
+            }
+        };
+
+        getUserLocation();
+
+        // Cleanup
+        return () => {
+            if (locationWatchId) {
+                locationWatchId.remove();
+            }
+        };
+    }, []);
+
+    // Initialize navigation when user location is available
+    useEffect(() => {
+        if (!userLocation || !webViewRef.current) return;
+
+        const initScript = `
+            try {
+                window.updateNavigation(
+                    ${userLocation.coords.latitude},
+                    ${userLocation.coords.longitude},
+                    ${destination.latitude},
+                    ${destination.longitude},
+                    "${destination.name.replace(/"/g, '\\"')}",
+                    "${(destination.address || '').replace(/"/g, '\\"')}"
+                );
+                true;
+            } catch(e) {
+                console.error('Error initializing navigation:', e);
+                true;
+            }
+        `;
+
+        webViewRef.current.injectJavaScript(initScript);
+    }, [userLocation, destination]);
+
+    // Handle messages from WebView
+    const handleWebViewMessage = (event: any) => {
+        try {
+            const data = JSON.parse(event.nativeEvent.data);
+
+            if (data.type === 'exitNavigation') {
+                if (locationWatchId) {
+                    locationWatchId.remove();
+                }
+                onClose();
+            } else if (data.type === 'returnToMainMap') {
+                onReturn();
+            }
+        } catch (error) {
+            console.error('Error handling WebView message:', error);
+        }
+    };
+
+    // Create a simple HTML for navigation
+    const navigationHTML = `
+        <!DOCTYPE html>
+        <html lang="id">
+        <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+            <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+            <style>
+                html, body { margin: 0; height: 100%; }
+                #map { width: 100%; height: 100%; }
+                
+                .nav-header {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    background: linear-gradient(135deg, #10b981, #059669);
+                    color: white;
+                    padding: 12px 20px;
+                    z-index: 1000;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                
+                .dest-info {
+                    flex-grow: 1;
+                    margin-left: 15px;
+                }
+                
+                .dest-name {
+                    font-weight: bold;
+                    font-size: 16px;
+                }
+                
+                .dest-address {
+                    font-size: 12px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    max-width: 200px;
+                }
+                
+                .nav-btn {
+                    width: 36px;
+                    height: 36px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 50%;
+                    border: none;
+                    cursor: pointer;
+                }
+                
+                .back-btn {
+                    background: rgba(255,255,255,0.25);
+                    color: white;
+                    margin-right: 10px;
+                }
+                
+                .close-btn {
+                    background: #ff5252;
+                    color: white;
+                }
+                
+                .nav-info {
+                    position: absolute;
+                    bottom: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: white;
+                    padding: 15px 20px;
+                    border-radius: 12px;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                    width: 90%;
+                    max-width: 350px;
+                    z-index: 1000;
+                }
+                
+                .instruction {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 10px;
+                }
+                
+                .turn-icon {
+                    background: #f0f9ff;
+                    width: 48px;
+                    height: 48px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin-right: 15px;
+                }
+                
+                .instruction-text {
+                    font-size: 16px;
+                    font-weight: 500;
+                }
+                
+                .distance-time {
+                    display: flex;
+                    justify-content: space-between;
+                    padding-top: 10px;
+                    border-top: 1px solid #f1f5f9;
+                    margin-top: 10px;
+                }
+                
+                .recenter-btn {
+                    position: absolute;
+                    bottom: 130px;
+                    right: 20px;
+                    background: white;
+                    width: 48px;
+                    height: 48px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                    z-index: 1000;
+                    border: none;
+                }
+            </style>
+        </head>
+        <body>
+            <div id="map"></div>
+            
+            <div class="nav-header">
+                <button class="nav-btn back-btn" onclick="returnToMainMap()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                </button>
+                <div class="dest-info">
+                    <div class="dest-name" id="dest-name">Loading...</div>
+                    <div class="dest-address" id="dest-address"></div>
+                </div>
+                <button class="nav-btn close-btn" onclick="exitNavigation()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            
+            <div class="nav-info">
+                <div class="instruction">
+                    <div class="turn-icon" id="turn-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </div>
+                    <div class="instruction-text" id="instruction">Menghitung rute...</div>
+                </div>
+                <div class="distance-time">
+                    <div>
+                        <div id="distance" style="font-size:18px;font-weight:bold;">--</div>
+                        <div style="font-size:12px;color:#64748b;">Jarak</div>
+                    </div>
+                    <div>
+                        <div id="time" style="font-size:18px;font-weight:bold;">--</div>
+                        <div style="font-size:12px;color:#64748b;">Waktu</div>
+                    </div>
+                </div>
+            </div>
+            
+            <button class="recenter-btn" onclick="centerOnLocation()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+            
+            <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+            <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+            <script>
+                // Global variables
+                let map, userMarker, destMarker, route;
+                let userLat, userLng, destLat, destLng;
+                
+                // Initialize map
+                map = L.map('map').setView([0, 0], 15);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(map);
+                
+                // Icons
+                const userIcon = L.icon({
+                    iconUrl: 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/markerBaseLocation.png',
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 20]
+                });
+                
+                const destIcon = L.icon({
+                    iconUrl: 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/waterSelected.png',
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 40]
+                });
+                
+                // Initialize navigation
+                function updateNavigation(uLat, uLng, dLat, dLng, name, address) {
+                    userLat = uLat;
+                    userLng = uLng;
+                    destLat = dLat;
+                    destLng = dLng;
+                    
+                    // Update destination info
+                    document.getElementById('dest-name').textContent = name || 'Tujuan';
+                    document.getElementById('dest-address').textContent = address || '';
+                    
+                    // Add user marker
+                    if (userMarker) {
+                        userMarker.setLatLng([userLat, userLng]);
+                    } else {
+                        userMarker = L.marker([userLat, userLng], {
+                            icon: userIcon,
+                            zIndexOffset: 1000
+                        }).addTo(map);
+                    }
+                    
+                    // Add destination marker
+                    if (destMarker) {
+                        destMarker.setLatLng([destLat, destLng]);
+                    } else {
+                        destMarker = L.marker([destLat, destLng], {
+                            icon: destIcon,
+                            zIndexOffset: 900
+                        }).addTo(map);
+                    }
+                    
+                    // Calculate route
+                    calculateRoute();
+                    
+                    // Center map to show both points
+                    const bounds = L.latLngBounds(
+                        L.latLng(userLat, userLng),
+                        L.latLng(destLat, destLng)
+                    );
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                    
+                    return true;
+                }
+                
+                // Update user position
+                function updateUserPosition(lat, lng, accuracy) {
+                    if (!userMarker) return false;
+                    
+                    userLat = lat;
+                    userLng = lng;
+                    userMarker.setLatLng([lat, lng]);
+                    
+                    // Recalculate route
+                    calculateRoute();
+                    
+                    return true;
+                }
+                
+                // Calculate route
+                function calculateRoute() {
+                    if (route) {
+                        map.removeControl(route);
+                    }
+                    
+                    route = L.Routing.control({
+                        waypoints: [
+                            L.latLng(userLat, userLng),
+                            L.latLng(destLat, destLng)
+                        ],
+                        router: L.Routing.osrmv1({
+                            serviceUrl: 'https://router.project-osrm.org/route/v1',
+                            profile: 'driving'
+                        }),
+                        lineOptions: {
+                            styles: [
+                                {color: '#3388ff', opacity: 0.8, weight: 5},
+                                {color: '#1056db', opacity: 0.3, weight: 8}
+                            ]
+                        },
+                        createMarker: function() { return null; },
+                        addWaypoints: false,
+                        draggableWaypoints: false,
+                        fitSelectedRoutes: false,
+                        showAlternatives: false
+                    }).addTo(map);
+                    
+                    // Update navigation info when route is calculated
+                    route.on('routesfound', function(e) {
+                        const routes = e.routes;
+                        const summary = routes[0].summary;
+                        
+                        // Format distance
+                        let formattedDistance;
+                        if (summary.totalDistance < 1000) {
+                            formattedDistance = Math.round(summary.totalDistance) + 'm';
+                        } else {
+                            formattedDistance = (summary.totalDistance / 1000).toFixed(1) + 'km';
+                        }
+                        
+                        // Format time
+                        const mins = Math.floor(summary.totalTime / 60);
+                        const formattedTime = mins < 60 ? 
+                            mins + ' min' : 
+                            Math.floor(mins / 60) + 'h ' + (mins % 60) + 'min';
+                        
+                        // Update UI
+                        document.getElementById('distance').textContent = formattedDistance;
+                        document.getElementById('time').textContent = formattedTime;
+                        
+                        // Get next instruction
+                        const instruction = routes[0].instructions[0];
+                        document.getElementById('instruction').textContent = instruction.text;
+                        
+                        // Send data to React Native
+                        window.ReactNativeWebView.postMessage(JSON.stringify({
+                            type: 'routeInfo',
+                            data: {
+                                distance: summary.totalDistance,
+                                time: summary.totalTime,
+                                instruction: instruction.text
+                            }
+                        }));
+                    });
+                }
+                
+                // Center map on user location
+                function centerOnLocation() {
+                    if (!userMarker) return;
+                    
+                    map.setView(userMarker.getLatLng(), 18, {
+                        animate: true,
+                        duration: 0.5
+                    });
+                }
+                
+                // Exit navigation
+                function exitNavigation() {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'exitNavigation'
+                    }));
+                }
+                
+                // Return to main map
+                function returnToMainMap() {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'returnToMainMap'
+                    }));
+                }
+            </script>
+        </body>
+        </html>
+    `;
+
+    return isLoading ? (
+        <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#3b82f6" />
+            <Text size="md" className="mt-2">Memulai Navigasi...</Text>
+        </View>
+    ) : (
+        <View style={StyleSheet.absoluteFill}>
+            <WebView
+                ref={webViewRef}
+                source={{ html: navigationHTML }}
+                style={StyleSheet.absoluteFill}
+                onMessage={handleWebViewMessage}
+                originWhitelist={['*']}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                geolocationEnabled={true}
+            />
+        </View>
+    );
+};
+
 const HomeScreen = () => {
     const [destination, setDestination] = useState<{ latitude: number, longitude: number } | null>(null); // Untuk marker destinasi
     const [address, setAddress] = useState<string | null>(null); // Untuk menyimpan alamat lengkap
@@ -224,39 +716,10 @@ const HomeScreen = () => {
         longitude: 0
     });
     const [savedLocation, setSavedLocation] = useState<SavedLocation | null>(null); // Change to single location
-    // const [showSavedLocationsDialog, setShowSavedLocationsDialog] = useState(false);
-    // const [isFetchingLocation, setIsFetchingLocation] = useState(false);
-    // const [location, setLocation] = useState<[number, number] | null>(null);
-    // const [channels, setChannels] = useState<Notifications.NotificationChannel[]>([]);
-    // const [notification, setNotification] = useState<Notifications.Notification | undefined>(
-    //     undefined
-    // );
-    // const notificationListener = useRef<Notifications.EventSubscription>();
-    // const responseListener = useRef<Notifications.EventSubscription>();
     const [locations, setLocations] = useState<SavedLocation[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoadingLocations, setIsLoadingLocations] = useState(false);
     const [locationsError, setLocationsError] = useState('');
-
-    // useEffect(() => {
-    //     // registerForPushNotificationsAsync().then(token => token && setExpoPushToken(token));
-
-    //     if (Platform.OS === 'android') {
-    //         Notifications.getNotificationChannelsAsync().then(value => setChannels(value ?? []));
-    //     }
-    //     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-    //         setNotification(notification);
-    //     });
-
-    //     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-    //         console.log(response);
-    //     }); return () => {
-    //         notificationListener.current &&
-    //             Notifications.removeNotificationSubscription(notificationListener.current);
-    //         responseListener.current &&
-    //             Notifications.removeNotificationSubscription(responseListener.current);
-    //     };
-    // }, []);
 
     // Tambah ref untuk input
     const riverNameInputRef = useRef<TextInput>(null);
@@ -352,61 +815,6 @@ const HomeScreen = () => {
             }
         };
     }, [savedLocation]); // Tambahkan savedLocation ke dependency array
-
-    // useEffect(() => {
-    //     const setupNotifications = async () => {
-    //         const { status } = await Notifications.requestPermissionsAsync();
-    //         if (status !== 'granted') {
-    //             Alert.alert('Izin notifikasi diperlukan untuk mendapatkan peringatan perangkat');
-    //         }
-    //     };
-    //     setupNotifications();
-    // }, []);
-
-    // useEffect(() => {
-    //     if (!mqttData || !savedLocation) return;
-
-    //     const checkDistance = async () => {
-    //         try {
-    //             const deviceLat = parseFloat(mqttData.message.latitude);
-    //             const deviceLon = parseFloat(mqttData.message.longitude);
-    //             const userLat = savedLocation[0];
-    //             const userLon = savedLocation[1];
-
-    //             const distance = calculateDistance(
-    //                 userLat, userLon,
-    //                 deviceLat, deviceLon
-    //             );
-
-    //             if (distance >= 1 && distance <= 10) {
-    //                 await Notifications.scheduleNotificationAsync({
-    //                     content: {
-    //                         title: "🚨 Perangkat IOT Dekat!",
-    //                         body: `Perangkat berada dalam jarak ${distance.toFixed(1)} meter`,
-    //                         sound: true,
-    //                         data: {
-    //                             lat: deviceLat,
-    //                             lon: deviceLon
-    //                         },
-    //                         // android: {
-    //                         //     channelId: 'alerts',
-    //                         //     priority: Notifications.AndroidNotificationPriority.HIGH,
-    //                         //     vibrationPattern: [0, 250, 250, 250],
-    //                         // }
-    //                     },
-    //                     trigger: {
-    //                         type: SchedulableTriggerInputTypes.TIME_INTERVAL,
-    //                         seconds: 2,
-    //                     },
-    //                 });
-    //             }
-    //         } catch (error) {
-    //             console.error('Error checking distance:', error);
-    //         }
-    //     };
-
-    //     checkDistance();
-    // }, [mqttData, savedLocation]); // Trigger saat ada update data MQTT atau lokasi user
 
     // Fungsi untuk melakukan reverse geocoding (mengambil alamat dari lat dan lon)
     const fetchAddressFromCoordinates = async (latitude: number, longitude: number): Promise<string | null> => {
@@ -845,6 +1253,59 @@ const HomeScreen = () => {
     // Tambahkan state untuk drawer
     const [drawerOpen, setDrawerOpen] = useState(false);
 
+    // Add state for navigation
+    const [navigationDestination, setNavigationDestination] = useState<{
+        latitude: number;
+        longitude: number;
+        name: string;
+        address?: string;
+    } | null>(null);
+
+    const [isNavigating, setIsNavigating] = useState(false);
+
+    // Add function to start navigation
+    const startNavigation = () => {
+        if (!savedLocation) return;
+
+        // Validate coordinates
+        const latitude = parseFloat(String(savedLocation.latitude));
+        const longitude = parseFloat(String(savedLocation.longitude));
+
+        if (isNaN(latitude) || isNaN(longitude)) {
+            toast.show({
+                placement: 'top',
+                render: () => (
+                    <Toast action="error">
+                        <ToastTitle>Error Navigasi</ToastTitle>
+                        <ToastDescription>Koordinat tujuan tidak valid</ToastDescription>
+                    </Toast>
+                )
+            });
+            return;
+        }
+
+        setNavigationDestination({
+            latitude,
+            longitude,
+            name: savedLocation.nama_sungai || 'Lokasi Monitoring',
+            address: savedLocation.address
+        });
+        setIsNavigating(true);
+        setBottomSheetOpen(false);
+    };
+
+    // Add function to close navigation
+    const closeNavigation = () => {
+        setIsNavigating(false);
+        setNavigationDestination(null);
+    };
+
+    // Add function to minimize navigation (return to map)
+    const minimizeNavigation = () => {
+        setIsNavigating(false);
+        // Keep navigation destination so we can restore it later if needed
+    };
+
     return (
         <>
             {/* Tambahkan CustomDrawer dengan style spesifik untuk memastikan di depan semua komponen */}
@@ -852,7 +1313,7 @@ const HomeScreen = () => {
                 {isFetchingAddress && (
                     <View style={styles.loadingOverlay}>
                         <ActivityIndicator size="large" color="#ea5757" />
-                        <Text style={styles.loadingText}>Mengambil alamat...</Text>
+                        <Text size="md" className="mt-2">Mengambil alamat...</Text>
                     </View>
                 )}
 
@@ -1119,6 +1580,18 @@ const HomeScreen = () => {
                                                                     </BottomSheetItemText>
                                                                 </BottomSheetItem>
                                                             </HStack>
+
+                                                            {/* Add navigation button here */}
+                                                            <BottomSheetItem
+                                                                style={styles.navigationButton}
+                                                                closeOnSelect={true}
+                                                                onPress={startNavigation}
+                                                            >
+                                                                <MaterialIcons name="navigation" size={18} color="white" style={{ marginRight: 6 }} />
+                                                                <BottomSheetItemText style={styles.navigationButtonText}>
+                                                                    Navigasi ke Lokasi
+                                                                </BottomSheetItemText>
+                                                            </BottomSheetItem>
                                                         </View>
                                                     )}
                                                     {isLoadingLocations ? (
@@ -1191,6 +1664,28 @@ const HomeScreen = () => {
                                                                             </BottomSheetItemText>
                                                                         </BottomSheetItem>
                                                                     </HStack>
+
+                                                                    {/* Navigation button for other locations */}
+                                                                    <BottomSheetItem
+                                                                        style={styles.navigationButton}
+                                                                        closeOnSelect={true}
+                                                                        onPress={() => {
+                                                                            // Navigate to this specific location
+                                                                            setNavigationDestination({
+                                                                                latitude: item.latitude,
+                                                                                longitude: item.longitude,
+                                                                                name: item.nama_sungai || 'Lokasi Sungai',
+                                                                                address: item.address
+                                                                            });
+                                                                            setIsNavigating(true);
+                                                                            setBottomSheetOpen(false);
+                                                                        }}
+                                                                    >
+                                                                        <MaterialIcons name="navigation" size={18} color="white" style={{ marginRight: 6 }} />
+                                                                        <BottomSheetItemText style={styles.navigationButtonText}>
+                                                                            Navigasi ke Lokasi
+                                                                        </BottomSheetItemText>
+                                                                    </BottomSheetItem>
                                                                 </View>
                                                             )}
                                                             contentContainerStyle={styles.listContent}
@@ -1387,6 +1882,15 @@ const HomeScreen = () => {
                 sensorData={sensorData}
             /> */}
 
+            {/* Navigation Layer - now uses our internal component */}
+            {isNavigating && navigationDestination && (
+                <NavigationScreen
+                    destination={navigationDestination}
+                    onClose={closeNavigation}
+                    onReturn={minimizeNavigation}
+                />
+            )}
+
         </>
     );
 };
@@ -1394,250 +1898,287 @@ const HomeScreen = () => {
 export default HomeScreen;
 
 const styles = StyleSheet.create({
+    // Layout
     container: {
         flex: 1,
-        backgroundColor: '#f8fafc',
+        position: 'relative',
     },
     map: {
         width: '100%',
         height: '100%',
     },
-    searchBox: {
-        position: 'absolute',
-        top: 6,
-        width: '70%',
-        alignSelf: 'center',
-        backgroundColor: 'white',
-        borderRadius: 8,
-        padding: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.8,
-        shadowRadius: 2,
-        elevation: 5,
-        zIndex: 0,
-    },
-    inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        width: '100%',
-    },
-    input: {
-        flex: 1,
-        height: 40,
-        paddingHorizontal: 10,
-        borderRadius: 8,
-        borderColor: '#ccc',
-        borderWidth: 1,
-    },
-    clearButton: {
-        marginLeft: 8,
-        marginRight: 5,
-    },
-    suggestions: {
-        backgroundColor: 'white',
-        marginTop: 5,
-        borderRadius: 8,
-        padding: 5,
-    },
-    suggestionText: {
-        padding: 10,
-        borderBottomColor: '#ccc',
-        borderBottomWidth: 1,
-    },
+
+    // Loading
     loadingOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(255,255,255,0.8)',
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(255, 255, 255, 0.7)',
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 999
     },
-    loadingText: {
-        marginTop: 10,
-        color: '#333',
-        fontSize: 16
+    loadingContainer: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(255,255,255,0.9)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 2000,
     },
-    savedLocationCard: {
-        backgroundColor: 'white',
-        borderRadius: 12,
-        padding: 16,
+    loadingText: {
+        marginTop: 8,
+        fontSize: 14,
+    },
+
+    // Navigation Button
+    navigationButton: {
+        backgroundColor: '#3b82f6',
+        borderRadius: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
-        shadowRadius: 6,
-        elevation: 3,
-    },
-    locationHeader: {
+        shadowRadius: 3,
+        elevation: 2,
         flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f1f5f9',
-        paddingBottom: 12
     },
-    locationTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#1e293b'
-    },
-    locationDetail: {
-        flexDirection: 'row',
-        gap: 8,
-        alignItems: 'flex-start',
-        marginBottom: 8
-    },
-    detailText: {
-        flex: 1,
-        fontSize: 14,
-        color: '#475569',
-        lineHeight: 20
-    },
-    coordinateBadge: {
-        flexDirection: 'row',
-        gap: 6,
-        alignItems: 'center',
-        backgroundColor: '#f8fafc',
-        padding: 8,
-        borderRadius: 8,
-        marginTop: 8
-    },
-    coordinateText: {
-        fontSize: 13,
-        color: '#64748b',
-        fontFamily: 'monospace'
-    },
-    // Di StyleSheet:
-    loadingIndicator: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.8)',
-        zIndex: 9999
-    },
-    listContent: {
-        paddingBottom: 24
-    },
-    speedometerContainer: {
-        width: '48%',
-        margin: '1%',
-        backgroundColor: 'white',
-        borderRadius: 20,
-        padding: 20,
-        marginBottom: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 6,
-        elevation: 3
-    },
-    sensorTitle: {
-        fontSize: 15,
-        fontWeight: '700',
-        marginBottom: 16,
-        color: '#1e293b',
-        textAlign: 'center',
-        letterSpacing: 0.5
-    },
-    speedometerText: {
-        fontSize: 15,
-        fontWeight: '800',
-        color: '#334155',
-        textAlign: 'center',
-        marginTop: 8
-    },
-    speedometerLabel: {
-        fontSize: 10,
-        color: '#64748b',
-        textAlign: 'center',
-        marginTop: 4
-    },
-    statusText: {
-        marginTop: 12,
-        fontSize: 13,
+    navigationButtonText: {
         color: 'white',
         fontWeight: '600',
-        textAlign: 'center',
-        backgroundColor: '#3b82f6',
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        borderRadius: 20,
-        overflow: 'hidden',
-        alignSelf: 'center'
+        fontSize: 15,
     },
-    coordinateContainer: {
+
+    // Search
+    searchBox: {
+        position: 'absolute',
+        top: 20,
+        left: 20,
+        right: 20,
+        backgroundColor: 'white',
+        borderRadius: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 15,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 1,
+        },
+        shadowOpacity: 0.22,
+        shadowRadius: 2.22,
+        elevation: 3,
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 10,
-        gap: 8,
-    },
-    inputImproved: {
-        backgroundColor: '#f8fafc',
-        borderWidth: 1,
-        borderColor: '#e2e8f0',
-        borderRadius: 8,
-        padding: 12,
-        fontSize: 14,
-        color: '#1e293b',
-    },
-    multilineInput: {
-        height: 80,
-        textAlignVertical: 'top',
-        paddingTop: 12,
-    },
-    footerButtonContainer: {
-        flexDirection: 'row',
-        gap: 12,
-        width: '100%',
-    },
-    searchContainer: {
-        position: 'relative',
-        marginHorizontal: 16,
-        marginBottom: 12,
-    },
-    searchInput: {
-        backgroundColor: '#f1f5f9',
-        borderRadius: 8,
-        padding: 12,
-        paddingLeft: 40,
-        fontSize: 14,
-        color: '#1e293b',
+        alignItems: 'center',
+        zIndex: 1000,
     },
     searchIcon: {
-        position: 'absolute',
-        left: 12,
-        top: 14,
+        marginRight: 10,
     },
+    searchInput: {
+        flex: 1,
+        fontSize: 16,
+        color: '#334155',
+    },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        borderRadius: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        marginBottom: 16,
+    },
+
+    // Bottom Sheet
+    bottomSheet: {
+        backgroundColor: 'white',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingTop: 8,
+    },
+    indicator: {
+        width: 40,
+        height: 4,
+        backgroundColor: '#e2e8f0',
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: 8,
+    },
+
+    // Location
     locationCard: {
         backgroundColor: 'white',
         borderRadius: 12,
         padding: 16,
-        marginHorizontal: 16,
-        marginBottom: 12,
+        marginBottom: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: {
+            width: 0,
+            height: 1,
+        },
         shadowOpacity: 0.1,
-        shadowRadius: 6,
-        elevation: 3,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    locationHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
     },
     cardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
         marginBottom: 8,
+    },
+    locationTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginLeft: 12,
+        color: '#1f2937',
+    },
+    locationDetail: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: 8,
+    },
+    detailText: {
+        marginLeft: 8,
+        fontSize: 14,
+        color: '#64748b',
+        flex: 1,
+    },
+    coordinateBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        borderRadius: 6,
+        padding: 10,
+        marginBottom: 12,
+    },
+    coordinateText: {
+        fontSize: 13,
+        color: '#64748b',
+        marginLeft: 3,
+    },
+
+    // Buttons
+    locationButton: {
+        flex: 1,
+        backgroundColor: '#3b82f6',
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    locationButtonText: {
+        color: 'white',
+        fontWeight: '600',
+    },
+    outlineButton: {
+        flex: 1,
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 8,
+        backgroundColor: 'transparent',
+    },
+    outlineButtonText: {
+        color: '#374151',
+    },
+    actionButton: {
+        flex: 1,
+        backgroundColor: '#10b981',
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 8,
+    },
+    actionButtonText: {
+        color: 'white',
+        fontWeight: '600',
+    },
+
+    // Lists
+    listContent: {
+        paddingHorizontal: 16,
+        paddingTop: 8,
+        paddingBottom: 24,
     },
     locationName: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#1e293b',
+        marginLeft: 8,
+        color: '#1f2937',
+    },
+
+    // Sensor UI
+    speedometerContainer: {
+        width: '48%',
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    sensorTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginBottom: 12,
+        textAlign: 'center',
+        color: '#1f2937',
+    },
+    speedometerText: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    speedometerLabel: {
+        fontSize: 12,
+        color: '#64748b',
+        marginTop: 4,
+    },
+    statusText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#10b981',
+        marginTop: 8,
+    },
+
+    // Tabs
+    tabContainer: {
+        flexDirection: 'row',
+        paddingHorizontal: 16,
+        marginBottom: 8,
+    },
+    tabItem: {
+        flex: 1,
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderBottomWidth: 2,
+        borderBottomColor: 'transparent',
+    },
+    activeTab: {
+        borderBottomColor: '#3b82f6',
+    },
+    tabText: {
+        fontSize: 15,
+        fontWeight: '500',
+    },
+    activeTabText: {
+        color: '#3b82f6',
+        fontWeight: '600',
     },
     toggleContainer: {
         flexDirection: 'row',
@@ -1679,9 +2220,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    activeToggleTab: {
-        // Empty as we're using the animated indicator instead
-    },
     toggleButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1698,63 +2236,26 @@ const styles = StyleSheet.create({
         color: '#ea5757',
         fontWeight: '600',
     },
-    locationButton: {
-        flex: 1,
-        backgroundColor: '#10b981', // emerald-500
-        borderRadius: 8,
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 2,
+    activeToggleTab: {
+        // Just for consistency, not actually needed for styling since indicator is separate
     },
-    locationButtonText: {
-        color: 'white',
-        fontWeight: '600',
-        fontSize: 14,
-    },
-    outlineButton: {
-        flex: 1,
-        backgroundColor: 'white',
+    inputImproved: {
+        backgroundColor: '#f8fafc',
         borderWidth: 1,
         borderColor: '#e2e8f0',
         borderRadius: 8,
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 12,
-        marginLeft: 8,
-    },
-    outlineButtonText: {
-        color: '#0f172a',
-        fontWeight: '500',
+        padding: 12,
         fontSize: 14,
+        color: '#1e293b',
     },
-    actionButton: {
-        flex: 1,
-        backgroundColor: '#3b82f6', // blue-500
-        borderRadius: 8,
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 12,
-        marginRight: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 2,
+    multilineInput: {
+        height: 80,
+        textAlignVertical: 'top',
+        paddingTop: 12,
     },
-    actionButtonText: {
-        color: 'white',
-        fontWeight: '600',
-        fontSize: 14,
+    footerButtonContainer: {
+        flexDirection: 'row',
+        gap: 12,
+        width: '100%',
     },
 });

@@ -883,6 +883,35 @@
               </div>
             </div>
             
+            <!-- Navigation button -->
+            <button onclick="handleNavigateToLocation(
+              ${safeLat},
+              ${safeLon},
+              '${safeNama}',
+              '${safeAlamat}'
+            )" 
+            style="width: 100%;
+                  background: linear-gradient(145deg, #10b981, #059669);
+                  color: white;
+                  border: none;
+                  padding: 12px 20px;
+                  border-radius: 8px;
+                  cursor: pointer;
+                  margin-bottom: 10px;
+                  font-weight: 600;
+                  letter-spacing: 0.5px;
+                  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                  transition: all 0.3s ease;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  gap: 8px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm3.5 7.5a.5.5 0 0 1 0 1H5.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L5.707 7.5H11.5z"/>
+              </svg>
+              <span>Navigasi ke Lokasi</span>
+            </button>
+            
             <button onclick="handleSetMonitoringLocation(
               ${properties.id_lokasi || 0},
               ${safeLat},
@@ -916,22 +945,40 @@
       `;
     }
 
-    function handleSetMonitoringLocation(id, lat, lon, nama, alamat) {
-      if (isNaN(lat) || isNaN(lon)) {
-        console.error('Koordinat tidak valid');
+    // Function to handle navigation to selected location
+    function handleNavigateToLocation(lat, lon, nama, alamat) {
+      // Validate input first
+      if (lat === undefined || lon === undefined || isNaN(lat) || isNaN(lon)) {
+        console.error('Koordinat tidak valid untuk navigasi:', { lat, lon });
         return;
       }
 
+      // Ensure values are valid numbers
+      const latitude = parseFloat(parseFloat(lat).toFixed(7));
+      const longitude = parseFloat(parseFloat(lon).toFixed(7));
+
+      // Double-check the parsed values
+      if (isNaN(latitude) || isNaN(longitude) ||
+        Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+        console.error('Koordinat di luar batas yang valid:', { latitude, longitude });
+        return;
+      }
+
+      console.log('Mengirim permintaan navigasi ke koordinat:', { latitude, longitude });
+
+      // Send message to React Native for navigation with validated coordinates
       window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'setMonitoringLocation', // Ubah type menjadi setMonitoringLocation
+        type: 'navigateToLocation',
         data: {
-          id_lokasi: id,
-          latitude: lat,
-          longitude: lon,
-          nama_sungai: nama,
-          address: alamat || ''
+          latitude: latitude,
+          longitude: longitude,
+          nama_lokasi: nama || 'Lokasi',
+          alamat: alamat || ''
         }
       }));
+
+      // Close any open popups
+      map.closePopup();
     }
 
     // Fungsi untuk melakukan reverse geocoding
@@ -1287,6 +1334,24 @@
         }
       }
     };
+
+    function handleSetMonitoringLocation(id, lat, lon, nama, alamat) {
+      if (isNaN(lat) || isNaN(lon)) {
+        console.error('Koordinat tidak valid');
+        return;
+      }
+
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'setMonitoringLocation', // Ubah type menjadi setMonitoringLocation
+        data: {
+          id_lokasi: id,
+          latitude: lat,
+          longitude: lon,
+          nama_sungai: nama,
+          address: alamat || ''
+        }
+      }));
+    }
   </script>
 </body>
 

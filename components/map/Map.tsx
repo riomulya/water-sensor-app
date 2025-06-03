@@ -688,7 +688,7 @@ const Map = forwardRef(({ onLocationSelect, ...props }: Props, ref) => {
                             try {
                                 console.log('Injecting new location:', ${latitude}, ${longitude});
                                 if (window.updateMapLocation) {
-                                    window.updateMapLocation(${latitude}, ${longitude});
+                                console.log('Injecting new location:', ${latitude}, ${longitude});
                                 } else {
                                     console.error('updateMapLocation function not found');
                                 }
