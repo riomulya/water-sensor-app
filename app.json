@@ -7,6 +7,7 @@
     "icon": "./assets/images/LogoSplash.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
     "assetBundlePatterns": [
       "**/*",
       "./assets/images/marker_base_location.png",
