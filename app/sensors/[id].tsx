@@ -1,14 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
     View, Text, StyleSheet, ScrollView,
     TextInput, TouchableOpacity, ActivityIndicator,
     Alert, KeyboardAvoidingView, Platform, Modal,
-    Pressable
+    Pressable, Dimensions
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useToast } from '@/components/ui/toast';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import { port } from '../../constants/https';
+import { WebView } from 'react-native-webview';
+import { Asset } from 'expo-asset';
+import * as FileSystem from 'expo-file-system';
+import { StatusBar } from 'expo-status-bar';
 
 interface Location {
     id_lokasi: number;
@@ -35,6 +39,42 @@ interface SensorData {
     lat: string;
     lon: string;
     location?: Location;
+    data_lokasi?: Location;
+    data_ph?: {
+        nilai_ph: number;
+        lat: string;
+        lon: string;
+    };
+    data_temperature?: {
+        nilai_temperature: number;
+        lat: string;
+        lon: string;
+    };
+    data_turbidity?: {
+        nilai_turbidity: number;
+        lat: string;
+        lon: string;
+    };
+    data_accel_x?: {
+        nilai_accel_x: number;
+        lat: string;
+        lon: string;
+    };
+    data_accel_y?: {
+        nilai_accel_y: number;
+        lat: string;
+        lon: string;
+    };
+    data_accel_z?: {
+        nilai_accel_z: number;
+        lat: string;
+        lon: string;
+    };
+    data_speed?: {
+        nilai_speed: number;
+        lat: string;
+        lon: string;
+    };
     [key: string]: any; // Allow any additional properties
 }
 
@@ -137,6 +177,9 @@ export default function SensorDetailScreen() {
     const [isEditing, setIsEditing] = useState(false);
     const [editedValues, setEditedValues] = useState<Record<string, number>>({});
     const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+    const [webViewContent, setWebViewContent] = useState<string | null>(null);
+    const [mapLoading, setMapLoading] = useState(true);
+    const leafletRef = useRef(null);
 
     // New state for prediction update
     const [isPredictionEditing, setIsPredictionEditing] = useState(false);
@@ -147,8 +190,13 @@ export default function SensorDetailScreen() {
     });
     const [showPredictionUpdateModal, setShowPredictionUpdateModal] = useState(false);
 
+    const [fullscreenMap, setFullscreenMap] = useState(false);
+    const fullscreenMapRef = useRef(null);
+    const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
+
     useEffect(() => {
         fetchSensorData();
+        loadMapHtml();
     }, [id, sensorType]);
 
     const fetchLocationData = async (id_lokasi: number) => {
@@ -228,6 +276,7 @@ export default function SensorDetailScreen() {
             }
 
             const result = await response.json();
+            console.log('API Response:', JSON.stringify(result, null, 2));
 
             let sensorDetail: SensorData | null = null;
 
@@ -241,6 +290,16 @@ export default function SensorDetailScreen() {
                     lon: result.data.data_lokasi?.lon || "",
                     location: result.data.data_lokasi,
                 };
+
+                // Preserve all the original API response data
+                sensorDetail.data_lokasi = result.data.data_lokasi;
+                sensorDetail.data_ph = result.data.data_ph;
+                sensorDetail.data_temperature = result.data.data_temperature;
+                sensorDetail.data_turbidity = result.data.data_turbidity;
+                sensorDetail.data_accel_x = result.data.data_accel_x;
+                sensorDetail.data_accel_y = result.data.data_accel_y;
+                sensorDetail.data_accel_z = result.data.data_accel_z;
+                sensorDetail.data_speed = result.data.data_speed;
 
                 // Add all sensor values to the sensorDetail object
                 if (result.data.data_ph) {
@@ -273,6 +332,17 @@ export default function SensorDetailScreen() {
             } else {
                 throw new Error('Unexpected API response format');
             }
+
+            console.log('Processed sensor data:', JSON.stringify({
+                id: sensorDetail.id,
+                id_lokasi: sensorDetail.id_lokasi,
+                has_data_lokasi: !!sensorDetail.data_lokasi,
+                data_lokasi_lat: sensorDetail.data_lokasi?.lat,
+                data_lokasi_lon: sensorDetail.data_lokasi?.lon,
+                has_data_ph: !!sensorDetail.data_ph,
+                has_data_temperature: !!sensorDetail.data_temperature,
+                has_data_turbidity: !!sensorDetail.data_turbidity
+            }, null, 2));
 
             setSensorData(sensorDetail);
 
@@ -545,6 +615,521 @@ export default function SensorDetailScreen() {
         }
     }, [sensorData]);
 
+    // Load the HTML content for Leaflet map
+    const loadMapHtml = async () => {
+        try {
+            setMapLoading(true);
+            const path = require("../../assets/leaflet.html");
+            console.log("Loading leaflet.html:", path);
+            const asset = Asset.fromModule(path);
+            await asset.downloadAsync();
+            console.log("Asset downloaded successfully:", asset.localUri);
+            const htmlContent = await FileSystem.readAsStringAsync(asset.localUri!);
+            console.log("HTML loaded, length:", htmlContent.length);
+            setWebViewContent(htmlContent);
+            setMapLoading(false);
+        } catch (error) {
+            console.error('Error loading HTML:', error);
+            setMapLoading(false);
+        }
+    };
+
+    // Update markers on map when sensor data is loaded
+    useEffect(() => {
+        if (sensorData && webViewContent && leafletRef.current) {
+            updateMapMarkers(leafletRef.current);
+        }
+    }, [sensorData, webViewContent, anomalyInfo]);
+
+    // Update markers on fullscreen map when opened
+    useEffect(() => {
+        if (fullscreenMap && fullscreenMapRef.current && sensorData && webViewContent) {
+            updateMapMarkers(fullscreenMapRef.current);
+        }
+    }, [fullscreenMap]);
+
+    // Function to update map markers for any WebView reference
+    const updateMapMarkers = (webViewRef) => {
+        try {
+            console.log('Attempting to update map markers with data:', JSON.stringify({
+                hasData: !!sensorData,
+                hasDataLokasi: sensorData?.data_lokasi ? 'yes' : 'no'
+            }));
+
+            // Use data_lokasi if available, otherwise try location
+            let locationData = sensorData?.data_lokasi;
+            if (!locationData && sensorData?.location) {
+                locationData = sensorData.location;
+                console.log('Using fallback location data');
+            }
+
+            if (!locationData || !locationData.lat || !locationData.lon) {
+                console.error("No location data available, attempting to use sensor location as fallback");
+
+                // If no location data, try to use a sensor's location as a fallback
+                if (sensorData?.data_ph?.lat && sensorData?.data_ph?.lon) {
+                    locationData = {
+                        id_lokasi: sensorData.id_lokasi || 0,
+                        lat: sensorData.data_ph.lat,
+                        lon: sensorData.data_ph.lon
+                    };
+                } else if (sensorData?.data_temperature?.lat && sensorData?.data_temperature?.lon) {
+                    locationData = {
+                        id_lokasi: sensorData.id_lokasi || 0,
+                        lat: sensorData.data_temperature.lat,
+                        lon: sensorData.data_temperature.lon
+                    };
+                } else if (sensorData?.data_turbidity?.lat && sensorData?.data_turbidity?.lon) {
+                    locationData = {
+                        id_lokasi: sensorData.id_lokasi || 0,
+                        lat: sensorData.data_turbidity.lat,
+                        lon: sensorData.data_turbidity.lon
+                    };
+                } else {
+                    // Default to center of Indonesia if we really have no location data
+                    locationData = {
+                        id_lokasi: sensorData?.id_lokasi || 0,
+                        lat: "-2.5489",
+                        lon: "118.0149"
+                    };
+                    console.log('Using default Indonesia coordinates');
+                }
+            }
+
+            // Parse location coordinates with proper conversion to ensure they're numeric
+            const locationPosition = {
+                lat: parseFloat(String(locationData.lat).replace(',', '.')),
+                lng: parseFloat(String(locationData.lon).replace(',', '.'))
+            };
+
+            console.log('Location position:', locationPosition);
+
+            const sensorPositions = [];
+
+            // Check if all sensor coordinates are the same
+            let allSensorsSamePosition = true;
+            let sensorLat = null;
+            let sensorLon = null;
+
+            // Get first sensor with coordinates
+            if (sensorData?.data_ph?.lat) {
+                sensorLat = sensorData.data_ph.lat;
+                sensorLon = sensorData.data_ph.lon;
+            } else if (sensorData?.data_temperature?.lat) {
+                sensorLat = sensorData.data_temperature.lat;
+                sensorLon = sensorData.data_temperature.lon;
+            } else if (sensorData?.data_turbidity?.lat) {
+                sensorLat = sensorData.data_turbidity.lat;
+                sensorLon = sensorData.data_turbidity.lon;
+            }
+
+            // Check if all sensors have the same coordinates
+            if (sensorLat && sensorLon) {
+                if (sensorData?.data_ph?.lat && (sensorData.data_ph.lat !== sensorLat || sensorData.data_ph.lon !== sensorLon)) {
+                    allSensorsSamePosition = false;
+                }
+                if (sensorData?.data_temperature?.lat && (sensorData.data_temperature.lat !== sensorLat || sensorData.data_temperature.lon !== sensorLon)) {
+                    allSensorsSamePosition = false;
+                }
+                if (sensorData?.data_turbidity?.lat && (sensorData.data_turbidity.lat !== sensorLat || sensorData.data_turbidity.lon !== sensorLon)) {
+                    allSensorsSamePosition = false;
+                }
+            }
+
+            console.log("All sensors at same position:", allSensorsSamePosition);
+
+            // Create combined sensor info for display
+            const combinedSensorInfo = [];
+
+            if (sensorData?.data_ph?.nilai_ph !== undefined) {
+                combinedSensorInfo.push({
+                    type: "pH",
+                    value: sensorData.data_ph.nilai_ph,
+                    icon: "🧪",
+                    color: "#10b981"
+                });
+            }
+
+            if (sensorData?.data_temperature?.nilai_temperature !== undefined) {
+                combinedSensorInfo.push({
+                    type: "Temperature",
+                    value: sensorData.data_temperature.nilai_temperature,
+                    icon: "🌡️",
+                    color: "#f59e0b"
+                });
+            }
+
+            if (sensorData?.data_turbidity?.nilai_turbidity !== undefined) {
+                combinedSensorInfo.push({
+                    type: "Turbidity",
+                    value: sensorData.data_turbidity.nilai_turbidity,
+                    icon: "💧",
+                    color: "#6366f1"
+                });
+            }
+
+            if (allSensorsSamePosition && sensorLat && sensorLon) {
+                // Add a single marker for all sensors
+                sensorPositions.push({
+                    type: "Combined",
+                    lat: parseFloat(String(sensorLat).replace(',', '.')),
+                    lng: parseFloat(String(sensorLon).replace(',', '.')),
+                    sensorInfo: combinedSensorInfo
+                });
+            } else {
+                // Add individual sensor positions if they exist - use safer parsing
+                if (sensorData?.data_ph?.lat && sensorData?.data_ph?.lon) {
+                    sensorPositions.push({
+                        type: "pH",
+                        lat: parseFloat(String(sensorData.data_ph.lat).replace(',', '.')),
+                        lng: parseFloat(String(sensorData.data_ph.lon).replace(',', '.')),
+                        value: sensorData.data_ph.nilai_ph
+                    });
+                }
+
+                if (sensorData?.data_temperature?.lat && sensorData?.data_temperature?.lon) {
+                    sensorPositions.push({
+                        type: "Temperature",
+                        lat: parseFloat(String(sensorData.data_temperature.lat).replace(',', '.')),
+                        lng: parseFloat(String(sensorData.data_temperature.lon).replace(',', '.')),
+                        value: sensorData.data_temperature.nilai_temperature
+                    });
+                }
+
+                if (sensorData?.data_turbidity?.lat && sensorData?.data_turbidity?.lon) {
+                    sensorPositions.push({
+                        type: "Turbidity",
+                        lat: parseFloat(String(sensorData.data_turbidity.lat).replace(',', '.')),
+                        lng: parseFloat(String(sensorData.data_turbidity.lon).replace(',', '.')),
+                        value: sensorData.data_turbidity.nilai_turbidity
+                    });
+                }
+            }
+
+            console.log("Sensor positions:", JSON.stringify(sensorPositions));
+
+            const jsCode = `
+                try {
+                    // Initialize map
+                    if (!window.mapInitialized) {
+                        window.mapInitialized = true;
+                        
+                        console.log("Initializing map");
+                        
+                        // Set initial view to Indonesia
+                        const map = L.map('root', {
+                            attributionControl: false,
+                            zoomControl: true,
+                            dragging: true,        // Enable dragging
+                            tap: true,             // Enable tap
+                            touchZoom: true,       // Enable touch zoom
+                            doubleClickZoom: true, // Enable double click zoom
+                            boxZoom: true,         // Enable box zoom
+                            keyboard: true,        // Enable keyboard navigation
+                            scrollWheelZoom: true, // Enable scroll wheel zoom
+                            inertia: true          // Enable inertia
+                        }).setView([${locationPosition.lat}, ${locationPosition.lng}], 5); // Center at location position
+                        
+                        // Add OSM tile layer with less cluttered look
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        }).addTo(map);
+                        
+                        window.map = map;
+                        window.markers = [];
+
+                        // Add attribution control at the bottom right
+                        L.control.attribution({
+                            position: 'bottomright'
+                        }).addAttribution('&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>').addTo(map);
+                        
+                        // Enable one-finger dragging for touch devices
+                        map.getContainer().addEventListener('touchstart', function(e) {
+                            if (e.touches.length === 1) {
+                                e.stopPropagation();
+                            }
+                        }, { passive: false });
+                        
+                        // Force the map to handle touch events properly
+                        const handleTouch = function(e) {
+                            if (e.touches.length === 1) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                            }
+                        };
+                        
+                        document.getElementById('root').style.touchAction = 'none';
+                        document.body.addEventListener('touchmove', handleTouch, { passive: false });
+                    }
+                    
+                    // Clear existing markers
+                    if (window.markers) {
+                        window.markers.forEach(marker => {
+                            if (marker && window.map) window.map.removeLayer(marker);
+                        });
+                        window.markers = [];
+                    }
+                    
+                    // Add location marker
+                    const locationPosition = ${JSON.stringify(locationPosition)};
+                    console.log("JS Location position:", JSON.stringify(locationPosition));
+                    
+                    if (locationPosition && !isNaN(locationPosition.lat) && !isNaN(locationPosition.lng)) {
+                        const locationIcon = L.divIcon({
+                            className: 'location-marker',
+                            html: '<div style="background-color: #3b82f6; width: 24px; height: 24px; border-radius: 24px; border: 3px solid white; box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);"></div>',
+                            iconSize: [30, 30],
+                            iconAnchor: [15, 15]
+                        });
+                        
+                        try {
+                            const locationMarker = L.marker([locationPosition.lat, locationPosition.lng], { 
+                                icon: locationIcon 
+                            }).addTo(window.map);
+                            
+                            locationMarker.bindPopup('<b>Lokasi Utama</b><br>Koordinat: ' + 
+                                locationPosition.lat.toFixed(6) + ', ' + locationPosition.lng.toFixed(6) + 
+                                '<br><small>' + (${JSON.stringify(sensorData?.data_lokasi?.nama_sungai || '')}) + '</small>');
+                                
+                            window.markers.push(locationMarker);
+                            console.log("Added location marker");
+                            
+                            // Create circle around location
+                            const locationCircle = L.circle([locationPosition.lat, locationPosition.lng], {
+                                color: '#3b82f6',
+                                fillColor: '#3b82f6',
+                                fillOpacity: 0.1,
+                                radius: 500
+                            }).addTo(window.map);
+                            
+                            window.markers.push(locationCircle);
+                            console.log("Added location circle");
+                        } catch (e) {
+                            console.error("Error adding location marker:", e);
+                        }
+                    } else {
+                        console.error("Invalid location coordinates:", locationPosition);
+                    }
+                    
+                    // Add sensor markers
+                    const sensorPositions = ${JSON.stringify(sensorPositions)};
+                    console.log("JS Sensor positions:", JSON.stringify(sensorPositions));
+                    
+                    let hasSensorMarkers = false;
+                    
+                    if (sensorPositions && sensorPositions.length) {
+                        sensorPositions.forEach(sensor => {
+                            if (isNaN(sensor.lat) || isNaN(sensor.lng)) {
+                                console.error("Invalid sensor coordinates:", sensor);
+                                return;
+                            }
+                            
+                            hasSensorMarkers = true;
+                            
+                            try {
+                                if (sensor.type === "Combined") {
+                                    // Create a combined marker for all sensors
+                                    const combinedIcon = L.divIcon({
+                                        className: 'sensor-marker-combined',
+                                        html: '<div style="display: flex; justify-content: center; align-items: center; background-color: #6366f1; width: 40px; height: 40px; border-radius: 20px; border: 3px solid white; box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); font-size: 18px;">⚡️</div>',
+                                        iconSize: [46, 46],
+                                        iconAnchor: [23, 23]
+                                    });
+                                    
+                                    const marker = L.marker([sensor.lat, sensor.lng], { 
+                                        icon: combinedIcon,
+                                        zIndexOffset: 1000
+                                    }).addTo(window.map);
+                                    
+                                    // Create popup content showing all sensor values
+                                    let popupContent = '<div style="min-width: 150px;"><b>Sensors Data</b><br>';
+                                    popupContent += '<hr style="margin: 5px 0; border-color: #e2e8f0;">';
+                                    
+                                    sensor.sensorInfo.forEach(info => {
+                                        popupContent += '<div style="display: flex; align-items: center; margin-bottom: 5px;">';
+                                        popupContent += '<span style="font-size: 16px; margin-right: 5px;">' + info.icon + '</span>';
+                                        popupContent += '<span><b>' + info.type + ':</b> ' + info.value + '</span>';
+                                        popupContent += '</div>';
+                                    });
+                                    
+                                    popupContent += '<hr style="margin: 5px 0; border-color: #e2e8f0;">';
+                                    popupContent += '<small>Koordinat: ' + sensor.lat.toFixed(6) + ', ' + sensor.lng.toFixed(6) + '</small>';
+                                    popupContent += '</div>';
+                                    
+                                    marker.bindPopup(popupContent);
+                                    window.markers.push(marker);
+                                    console.log("Added combined sensors marker");
+                                } else {
+                                    // Add individual sensor marker
+                                    let color;
+                                    let icon;
+                                    
+                                    switch(sensor.type) {
+                                        case 'pH':
+                                            color = '#10b981'; // Green
+                                            icon = '🧪';
+                                            break;
+                                        case 'Temperature':
+                                            color = '#f59e0b'; // Orange
+                                            icon = '🌡️';
+                                            break;
+                                        case 'Turbidity':
+                                            color = '#6366f1'; // Purple
+                                            icon = '💧';
+                                            break;
+                                        default:
+                                            color = '#64748b'; // Gray
+                                            icon = '📡';
+                                    }
+                                    
+                                    const sensorIcon = L.divIcon({
+                                        className: 'sensor-marker',
+                                        html: '<div style="display: flex; justify-content: center; align-items: center; background-color: ' + color + '; width: 36px; height: 36px; border-radius: 18px; border: 3px solid white; box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); font-size: 18px;">' + icon + '</div>',
+                                        iconSize: [42, 42],
+                                        iconAnchor: [21, 21]
+                                    });
+                                    
+                                    const marker = L.marker([sensor.lat, sensor.lng], { 
+                                        icon: sensorIcon,
+                                        zIndexOffset: 1000 // Ensure sensor markers appear on top
+                                    }).addTo(window.map);
+                                    
+                                    marker.bindPopup('<b>Sensor ' + sensor.type + '</b><br>Nilai: ' + 
+                                        sensor.value + '<br>Koordinat: ' + 
+                                        sensor.lat.toFixed(6) + ', ' + sensor.lng.toFixed(6));
+                                        
+                                    window.markers.push(marker);
+                                    console.log("Added sensor marker for " + sensor.type);
+                                }
+                            } catch (e) {
+                                console.error("Error adding sensor marker:", e);
+                            }
+                        });
+                    }
+                    
+                    // Add sensor-to-location connecting lines if both types of markers exist
+                    if (hasSensorMarkers && locationPosition && !isNaN(locationPosition.lat) && !isNaN(locationPosition.lng)) {
+                        sensorPositions.forEach(sensor => {
+                            if (isNaN(sensor.lat) || isNaN(sensor.lng)) return;
+                            
+                            try {
+                                let color = '#6366f1';
+                                
+                                if (sensor.type !== "Combined") {
+                                    switch(sensor.type) {
+                                        case 'pH':
+                                            color = '#10b981'; // Green
+                                            break;
+                                        case 'Temperature':
+                                            color = '#f59e0b'; // Orange
+                                            break;
+                                        case 'Turbidity':
+                                            color = '#6366f1'; // Purple
+                                            break;
+                                        default:
+                                            color = '#64748b'; // Gray
+                                    }
+                                }
+                                
+                                const line = L.polyline([
+                                    [locationPosition.lat, locationPosition.lng],
+                                    [sensor.lat, sensor.lng]
+                                ], {
+                                    color: color,
+                                    weight: 3,
+                                    opacity: 0.6,
+                                    dashArray: '5, 5'
+                                }).addTo(window.map);
+                                
+                                window.markers.push(line);
+                                console.log("Added connecting line");
+                            } catch (e) {
+                                console.error("Error adding connecting line:", e);
+                            }
+                        });
+                    }
+                    
+                    // Fit map to show all markers with padding
+                    const bounds = [];
+                    let hasValidMarkers = false;
+                    
+                    // Add location to bounds if valid
+                    if (locationPosition && !isNaN(locationPosition.lat) && !isNaN(locationPosition.lng)) {
+                        bounds.push([locationPosition.lat, locationPosition.lng]);
+                        hasValidMarkers = true;
+                    }
+                    
+                    // Add sensors to bounds if valid
+                    if (sensorPositions && sensorPositions.length) {
+                        sensorPositions.forEach(sensor => {
+                            if (!isNaN(sensor.lat) && !isNaN(sensor.lng)) {
+                                bounds.push([sensor.lat, sensor.lng]);
+                                hasValidMarkers = true;
+                            }
+                        });
+                    }
+                    
+                    if (hasValidMarkers) {
+                        if (bounds.length > 1) {
+                            try {
+                                // If we have multiple points, fit to all of them
+                                console.log("Fitting to bounds:", JSON.stringify(bounds));
+                                window.map.fitBounds(bounds, {
+                                    padding: [50, 50],
+                                    maxZoom: 15
+                                });
+                            } catch (e) {
+                                console.error("Error fitting to bounds:", e);
+                            }
+                        } else if (bounds.length === 1) {
+                            try {
+                                // If we have only one point, center and zoom
+                                console.log("Setting view to single point:", JSON.stringify(bounds[0]));
+                                window.map.setView(bounds[0], 13);
+                            } catch (e) {
+                                console.error("Error setting view to single point:", e);
+                            }
+                        }
+                    } else {
+                        try {
+                            // Default view of Indonesia if no valid markers
+                            console.log("Setting default view of Indonesia");
+                            window.map.setView([-2.5489, 118.0149], 5);
+                        } catch (e) {
+                            console.error("Error setting default view:", e);
+                        }
+                    }
+                    
+                    // Force map to recalculate size
+                    try {
+                        window.map.invalidateSize();
+                        console.log("Map size recalculated");
+                    } catch (e) {
+                        console.error("Error recalculating map size:", e);
+                    }
+                    
+                    true;
+                } catch(err) {
+                    console.error('Error updating markers: ' + err);
+                    false;
+                }
+            `;
+            webViewRef.injectJavaScript(jsCode);
+        } catch (error) {
+            console.error('Error updating markers on map:', error);
+        }
+    };
+
+    // Handle WebView messages from the map
+    const handleMessageReceived = (message: any) => {
+        try {
+            console.log('Message from WebView:', message);
+            // Handle map interactions if needed
+        } catch (error) {
+            console.error('Error handling message from map:', error);
+        }
+    };
+
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -635,30 +1220,192 @@ export default function SensorDetailScreen() {
                         <Text style={styles.cardTitle}>Informasi Lokasi</Text>
                     </View>
                     <View style={styles.cardContent}>
-                        <LocationDisplay locationData={locationData || sensorData.location} />
+                        <LocationDisplay locationData={locationData || sensorData?.location || sensorData?.data_lokasi} />
 
                         <View style={styles.locationDetailsGrid}>
                             <View style={styles.locationDetailItem}>
                                 <Text style={styles.detailLabel}>ID Lokasi</Text>
-                                <Text style={styles.detailValue}>{sensorData.id_lokasi}</Text>
+                                <Text style={styles.detailValue}>{sensorData?.id_lokasi}</Text>
                             </View>
 
                             <View style={styles.locationDetailItem}>
                                 <Text style={styles.detailLabel}>Tanggal</Text>
-                                <Text style={styles.detailValue}>{formatDate(sensorData.tanggal)}</Text>
+                                <Text style={styles.detailValue}>{formatDate(sensorData?.tanggal || "")}</Text>
                             </View>
                         </View>
 
+                        <View style={styles.addressContainer}>
+                            <Text style={styles.addressLabel}>Alamat Lengkap:</Text>
+                            <Text style={styles.addressText}>
+                                {sensorData?.data_lokasi?.alamat || sensorData?.location?.alamat || "Alamat tidak tersedia"}
+                            </Text>
+                        </View>
+
                         <View style={styles.coordinateContainer}>
-                            <Text style={styles.coordinateLabel}>Koordinat GPS:</Text>
+                            <Text style={styles.coordinateLabel}>Koordinat Lokasi:</Text>
                             <View style={styles.coordinate}>
                                 <MaterialIcons name="my-location" size={18} color="#64748b" />
                                 <Text style={styles.coordinateValue}>
-                                    {sensorData.lat}, {sensorData.lon}
+                                    {sensorData?.data_lokasi?.lat || sensorData?.location?.lat}, {sensorData?.data_lokasi?.lon || sensorData?.location?.lon}
                                 </Text>
                             </View>
                         </View>
                     </View>
+                </View>
+
+                {/* Map View */}
+                <View style={styles.card}>
+                    <View style={styles.cardHeader}>
+                        <MaterialIcons name="map" size={20} color="#3b82f6" />
+                        <Text style={styles.cardTitle}>Peta Lokasi & Sensor</Text>
+
+                        <TouchableOpacity
+                            style={styles.fullscreenButton}
+                            onPress={() => setFullscreenMap(true)}
+                        >
+                            <MaterialIcons name="fullscreen" size={20} color="#64748b" />
+                        </TouchableOpacity>
+                    </View>
+                    <View style={styles.mapContainer}>
+                        {mapLoading ? (
+                            <View style={styles.mapLoading}>
+                                <ActivityIndicator size="large" color="#3b82f6" />
+                                <Text style={styles.loadingText}>Memuat peta...</Text>
+                            </View>
+                        ) : (
+                            webViewContent ? (
+                                <WebView
+                                    ref={leafletRef}
+                                    source={{ html: webViewContent }}
+                                    style={styles.mapView}
+                                    onMessage={(event) => {
+                                        const data = event.nativeEvent.data;
+                                        try {
+                                            const message = JSON.parse(data);
+                                            handleMessageReceived(message);
+                                        } catch (error) {
+                                            console.error('Error parsing WebView message:', error);
+                                        }
+                                    }}
+                                    javaScriptEnabled={true}
+                                    domStorageEnabled={true}
+                                    scrollEnabled={false}
+                                    bounces={false}
+                                    startInLoadingState={true}
+                                    renderLoading={() => (
+                                        <View style={styles.mapLoading}>
+                                            <ActivityIndicator size="large" color="#3b82f6" />
+                                            <Text style={styles.loadingText}>Memuat peta...</Text>
+                                        </View>
+                                    )}
+                                />
+                            ) : (
+                                <View style={styles.mapError}>
+                                    <MaterialIcons name="error-outline" size={32} color="#94a3b8" />
+                                    <Text style={styles.mapErrorText}>Gagal memuat peta</Text>
+                                </View>
+                            )
+                        )}
+                    </View>
+                    <View style={styles.mapLegend}>
+                        <Text style={styles.mapLegendTitle}>Keterangan:</Text>
+                        <View style={styles.mapLegendItems}>
+                            <View style={styles.mapLegendItem}>
+                                <View style={[styles.mapLegendColor, { backgroundColor: "#3b82f6" }]} />
+                                <Text style={styles.mapLegendText}>Lokasi Utama</Text>
+                            </View>
+                            <View style={styles.mapLegendItem}>
+                                <View style={[styles.mapLegendColor, { backgroundColor: "#6366f1" }]} />
+                                <Text style={styles.mapLegendText}>Lokasi Sensor</Text>
+                            </View>
+                        </View>
+                    </View>
+                    {sensorData?.data_ph?.lat && (
+                        <View style={styles.sensorCoordinatesContainer}>
+                            <Text style={styles.sensorCoordinatesTitle}>Koordinat Sensor:</Text>
+
+                            {/* Check if all sensors have the same coordinates */}
+                            {(() => {
+                                // Get first sensor with coordinates
+                                let sensorLat = null;
+                                let sensorLon = null;
+                                let allSensorsSamePosition = true;
+
+                                if (sensorData?.data_ph?.lat) {
+                                    sensorLat = sensorData.data_ph.lat;
+                                    sensorLon = sensorData.data_ph.lon;
+                                } else if (sensorData?.data_temperature?.lat) {
+                                    sensorLat = sensorData.data_temperature.lat;
+                                    sensorLon = sensorData.data_temperature.lon;
+                                } else if (sensorData?.data_turbidity?.lat) {
+                                    sensorLat = sensorData.data_turbidity.lat;
+                                    sensorLon = sensorData.data_turbidity.lon;
+                                }
+
+                                // Check if all sensors have the same coordinates
+                                if (sensorLat && sensorLon) {
+                                    if (sensorData?.data_ph?.lat && (sensorData.data_ph.lat !== sensorLat || sensorData.data_ph.lon !== sensorLon)) {
+                                        allSensorsSamePosition = false;
+                                    }
+                                    if (sensorData?.data_temperature?.lat && (sensorData.data_temperature.lat !== sensorLat || sensorData.data_temperature.lon !== sensorLon)) {
+                                        allSensorsSamePosition = false;
+                                    }
+                                    if (sensorData?.data_turbidity?.lat && (sensorData.data_turbidity.lat !== sensorLat || sensorData.data_turbidity.lon !== sensorLon)) {
+                                        allSensorsSamePosition = false;
+                                    }
+                                }
+
+                                if (allSensorsSamePosition && sensorLat && sensorLon) {
+                                    // If all sensors are at the same position, show only one set of coordinates
+                                    return (
+                                        <View style={styles.combinedCoordinateContainer}>
+                                            <View style={styles.coordinate}>
+                                                <MaterialIcons name="location-on" size={18} color="#6366f1" />
+                                                <Text style={styles.coordinateValue}>
+                                                    {sensorLat}, {sensorLon}
+                                                </Text>
+                                            </View>
+                                            <Text style={styles.combinedSensorNote}>
+                                                Semua sensor berada di lokasi yang sama
+                                            </Text>
+                                        </View>
+                                    );
+                                } else {
+                                    // If sensors have different coordinates, list them all
+                                    return (
+                                        <View style={styles.sensorCoordinatesList}>
+                                            {sensorData?.data_ph?.lat && sensorData?.data_ph?.lon && (
+                                                <Text style={styles.sensorCoordinateItem}>
+                                                    <Text style={styles.sensorCoordinateLabel}>pH: </Text>
+                                                    {sensorData.data_ph.lat}, {sensorData.data_ph.lon}
+                                                </Text>
+                                            )}
+                                            {sensorData?.data_temperature?.lat && sensorData?.data_temperature?.lon && (
+                                                <Text style={styles.sensorCoordinateItem}>
+                                                    <Text style={styles.sensorCoordinateLabel}>Temperatur: </Text>
+                                                    {sensorData.data_temperature.lat}, {sensorData.data_temperature.lon}
+                                                </Text>
+                                            )}
+                                            {sensorData?.data_turbidity?.lat && sensorData?.data_turbidity?.lon && (
+                                                <Text style={styles.sensorCoordinateItem}>
+                                                    <Text style={styles.sensorCoordinateLabel}>Turbidity: </Text>
+                                                    {sensorData.data_turbidity.lat}, {sensorData.data_turbidity.lon}
+                                                </Text>
+                                            )}
+                                        </View>
+                                    );
+                                }
+                            })()}
+                        </View>
+                    )}
+                    {anomalyInfo.isAnomaly && (
+                        <View style={styles.anomalyMapNote}>
+                            <MaterialIcons name="info-outline" size={16} color="#b91c1c" />
+                            <Text style={styles.anomalyMapNoteText}>
+                                Lokasi ini memiliki parameter air yang anomali
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Sensor data */}
@@ -916,6 +1663,85 @@ export default function SensorDetailScreen() {
                     </View>
                 </View>
             </Modal>
+
+            {/* Fullscreen Map Modal */}
+            <Modal
+                visible={fullscreenMap}
+                animationType="slide"
+                transparent={false}
+                onRequestClose={() => setFullscreenMap(false)}
+                statusBarTranslucent={true}
+            >
+                <View style={styles.fullscreenMapContainer}>
+                    <StatusBar style="light" />
+                    <View style={styles.fullscreenMapHeader}>
+                        <TouchableOpacity
+                            style={styles.fullscreenMapCloseButton}
+                            onPress={() => setFullscreenMap(false)}
+                        >
+                            <MaterialIcons name="arrow-back" size={24} color="#fff" />
+                        </TouchableOpacity>
+                        <Text style={styles.fullscreenMapTitle}>
+                            Peta Lokasi Sensor {sensorData?.data_lokasi?.nama_sungai || ''}
+                        </Text>
+                    </View>
+
+                    {webViewContent ? (
+                        <WebView
+                            ref={fullscreenMapRef}
+                            source={{ html: webViewContent }}
+                            style={styles.fullscreenMapView}
+                            onMessage={(event) => {
+                                const data = event.nativeEvent.data;
+                                try {
+                                    const message = JSON.parse(data);
+                                    handleMessageReceived(message);
+                                } catch (error) {
+                                    console.error('Error parsing WebView message:', error);
+                                }
+                            }}
+                            javaScriptEnabled={true}
+                            domStorageEnabled={true}
+                            scrollEnabled={false}
+                            bounces={false}
+                            startInLoadingState={true}
+                            renderLoading={() => (
+                                <View style={styles.mapLoading}>
+                                    <ActivityIndicator size="large" color="#3b82f6" />
+                                    <Text style={[styles.loadingText, { color: '#fff' }]}>Memuat peta...</Text>
+                                </View>
+                            )}
+                        />
+                    ) : (
+                        <View style={styles.fullscreenMapError}>
+                            <MaterialIcons name="error-outline" size={48} color="#fff" />
+                            <Text style={styles.fullscreenMapErrorText}>Gagal memuat peta</Text>
+                        </View>
+                    )}
+
+                    <View style={styles.fullscreenMapLegend}>
+                        <View style={styles.mapLegendItems}>
+                            <View style={styles.mapLegendItem}>
+                                <View style={[styles.mapLegendColor, { backgroundColor: "#3b82f6" }]} />
+                                <Text style={[styles.mapLegendText, { color: '#fff' }]}>Lokasi Utama</Text>
+                            </View>
+                            <View style={styles.mapLegendItem}>
+                                <View style={[styles.mapLegendColor, { backgroundColor: "#6366f1" }]} />
+                                <Text style={[styles.mapLegendText, { color: '#fff' }]}>Lokasi Sensor</Text>
+                            </View>
+                        </View>
+
+                        {anomalyInfo.isAnomaly && (
+                            <View style={styles.fullscreenAnomalyNote}>
+                                <MaterialIcons name="warning" size={18} color="#fff" />
+                                <Text style={styles.fullscreenAnomalyText}>
+                                    Terdeteksi {anomalyInfo.anomalyTypes.length} parameter anomali
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </KeyboardAvoidingView>
     );
 }
@@ -1037,6 +1863,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#1e293b',
         marginLeft: 8,
+        flex: 1,
     },
     cardContent: {
         padding: 16,
@@ -1393,5 +2220,197 @@ const styles = StyleSheet.create({
     updatePredictionDescription: {
         fontSize: 13,
         color: '#64748b',
+    },
+    mapContainer: {
+        height: 300,
+        width: '100%',
+        borderRadius: 8,
+        overflow: 'hidden',
+        backgroundColor: '#f1f5f9',
+    },
+    mapView: {
+        height: 300,
+        width: '100%',
+    },
+    mapLoading: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    mapError: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f8fafc',
+    },
+    mapErrorText: {
+        marginTop: 8,
+        fontSize: 14,
+        color: '#94a3b8',
+    },
+    mapLegend: {
+        padding: 12,
+        borderBottomLeftRadius: 8,
+        borderBottomRightRadius: 8,
+        backgroundColor: '#f8fafc',
+        borderTopWidth: 1,
+        borderTopColor: '#e2e8f0',
+    },
+    mapLegendTitle: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#1e293b',
+        marginBottom: 8,
+    },
+    mapLegendItems: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+    },
+    mapLegendItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginRight: 12,
+        marginBottom: 4,
+    },
+    mapLegendColor: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        marginRight: 5,
+        borderWidth: 1,
+        borderColor: 'white',
+    },
+    mapLegendText: {
+        fontSize: 12,
+        color: '#64748b',
+    },
+    anomalyMapNote: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: '#fef2f2',
+        borderBottomLeftRadius: 8,
+        borderBottomRightRadius: 8,
+    },
+    anomalyMapNoteText: {
+        marginLeft: 8,
+        fontSize: 12,
+        color: '#b91c1c',
+    },
+    addressContainer: {
+        marginVertical: 10,
+        padding: 10,
+        backgroundColor: '#f8fafc',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    addressLabel: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: '#64748b',
+        marginBottom: 4,
+    },
+    addressText: {
+        fontSize: 14,
+        color: '#334155',
+        lineHeight: 20,
+    },
+    fullscreenButton: {
+        padding: 6,
+        borderRadius: 4,
+        backgroundColor: '#f1f5f9',
+    },
+    sensorCoordinatesContainer: {
+        padding: 12,
+        backgroundColor: '#f8fafc',
+        borderTopWidth: 1,
+        borderTopColor: '#e2e8f0',
+    },
+    sensorCoordinatesTitle: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#1e293b',
+        marginBottom: 8,
+    },
+    sensorCoordinatesList: {
+        paddingLeft: 4,
+    },
+    sensorCoordinateItem: {
+        fontSize: 12,
+        color: '#64748b',
+        lineHeight: 18,
+    },
+    sensorCoordinateLabel: {
+        fontWeight: '600',
+    },
+    fullscreenMapContainer: {
+        flex: 1,
+        backgroundColor: '#0f172a',
+    },
+    fullscreenMapHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingTop: Platform.OS === 'ios' ? 50 : 8,
+        paddingBottom: 8,
+        paddingHorizontal: 16,
+        backgroundColor: 'rgba(15, 23, 42, 0.8)',
+        zIndex: 10,
+    },
+    fullscreenMapCloseButton: {
+        padding: 8,
+        marginRight: 12,
+    },
+    fullscreenMapTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#ffffff',
+        flex: 1,
+    },
+    fullscreenMapView: {
+        flex: 1,
+    },
+    fullscreenMapError: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    fullscreenMapErrorText: {
+        marginTop: 16,
+        color: '#fff',
+        fontSize: 16,
+    },
+    fullscreenMapLegend: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.8)',
+        padding: 12,
+        paddingBottom: Platform.OS === 'ios' ? 30 : 12,
+    },
+    fullscreenAnomalyNote: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 8,
+        paddingTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    },
+    fullscreenAnomalyText: {
+        marginLeft: 8,
+        fontSize: 12,
+        color: '#fff',
+    },
+    combinedCoordinateContainer: {
+        marginVertical: 4,
+    },
+    combinedSensorNote: {
+        fontSize: 12,
+        color: '#64748b',
+        marginTop: 4,
     },
 }); 
