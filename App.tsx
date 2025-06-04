@@ -3,7 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet } from 'react-native';
 import { GluestackUIProvider } from '@/components/ui/gluestack-ui-provider';
 
-import RootLayout from './App';
+import RootLayout from './app';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
