@@ -182,14 +182,6 @@ const StatsSummaryCards: React.FC<StatsSummaryCardsProps> = ({ sensorData }) => 
     const waterSensors = sensorStats.filter(sensor => SENSOR_GROUPS.water.includes(sensor.name));
     const motionSensors = sensorStats.filter(sensor => SENSOR_GROUPS.motion.includes(sensor.name));
 
-    // Organize sensors to ensure pairs per row
-    const organizedSensors = [
-        ...waterSensors.slice(0, 2),  // First row: turbidity, ph
-        ...waterSensors.slice(2, 4),  // Second row: temperature, speed
-        ...motionSensors.slice(0, 2), // Third row: accel_x, accel_y
-        motionSensors[2],             // Fourth row: accel_z (centered)
-    ];
-
     return (
         <MotiView
             style={styles.container}
@@ -222,7 +214,9 @@ const StatsSummaryCards: React.FC<StatsSummaryCardsProps> = ({ sensorData }) => 
                 </View>
 
                 <View style={styles.gridContainer}>
-                    {motionSensors.map((item, index) => renderSensorCard(item, index + waterSensors.length))}
+                    <View style={styles.motionContainer}>
+                        {motionSensors.map((item, index) => renderSensorCard(item, index + waterSensors.length))}
+                    </View>
                 </View>
             </View>
         </MotiView>
@@ -234,8 +228,6 @@ const StatsSummaryCards: React.FC<StatsSummaryCardsProps> = ({ sensorData }) => 
                 key={item.name}
                 style={[
                     styles.statCard,
-                    // Center last card if it's alone in a row
-                    item.name === 'accel_z' ? styles.centeredCard : null
                 ]}
                 entering={FadeInDown.delay(300 + (index * 80)).duration(500)}
             >
@@ -357,6 +349,13 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 16,
     },
+    motionContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        width: '100%',
+        gap: 16,
+    },
     statCard: {
         width: CARD_WIDTH,
         marginBottom: 16,
@@ -368,10 +367,6 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 3,
         backgroundColor: 'white',
-    },
-    centeredCard: {
-        alignSelf: 'center',
-        marginHorizontal: 'auto',
     },
     cardHeader: {
         flexDirection: 'row',

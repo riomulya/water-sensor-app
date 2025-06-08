@@ -60,7 +60,7 @@ interface SensorData {
 
 const { width } = Dimensions.get('window');
 
-// Add an "All" option for time range and locations
+// Add an "All" option for locations
 const ALL_OPTION = {
     id_lokasi: 'all',
     nama_sungai: 'Semua Lokasi'
@@ -71,7 +71,6 @@ export default function StatisticsScreen() {
     const [locations, setLocations] = useState<Location[]>([]);
     const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
     const [sensorData, setSensorData] = useState<SensorData[] | null>(null);
-    const [timeRange, setTimeRange] = useState<string>('all'); // Default to 'all' instead of '30d'
     const [totalRecords, setTotalRecords] = useState<number>(0);
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [totalPages, setTotalPages] = useState<number>(1);
@@ -113,12 +112,12 @@ export default function StatisticsScreen() {
         fetchLocations();
     }, []);
 
-    // Fetch sensor data when selected location or time range changes
+    // Fetch sensor data when selected location changes
     useEffect(() => {
         if (!selectedLocation) return;
 
         fetchSensorData();
-    }, [selectedLocation, timeRange, currentPage]);
+    }, [selectedLocation, currentPage]);
 
     // Fetch sensor data with pagination
     const fetchSensorData = async () => {
@@ -130,23 +129,11 @@ export default function StatisticsScreen() {
             // Use different endpoint based on whether all locations are selected or specific location
             if (selectedLocation === 'all') {
                 // For all locations, use the endpoint without location ID
-                apiUrl = `${API_URL}data_combined/paginated?page=${currentPage}&limit=${pageSize}`;
-
-                // Add time range filter if not "all"
-                if (timeRange !== 'all') {
-                    apiUrl += `&range=${timeRange}`;
-                }
-
+                apiUrl = `${API_URL}data_combined`;
                 console.log(`Fetching all sensor data from: ${apiUrl}`);
             } else {
                 // For specific location
                 apiUrl = `${API_URL}data_combined/paginated/${selectedLocation}?page=${currentPage}&limit=${pageSize}`;
-
-                // Add time range filter if not "all"
-                if (timeRange !== 'all') {
-                    apiUrl += `&range=${timeRange}`;
-                }
-
                 console.log(`Fetching sensor data for location ${selectedLocation} from: ${apiUrl}`);
             }
 
@@ -210,11 +197,6 @@ export default function StatisticsScreen() {
         setCurrentPage(1); // Reset to page 1 when location changes
     };
 
-    const handleTimeRangeChange = (range: string) => {
-        setTimeRange(range);
-        setCurrentPage(1); // Reset to page 1 when time range changes
-    };
-
     // Function to load more data
     const loadMoreData = () => {
         if (currentPage < totalPages && !loading) {
@@ -232,10 +214,7 @@ export default function StatisticsScreen() {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar style="dark" />
-            <StatisticsHeader
-                timeRange={timeRange}
-                onTimeRangeChange={handleTimeRangeChange}
-            />
+            <StatisticsHeader />
 
             <ScrollView
                 style={styles.scrollView}
@@ -366,14 +345,17 @@ const styles = StyleSheet.create({
     },
     titleContainer: {
         marginBottom: 8,
+        alignItems: 'center',
     },
     title: {
         color: '#334155',
         fontSize: 26,
+        textAlign: 'center',
     },
     dataCount: {
         color: '#64748b',
         marginTop: 4,
+        textAlign: 'center',
     },
     loadingText: {
         marginTop: 12,

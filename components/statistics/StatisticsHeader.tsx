@@ -6,32 +6,11 @@ import { MotiView } from 'moti';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 // Local components
-import { Box } from '@/components/ui/box';
 import { Text } from '@/components/ui/text';
-import { HStack } from '@/components/ui/hstack';
-import {
-    Select, SelectBackdrop, SelectContent, SelectDragIndicator,
-    SelectDragIndicatorWrapper, SelectItem, SelectPortal,
-    SelectTrigger, SelectInput
-} from '@/components/ui/select';
 
-// Constants and types
-import { TIME_RANGE_OPTIONS } from '@/constants/api';
+interface StatisticsHeaderProps { }
 
-interface TimeRangeOption {
-    label: string;
-    value: string;
-}
-
-interface StatisticsHeaderProps {
-    timeRange: string;
-    onTimeRangeChange: (range: string) => void;
-}
-
-const StatisticsHeader: React.FC<StatisticsHeaderProps> = ({
-    timeRange,
-    onTimeRangeChange
-}) => {
+const StatisticsHeader: React.FC<StatisticsHeaderProps> = () => {
     const router = useRouter();
 
     return (
@@ -49,6 +28,7 @@ const StatisticsHeader: React.FC<StatisticsHeaderProps> = ({
                 </TouchableOpacity>
 
                 <MotiView
+                    style={styles.titleContainer}
                     from={{ opacity: 0, translateY: -10 }}
                     animate={{ opacity: 1, translateY: 0 }}
                     transition={{ type: 'timing', duration: 500, delay: 100 }}
@@ -58,40 +38,8 @@ const StatisticsHeader: React.FC<StatisticsHeaderProps> = ({
                     </Text>
                 </MotiView>
 
-                <MotiView
-                    from={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ type: 'timing', duration: 500, delay: 200 }}
-                    style={styles.selectContainer}
-                >
-                    <Select
-                        selectedValue={timeRange}
-                        onValueChange={onTimeRangeChange}
-                    >
-                        <SelectTrigger
-                            variant="outline"
-                            size="sm"
-                            style={styles.selectTrigger}
-                        >
-                            <SelectInput placeholder="Pilih Periode" style={styles.selectInput} />
-                        </SelectTrigger>
-                        <SelectPortal>
-                            <SelectBackdrop />
-                            <SelectContent style={styles.selectContent}>
-                                <SelectDragIndicatorWrapper>
-                                    <SelectDragIndicator />
-                                </SelectDragIndicatorWrapper>
-                                {TIME_RANGE_OPTIONS.map((option: TimeRangeOption) => (
-                                    <SelectItem
-                                        key={option.value}
-                                        label={option.label}
-                                        value={option.value}
-                                    />
-                                ))}
-                            </SelectContent>
-                        </SelectPortal>
-                    </Select>
-                </MotiView>
+                {/* Empty view to balance the layout */}
+                <View style={styles.placeholder} />
             </View>
         </Animated.View>
     );
@@ -121,23 +69,17 @@ const styles = StyleSheet.create({
         padding: 8,
         borderRadius: 8,
         backgroundColor: '#f8fafc',
+        width: 40,
+    },
+    titleContainer: {
+        flex: 1,
+        alignItems: 'center',
     },
     title: {
         color: '#0f172a',
     },
-    selectContainer: {
-        zIndex: 101, // Ensure dropdown appears above other elements
-    },
-    selectTrigger: {
-        borderColor: '#e2e8f0',
-        backgroundColor: '#f8fafc',
-        minWidth: 120,
-    },
-    selectInput: {
-        fontSize: 13,
-    },
-    selectContent: {
-        zIndex: 1000,
+    placeholder: {
+        width: 40,
     }
 });
 
