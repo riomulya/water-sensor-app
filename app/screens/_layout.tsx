@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { View, TouchableOpacity, StyleSheet, StatusBar, Platform, Image } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
+import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/text';
 import { AntDesign } from '@expo/vector-icons';
@@ -38,6 +40,7 @@ type RootStackParamList = {
 };
 
 const BottomTab = createBottomTabNavigator<RootStackParamList>();
+const Stack = createStackNavigator<RootStackParamList>();
 
 // Custom AppBar component with menu button
 const AppBar = ({ onMenuPress, onLogoutPress }: { onMenuPress: () => void, onLogoutPress: () => void }) => {
@@ -86,6 +89,20 @@ const AppBar = ({ onMenuPress, onLogoutPress }: { onMenuPress: () => void, onLog
     );
 };
 
+function MainTabNavigator() {
+    return (
+        <BottomTab.Navigator
+            id={undefined}
+            tabBar={TabBar}
+        >
+            <BottomTab.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+            <BottomTab.Screen name="Feeds" component={FeedsScreen} options={{ headerShown: false }} />
+            <BottomTab.Screen name="Analysis" component={AnalysisScreen} options={{ headerShown: false }} />
+            <BottomTab.Screen name="About" component={AboutScreen} options={{ headerShown: false }} />
+        </BottomTab.Navigator>
+    );
+}
+
 function ScreensLayout() {
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [showLogoutAlert, setShowLogoutAlert] = useState(false);
@@ -126,16 +143,10 @@ function ScreensLayout() {
                     onLogoutPress={() => setShowLogoutAlert(true)}
                 />
 
-                {/* Main Content with Tab Navigator */}
-                <BottomTab.Navigator
-                    id={undefined}
-                    tabBar={TabBar}
-                >
-                    <BottomTab.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
-                    <BottomTab.Screen name="Feeds" component={FeedsScreen} options={{ headerShown: false }} />
-                    <BottomTab.Screen name="Analysis" component={AnalysisScreen} options={{ headerShown: false }} />
-                    <BottomTab.Screen name="About" component={AboutScreen} options={{ headerShown: false }} />
-                </BottomTab.Navigator>
+                {/* Main Content with Stack Navigator containing Tab Navigator */}
+                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="Home" component={MainTabNavigator} />
+                </Stack.Navigator>
 
                 {/* Logout Confirmation Alert */}
                 <AlertDialog isOpen={showLogoutAlert} onClose={() => setShowLogoutAlert(false)}>

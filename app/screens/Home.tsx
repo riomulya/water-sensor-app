@@ -10,7 +10,8 @@ import { Fab, FabIcon, FabLabel } from '@/components/ui/fab';
 import Map from '@/components/map/Map';
 import { io, Socket } from 'socket.io-client'; // Import Socket.IO client
 import { port } from '@/constants/https';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BackHandler } from 'react-native';
 import { Button, ButtonText } from "@/components/ui/button"
 import { Center } from "@/components/ui/center"
@@ -52,7 +53,6 @@ import { logout } from '@/controllers/auth';
 import { router } from 'expo-router';
 import CustomDrawer from '../../components/CustomDrawer';
 import { Switch } from '@/components/ui/switch';
-import WebView from 'react-native-webview';
 import * as Location from 'expo-location';
 
 // Notifications.setNotificationHandler({
@@ -200,495 +200,19 @@ interface SensorData {
     speed: number;
 }
 
-// Simple NavigationScreen component implemented directly in the file
-interface NavigationScreenProps {
-    destination: {
-        latitude: number;
-        longitude: number;
+// Define types for navigation
+type RootStackParamList = {
+    Home: undefined;
+    NavigationScreen: {
+        latitude: string;
+        longitude: string;
         name: string;
-        address?: string;
+        address: string;
     };
-    onClose: () => void;
-    onReturn: () => void;
-}
-
-const NavigationScreen: React.FC<NavigationScreenProps> = ({ destination, onClose, onReturn }) => {
-    const webViewRef = useRef<WebView>(null);
-    const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
-    const [locationWatchId, setLocationWatchId] = useState<Location.LocationSubscription | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-
-    // Get user location when component mounts
-    useEffect(() => {
-        const getUserLocation = async () => {
-            try {
-                const { status } = await Location.requestForegroundPermissionsAsync();
-                if (status !== 'granted') {
-                    Alert.alert('Izin Lokasi Diperlukan', 'Aplikasi membutuhkan akses lokasi untuk navigasi');
-                    onClose();
-                    return;
-                }
-
-                setIsLoading(true);
-                const location = await Location.getCurrentPositionAsync({
-                    accuracy: Location.Accuracy.BestForNavigation,
-                });
-                setUserLocation(location);
-
-                // Start watching location
-                const subscription = await Location.watchPositionAsync(
-                    {
-                        accuracy: Location.Accuracy.BestForNavigation,
-                        distanceInterval: 5,
-                        timeInterval: 3000,
-                    },
-                    (location) => {
-                        setUserLocation(location);
-
-                        // Update the navigation UI with the new location
-                        if (webViewRef.current) {
-                            const { latitude, longitude, accuracy } = location.coords;
-                            const updateScript = `
-                                try {
-                                    window.updateUserPosition(${latitude}, ${longitude}, ${accuracy || 0});
-                                    true;
-                                } catch(e) {
-                                    console.error('Error updating position:', e);
-                                    true;
-                                }
-                            `;
-                            webViewRef.current.injectJavaScript(updateScript);
-                        }
-                    }
-                );
-
-                setLocationWatchId(subscription);
-                setIsLoading(false);
-            } catch (error) {
-                console.error('Error starting navigation:', error);
-                Alert.alert('Error', 'Gagal memulai navigasi. Coba lagi.');
-                onClose();
-            }
-        };
-
-        getUserLocation();
-
-        // Cleanup
-        return () => {
-            if (locationWatchId) {
-                locationWatchId.remove();
-            }
-        };
-    }, []);
-
-    // Initialize navigation when user location is available
-    useEffect(() => {
-        if (!userLocation || !webViewRef.current) return;
-
-        const initScript = `
-            try {
-                window.updateNavigation(
-                    ${userLocation.coords.latitude},
-                    ${userLocation.coords.longitude},
-                    ${destination.latitude},
-                    ${destination.longitude},
-                    "${destination.name.replace(/"/g, '\\"')}",
-                    "${(destination.address || '').replace(/"/g, '\\"')}"
-                );
-                true;
-            } catch(e) {
-                console.error('Error initializing navigation:', e);
-                true;
-            }
-        `;
-
-        webViewRef.current.injectJavaScript(initScript);
-    }, [userLocation, destination]);
-
-    // Handle messages from WebView
-    const handleWebViewMessage = (event: any) => {
-        try {
-            const data = JSON.parse(event.nativeEvent.data);
-
-            if (data.type === 'exitNavigation') {
-                if (locationWatchId) {
-                    locationWatchId.remove();
-                }
-                onClose();
-            } else if (data.type === 'returnToMainMap') {
-                onReturn();
-            }
-        } catch (error) {
-            console.error('Error handling WebView message:', error);
-        }
-    };
-
-    // Create a simple HTML for navigation
-    const navigationHTML = `
-        <!DOCTYPE html>
-        <html lang="id">
-        <head>
-            <meta charset="UTF-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-            <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
-            <style>
-                html, body { margin: 0; height: 100%; }
-                #map { width: 100%; height: 100%; }
-                
-                .nav-header {
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    background: linear-gradient(135deg, #10b981, #059669);
-                    color: white;
-                    padding: 12px 20px;
-                    z-index: 1000;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                }
-                
-                .dest-info {
-                    flex-grow: 1;
-                    margin-left: 15px;
-                }
-                
-                .dest-name {
-                    font-weight: bold;
-                    font-size: 16px;
-                }
-                
-                .dest-address {
-                    font-size: 12px;
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    max-width: 200px;
-                }
-                
-                .nav-btn {
-                    width: 36px;
-                    height: 36px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    border-radius: 50%;
-                    border: none;
-                    cursor: pointer;
-                }
-                
-                .back-btn {
-                    background: rgba(255,255,255,0.25);
-                    color: white;
-                    margin-right: 10px;
-                }
-                
-                .close-btn {
-                    background: #ff5252;
-                    color: white;
-                }
-                
-                .nav-info {
-                    position: absolute;
-                    bottom: 20px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    background: white;
-                    padding: 15px 20px;
-                    border-radius: 12px;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-                    width: 90%;
-                    max-width: 350px;
-                    z-index: 1000;
-                }
-                
-                .instruction {
-                    display: flex;
-                    align-items: center;
-                    margin-bottom: 10px;
-                }
-                
-                .turn-icon {
-                    background: #f0f9ff;
-                    width: 48px;
-                    height: 48px;
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    margin-right: 15px;
-                }
-                
-                .instruction-text {
-                    font-size: 16px;
-                    font-weight: 500;
-                }
-                
-                .distance-time {
-                    display: flex;
-                    justify-content: space-between;
-                    padding-top: 10px;
-                    border-top: 1px solid #f1f5f9;
-                    margin-top: 10px;
-                }
-                
-                .recenter-btn {
-                    position: absolute;
-                    bottom: 130px;
-                    right: 20px;
-                    background: white;
-                    width: 48px;
-                    height: 48px;
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-                    z-index: 1000;
-                    border: none;
-                }
-            </style>
-        </head>
-        <body>
-            <div id="map"></div>
-            
-            <div class="nav-header">
-                <button class="nav-btn back-btn" onclick="returnToMainMap()">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                </button>
-                <div class="dest-info">
-                    <div class="dest-name" id="dest-name">Loading...</div>
-                    <div class="dest-address" id="dest-address"></div>
-                </div>
-                <button class="nav-btn close-btn" onclick="exitNavigation()">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                </button>
-            </div>
-            
-            <div class="nav-info">
-                <div class="instruction">
-                    <div class="turn-icon" id="turn-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                    </div>
-                    <div class="instruction-text" id="instruction">Menghitung rute...</div>
-                </div>
-                <div class="distance-time">
-                    <div>
-                        <div id="distance" style="font-size:18px;font-weight:bold;">--</div>
-                        <div style="font-size:12px;color:#64748b;">Jarak</div>
-                    </div>
-                    <div>
-                        <div id="time" style="font-size:18px;font-weight:bold;">--</div>
-                        <div style="font-size:12px;color:#64748b;">Waktu</div>
-                    </div>
-                </div>
-            </div>
-            
-            <button class="recenter-btn" onclick="centerOnLocation()">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
-            </button>
-            
-            <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-            <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
-            <script>
-                // Global variables
-                let map, userMarker, destMarker, route;
-                let userLat, userLng, destLat, destLng;
-                
-                // Initialize map
-                map = L.map('map').setView([0, 0], 15);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(map);
-                
-                // Icons
-                const userIcon = L.icon({
-                    iconUrl: 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/markerBaseLocation.png',
-                    iconSize: [40, 40],
-                    iconAnchor: [20, 20]
-                });
-                
-                const destIcon = L.icon({
-                    iconUrl: 'https://dlvmrafkpmwfitrvgpgc.supabase.co/storage/v1/object/public/marker/waterSelected.png',
-                    iconSize: [40, 40],
-                    iconAnchor: [20, 40]
-                });
-                
-                // Initialize navigation
-                function updateNavigation(uLat, uLng, dLat, dLng, name, address) {
-                    userLat = uLat;
-                    userLng = uLng;
-                    destLat = dLat;
-                    destLng = dLng;
-                    
-                    // Update destination info
-                    document.getElementById('dest-name').textContent = name || 'Tujuan';
-                    document.getElementById('dest-address').textContent = address || '';
-                    
-                    // Add user marker
-                    if (userMarker) {
-                        userMarker.setLatLng([userLat, userLng]);
-                    } else {
-                        userMarker = L.marker([userLat, userLng], {
-                            icon: userIcon,
-                            zIndexOffset: 1000
-                        }).addTo(map);
-                    }
-                    
-                    // Add destination marker
-                    if (destMarker) {
-                        destMarker.setLatLng([destLat, destLng]);
-                    } else {
-                        destMarker = L.marker([destLat, destLng], {
-                            icon: destIcon,
-                            zIndexOffset: 900
-                        }).addTo(map);
-                    }
-                    
-                    // Calculate route
-                    calculateRoute();
-                    
-                    // Center map to show both points
-                    const bounds = L.latLngBounds(
-                        L.latLng(userLat, userLng),
-                        L.latLng(destLat, destLng)
-                    );
-                    map.fitBounds(bounds, { padding: [50, 50] });
-                    
-                    return true;
-                }
-                
-                // Update user position
-                function updateUserPosition(lat, lng, accuracy) {
-                    if (!userMarker) return false;
-                    
-                    userLat = lat;
-                    userLng = lng;
-                    userMarker.setLatLng([lat, lng]);
-                    
-                    // Recalculate route
-                    calculateRoute();
-                    
-                    return true;
-                }
-                
-                // Calculate route
-                function calculateRoute() {
-                    if (route) {
-                        map.removeControl(route);
-                    }
-                    
-                    route = L.Routing.control({
-                        waypoints: [
-                            L.latLng(userLat, userLng),
-                            L.latLng(destLat, destLng)
-                        ],
-                        router: L.Routing.osrmv1({
-                            serviceUrl: 'https://router.project-osrm.org/route/v1',
-                            profile: 'driving'
-                        }),
-                        lineOptions: {
-                            styles: [
-                                {color: '#3388ff', opacity: 0.8, weight: 5},
-                                {color: '#1056db', opacity: 0.3, weight: 8}
-                            ]
-                        },
-                        createMarker: function() { return null; },
-                        addWaypoints: false,
-                        draggableWaypoints: false,
-                        fitSelectedRoutes: false,
-                        showAlternatives: false
-                    }).addTo(map);
-                    
-                    // Update navigation info when route is calculated
-                    route.on('routesfound', function(e) {
-                        const routes = e.routes;
-                        const summary = routes[0].summary;
-                        
-                        // Format distance
-                        let formattedDistance;
-                        if (summary.totalDistance < 1000) {
-                            formattedDistance = Math.round(summary.totalDistance) + 'm';
-                        } else {
-                            formattedDistance = (summary.totalDistance / 1000).toFixed(1) + 'km';
-                        }
-                        
-                        // Format time
-                        const mins = Math.floor(summary.totalTime / 60);
-                        const formattedTime = mins < 60 ? 
-                            mins + ' min' : 
-                            Math.floor(mins / 60) + 'h ' + (mins % 60) + 'min';
-                        
-                        // Update UI
-                        document.getElementById('distance').textContent = formattedDistance;
-                        document.getElementById('time').textContent = formattedTime;
-                        
-                        // Get next instruction
-                        const instruction = routes[0].instructions[0];
-                        document.getElementById('instruction').textContent = instruction.text;
-                        
-                        // Send data to React Native
-                        window.ReactNativeWebView.postMessage(JSON.stringify({
-                            type: 'routeInfo',
-                            data: {
-                                distance: summary.totalDistance,
-                                time: summary.totalTime,
-                                instruction: instruction.text
-                            }
-                        }));
-                    });
-                }
-                
-                // Center map on user location
-                function centerOnLocation() {
-                    if (!userMarker) return;
-                    
-                    map.setView(userMarker.getLatLng(), 18, {
-                        animate: true,
-                        duration: 0.5
-                    });
-                }
-                
-                // Exit navigation
-                function exitNavigation() {
-                    window.ReactNativeWebView.postMessage(JSON.stringify({
-                        type: 'exitNavigation'
-                    }));
-                }
-                
-                // Return to main map
-                function returnToMainMap() {
-                    window.ReactNativeWebView.postMessage(JSON.stringify({
-                        type: 'returnToMainMap'
-                    }));
-                }
-            </script>
-        </body>
-        </html>
-    `;
-
-    return isLoading ? (
-        <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#3b82f6" />
-            <Text size="md" className="mt-2">Memulai Navigasi...</Text>
-        </View>
-    ) : (
-        <View style={StyleSheet.absoluteFill}>
-            <WebView
-                ref={webViewRef}
-                source={{ html: navigationHTML }}
-                style={StyleSheet.absoluteFill}
-                onMessage={handleWebViewMessage}
-                originWhitelist={['*']}
-                javaScriptEnabled={true}
-                domStorageEnabled={true}
-                geolocationEnabled={true}
-            />
-        </View>
-    );
+    // Add other screen types as needed
 };
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 const HomeScreen = () => {
     const [destination, setDestination] = useState<{ latitude: number, longitude: number } | null>(null); // Untuk marker destinasi
@@ -738,6 +262,8 @@ const HomeScreen = () => {
             address: ''
         }
     });
+
+    const navigation = useNavigation<NavigationProp>();
 
     useEffect(() => {
         if (!socketRef.current) {
@@ -1253,16 +779,6 @@ const HomeScreen = () => {
     // Tambahkan state untuk drawer
     const [drawerOpen, setDrawerOpen] = useState(false);
 
-    // Add state for navigation
-    const [navigationDestination, setNavigationDestination] = useState<{
-        latitude: number;
-        longitude: number;
-        name: string;
-        address?: string;
-    } | null>(null);
-
-    const [isNavigating, setIsNavigating] = useState(false);
-
     // Add function to start navigation
     const startNavigation = () => {
         if (!savedLocation) return;
@@ -1284,26 +800,18 @@ const HomeScreen = () => {
             return;
         }
 
-        setNavigationDestination({
-            latitude,
-            longitude,
-            name: savedLocation.nama_sungai || 'Lokasi Monitoring',
-            address: savedLocation.address
+        // Navigate using expo-router
+        router.push({
+            pathname: '/navigate/NavigationScreen',
+            params: {
+                latitude: latitude.toString(),
+                longitude: longitude.toString(),
+                name: savedLocation.nama_sungai || 'Lokasi Monitoring',
+                address: savedLocation.address || ''
+            }
         });
-        setIsNavigating(true);
+
         setBottomSheetOpen(false);
-    };
-
-    // Add function to close navigation
-    const closeNavigation = () => {
-        setIsNavigating(false);
-        setNavigationDestination(null);
-    };
-
-    // Add function to minimize navigation (return to map)
-    const minimizeNavigation = () => {
-        setIsNavigating(false);
-        // Keep navigation destination so we can restore it later if needed
     };
 
     return (
@@ -1670,14 +1178,15 @@ const HomeScreen = () => {
                                                                         style={styles.navigationButton}
                                                                         closeOnSelect={true}
                                                                         onPress={() => {
-                                                                            // Navigate to this specific location
-                                                                            setNavigationDestination({
-                                                                                latitude: item.latitude,
-                                                                                longitude: item.longitude,
-                                                                                name: item.nama_sungai || 'Lokasi Sungai',
-                                                                                address: item.address
+                                                                            router.push({
+                                                                                pathname: '/navigate/NavigationScreen',
+                                                                                params: {
+                                                                                    latitude: item.latitude.toString(),
+                                                                                    longitude: item.longitude.toString(),
+                                                                                    name: item.nama_sungai || 'Lokasi Sungai',
+                                                                                    address: item.address || ''
+                                                                                }
                                                                             });
-                                                                            setIsNavigating(true);
                                                                             setBottomSheetOpen(false);
                                                                         }}
                                                                     >
@@ -1881,15 +1390,6 @@ const HomeScreen = () => {
                 isRunning={isServiceRunning}
                 sensorData={sensorData}
             /> */}
-
-            {/* Navigation Layer - now uses our internal component */}
-            {isNavigating && navigationDestination && (
-                <NavigationScreen
-                    destination={navigationDestination}
-                    onClose={closeNavigation}
-                    onReturn={minimizeNavigation}
-                />
-            )}
 
         </>
     );
