@@ -119,7 +119,7 @@ const DownloadAnimation = ({ downloadState }: { downloadState: DownloadState }) 
         >
             <HStack space="sm" style={styles.downloadAnimationContent}>
                 {downloadState === 'idle' && (
-                    <Ionicons name="download-outline" size={16} color="#333" />
+                    <Ionicons name="document-text-outline" size={16} color="#333" />
                 )}
                 {downloadState === 'preparing' && (
                     <MotiView
@@ -136,10 +136,11 @@ const DownloadAnimation = ({ downloadState }: { downloadState: DownloadState }) 
                 )}
                 {downloadState === 'downloading' && (
                     <MotiView
-                        from={{ opacity: 0.5 }}
-                        animate={{ opacity: 1 }}
+                        from={{ translateY: -2 }}
+                        animate={{ translateY: 2 }}
                         transition={{
                             loop: true,
+                            repeatReverse: true,
                             duration: 500,
                         }}
                     >
@@ -156,7 +157,7 @@ const DownloadAnimation = ({ downloadState }: { downloadState: DownloadState }) 
                             damping: 15
                         }}
                     >
-                        <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
+                        <Ionicons name="checkmark-circle" size={16} color="#fff" />
                     </MotiView>
                 )}
                 {downloadState === 'error' && (
@@ -169,18 +170,18 @@ const DownloadAnimation = ({ downloadState }: { downloadState: DownloadState }) 
                             duration: 100,
                         }}
                     >
-                        <Ionicons name="alert-circle-outline" size={16} color="#d32f2f" />
+                        <Ionicons name="alert-circle" size={16} color="#d32f2f" />
                     </MotiView>
                 )}
                 <Text style={[
                     styles.downloadAnimationText,
                     downloadState === 'completed' && styles.downloadAnimationTextCompleted
                 ]}>
-                    {downloadState === 'idle' && 'Download'}
-                    {downloadState === 'preparing' && 'Mempersiapkan Data...'}
+                    {downloadState === 'idle' && 'Unduh Excel'}
+                    {downloadState === 'preparing' && 'Menyiapkan...'}
                     {downloadState === 'downloading' && 'Mengunduh...'}
-                    {downloadState === 'completed' && 'Download Berhasil!'}
-                    {downloadState === 'error' && 'Gagal Mengunduh'}
+                    {downloadState === 'completed' && 'Berhasil!'}
+                    {downloadState === 'error' && 'Gagal'}
                 </Text>
             </HStack>
         </MotiView>
@@ -195,28 +196,186 @@ const convertToExcel = async (sensorData: Array<{
     // Create a new workbook
     const wb: WorkBook = XLSX.utils.book_new();
 
+    // Log jumlah data yang akan diekspor
+    console.log('Jumlah sensor datasets:', sensorData.length);
+    sensorData.forEach((sensor, idx) => {
+        console.log(`Sensor ${idx} (${sensor.title}): ${sensor.data.length} records`);
+    });
+
+    // Inspeksi struktur data untuk memastikan format sudah benar
+    if (sensorData.length > 0 && sensorData[0].data.length > 0) {
+        console.log('Sample data structure for first sensor:');
+        console.log(JSON.stringify(sensorData[0].data[0], null, 2));
+    }
+
     // Add headers
     const headers = ['Timestamp', ...sensorData.map(sensor => sensor.title)];
     const ws: WorkSheet = XLSX.utils.aoa_to_sheet([headers]);
 
     // Collect all timestamps and sort them
     const allTimestamps = new Set<string>();
-    sensorData.forEach(sensor => {
-        sensor.data.forEach(item => {
-            allTimestamps.add(item.timestamp);
-        });
-    });
-    const sortedTimestamps = Array.from(allTimestamps).sort();
 
-    // Add data rows
+    console.log('Checking timestamp field in first record of each sensor:');
+    sensorData.forEach(sensor => {
+        if (sensor.data && Array.isArray(sensor.data) && sensor.data.length > 0) {
+            // Cek properti apa saja yang ada di objek pertama untuk debugging
+            console.log(`${sensor.title} first record keys:`, Object.keys(sensor.data[0]));
+
+            // Coba beberapa kemungkinan nama field untuk timestamp
+            const possibleTimestampFields = ['timestamp', 'time', 'date', 'waktu', 'tanggal', 'created_at'];
+            let timestampField = '';
+
+            // Cari field yang berisi timestamp
+            for (const field of possibleTimestampFields) {
+                if (field in sensor.data[0]) {
+                    timestampField = field;
+                    console.log(`Found timestamp field for ${sensor.title}: ${field}`);
+                    break;
+                }
+            }
+
+            if (!timestampField) {
+                console.warn(`No timestamp field found for ${sensor.title}. Using first field:`, Object.keys(sensor.data[0])[0]);
+                // Gunakan field pertama sebagai fallback jika tidak ada timestamp yang jelas
+                timestampField = Object.keys(sensor.data[0])[0];
+            }
+
+            // Collect timestamps dari field yang ditemukan
+            sensor.data.forEach(item => {
+                if (item && item[timestampField]) {
+                    const timestamp = typeof item[timestampField] === 'string'
+                        ? item[timestampField]
+                        : String(item[timestampField]);
+
+                    if (timestamp) {
+                        try {
+                            // Pastikan ini adalah timestamp valid
+                            const date = new Date(timestamp);
+                            if (!isNaN(date.getTime())) {
+                                allTimestamps.add(timestamp);
+                            } else {
+                                console.warn(`Invalid timestamp detected: ${timestamp}`);
+                            }
+                        } catch (e) {
+                            console.warn(`Error processing timestamp: ${timestamp}`, e);
+                        }
+                    }
+                }
+            });
+        }
+    });
+
+    console.log(`Total unique timestamps collected: ${allTimestamps.size}`);
+
+    // Jika masih tidak ada timestamp, coba pendekatan lain
+    if (allTimestamps.size === 0) {
+        console.warn('No timestamps found. Creating synthetic timestamps from record index');
+
+        // Ambil jumlah data terbanyak
+        const maxDataLength = Math.max(...sensorData.map(sensor => sensor.data?.length || 0));
+
+        // Buat timestamp sintetis
+        const startDate = new Date();
+        startDate.setHours(0, 0, 0, 0);
+
+        for (let i = 0; i < maxDataLength; i++) {
+            const date = new Date(startDate);
+            date.setMinutes(i); // Buat data dengan interval 1 menit
+            allTimestamps.add(date.toISOString());
+        }
+
+        console.log(`Created ${allTimestamps.size} synthetic timestamps`);
+    }
+
+    // Sort timestamps chronologically
+    const sortedTimestamps = Array.from(allTimestamps).sort((a, b) => {
+        const dateA = new Date(a);
+        const dateB = new Date(b);
+        return dateA.getTime() - dateB.getTime();
+    });
+
+    // Format timestamp untuk Excel (gunakan format yang terbaca Excel)
+    const formatTimestamp = (timestamp: string): string => {
+        try {
+            // Format timestamp agar Excel bisa membacanya sebagai tanggal/waktu
+            // Tambahkan tanda kutip di awal untuk mencegah Excel mengubah format
+            const formattedDate = moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
+            return `"${formattedDate}"`;  // Tambahkan tanda kutip sebagai literal string
+        } catch (error) {
+            console.error('Error formatting timestamp:', timestamp, error);
+            return `"${timestamp}"`;  // Return original with quotes if formatting fails
+        }
+    };
+
+    // Format nilai numerik untuk konsistensi
+    const formatValue = (value: any): string => {
+        if (value === null || value === undefined) return '';
+        if (typeof value === 'number') return value.toFixed(2);
+        return String(value);
+    };
+
+    // Add data rows with proper formatting
     const rows = sortedTimestamps.map(timestamp => {
-        const row = [timestamp];
+        const formattedTimestamp = formatTimestamp(timestamp);
+
+        // Buat row baru dimulai dengan timestamp
+        const row = [formattedTimestamp];
+
+        // Tambahkan data dari setiap sensor pada timestamp yang sama
         sensorData.forEach(sensor => {
-            const dataPoint = sensor.data.find(item => item.timestamp === timestamp);
-            row.push(dataPoint ? dataPoint[sensor.as] : '');
+            if (!sensor.data || !Array.isArray(sensor.data) || !sensor.data.length) {
+                row.push('');
+                return;
+            }
+
+            // Deteksi field timestamp
+            const firstRecord = sensor.data[0];
+            const possibleTimestampFields = ['timestamp', 'time', 'date', 'waktu', 'tanggal', 'created_at'];
+            let timestampField = '';
+
+            for (const field of possibleTimestampFields) {
+                if (field in firstRecord) {
+                    timestampField = field;
+                    break;
+                }
+            }
+
+            if (!timestampField) {
+                timestampField = Object.keys(firstRecord)[0];
+            }
+
+            // Cari data point yang timestamp-nya cocok
+            const dataPoint = sensor.data.find(item => {
+                if (!item || !item[timestampField]) return false;
+
+                const itemTimestamp = String(item[timestampField]);
+                return itemTimestamp === timestamp ||
+                    moment(itemTimestamp).format('YYYY-MM-DD HH:mm:ss') === moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
+            });
+
+            // Jika data point ditemukan, ambil nilai sensor
+            if (dataPoint && sensor.as && dataPoint[sensor.as] !== undefined) {
+                row.push(formatValue(dataPoint[sensor.as]));
+            } else {
+                // Coba ambil item pertama yang ditemukan (fallback)
+                const fieldName = sensor.as || Object.keys(firstRecord).find(key => key !== timestampField);
+                if (dataPoint && fieldName && dataPoint[fieldName] !== undefined) {
+                    row.push(formatValue(dataPoint[fieldName]));
+                } else {
+                    row.push(''); // Jika tidak ada data yang cocok
+                }
+            }
         });
+
         return row;
     });
+
+    // Log untuk debugging
+    console.log(`Generated ${rows.length} data rows for excel`);
+    if (rows.length > 0) {
+        console.log('First row sample:', rows[0]);
+        console.log('Last row sample:', rows[rows.length - 1]);
+    }
 
     // Add rows to worksheet
     XLSX.utils.sheet_add_aoa(ws, rows, { origin: 'A2' });
@@ -597,6 +756,186 @@ const FeedsScreen: React.FC = () => {
         );
     }), [chartData, selectedTimeRange]);
 
+    // Fungsi untuk download langsung dari server
+    const serverDownloadExcel = async (useCurrentLocation: boolean = false) => {
+        try {
+            setIsExporting(true);
+            setDownloadState('preparing');
+
+            // Buat notifikasi untuk tracking
+            const notificationId = await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Mengunduh Data Sensor",
+                    body: "Mempersiapkan proses unduh dari server...",
+                },
+                trigger: null,
+            });
+
+            // Buat URL berdasarkan pilihan lokasi
+            let downloadUrl = '';
+            if (useCurrentLocation && selectedLocation && selectedLocation !== 'all' && selectedLocation !== '') {
+                // Download berdasarkan lokasi tertentu menggunakan endpoint yang benar
+                downloadUrl = `https://server-water-sensors.onrender.com/data_combined/export/${selectedLocation}`;
+            } else {
+                // Download semua data menggunakan endpoint yang benar
+                downloadUrl = `https://server-water-sensors.onrender.com/data_combined_export/all`;
+            }
+
+            console.log(`Mengunduh Excel dari: ${downloadUrl}`);
+            setDownloadState('downloading');
+
+            // Update notifikasi
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Mengunduh Data Sensor",
+                    body: "Mengunduh file dari server...",
+                },
+                trigger: null,
+                identifier: notificationId,
+            });
+
+            // Buat nama file dengan timestamp
+            const timestamp = moment().format('YYYY-MM-DD_HH-mm-ss');
+            const filename = useCurrentLocation ?
+                `sensor_data_lokasi_${selectedLocation}_${timestamp}.xlsx` :
+                `all_sensor_data_${timestamp}.xlsx`;
+
+            // Download file ke cache terlebih dahulu
+            const fileUri = FileSystem.cacheDirectory + filename;
+            const downloadResumable = FileSystem.createDownloadResumable(
+                downloadUrl,
+                fileUri,
+                {
+                    headers: {
+                        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    }
+                }
+            );
+
+            // Tambahkan timeout untuk menangani jika server tidak merespons
+            const downloadPromise = downloadResumable.downloadAsync();
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Download timeout - server tidak merespons')), 60000); // 60 detik timeout
+            });
+
+            const { uri } = await Promise.race([downloadPromise, timeoutPromise]) as any;
+
+            if (!uri) {
+                throw new Error('Download gagal - URI tidak valid');
+            }
+
+            setDownloadState('completed');
+
+            // Update notifikasi ke selesai
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Unduh Selesai",
+                    body: `File ${filename} berhasil diunduh.`,
+                    data: { filepath: uri }
+                },
+                trigger: null,
+                identifier: notificationId,
+            });
+
+            // Tampilkan alert dengan opsi penyimpanan
+            Alert.alert(
+                '📊 Unduhan Berhasil',
+                'File Excel telah berhasil diunduh. Apa yang ingin Anda lakukan dengan file ini?',
+                [
+                    {
+                        text: 'Bagikan',
+                        onPress: async () => {
+                            try {
+                                await Sharing.shareAsync(uri, {
+                                    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                    dialogTitle: 'Bagikan Data Sensor',
+                                    UTI: 'org.openxmlformats.spreadsheetml.sheet'
+                                });
+                            } catch (error) {
+                                console.error('Error sharing file:', error);
+                                Alert.alert('Error', 'Gagal membagikan file');
+                            }
+                        }
+                    },
+                    {
+                        text: 'Simpan ke Perangkat',
+                        onPress: async () => {
+                            try {
+                                if (Platform.OS === 'android') {
+                                    // Request directory permissions for Android
+                                    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+
+                                    if (permissions.granted) {
+                                        // Create file in the selected directory
+                                        const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+                                            permissions.directoryUri,
+                                            filename,
+                                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                                        );
+
+                                        // Read the cached file
+                                        const fileContent = await FileSystem.readAsStringAsync(uri, {
+                                            encoding: FileSystem.EncodingType.Base64
+                                        });
+
+                                        // Write to the selected directory
+                                        await FileSystem.writeAsStringAsync(fileUri, fileContent, {
+                                            encoding: FileSystem.EncodingType.Base64
+                                        });
+
+                                        Alert.alert(
+                                            '✅ Berhasil Disimpan',
+                                            `File ${filename} telah disimpan ke folder yang Anda pilih.`,
+                                            [{ text: 'OK' }]
+                                        );
+                                    }
+                                } else if (Platform.OS === 'ios') {
+                                    // For iOS, share and ask them to save
+                                    await Sharing.shareAsync(uri, {
+                                        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                        dialogTitle: 'Simpan Data Sensor ke Perangkat',
+                                        UTI: 'org.openxmlformats.spreadsheetml.sheet'
+                                    });
+                                }
+                            } catch (error) {
+                                console.error('Error saving file:', error);
+                                Alert.alert(
+                                    '❌ Gagal Menyimpan',
+                                    'Terjadi kesalahan saat menyimpan file ke perangkat.',
+                                    [{ text: 'OK' }]
+                                );
+                            }
+                        },
+                        style: 'default'
+                    },
+                    {
+                        text: 'Tutup',
+                        style: 'cancel'
+                    },
+                ],
+                { cancelable: true }
+            );
+
+            // Reset state setelah beberapa detik
+            setTimeout(() => setDownloadState('idle'), 2000);
+
+        } catch (error) {
+            console.error('Error downloading Excel from server:', error);
+            setDownloadState('error');
+
+            // Reset state setelah beberapa detik
+            setTimeout(() => setDownloadState('idle'), 2000);
+
+            Alert.alert(
+                '❌ Unduhan Gagal',
+                `Terjadi kesalahan saat mengunduh data dari server:\n\n${error instanceof Error ? error.message : 'Kesalahan tidak diketahui'}\n\nSilakan coba lagi nanti.`,
+                [{ text: 'OK' }]
+            );
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     const downloadExcel = async () => {
         try {
             setIsExporting(true);
@@ -617,44 +956,69 @@ const FeedsScreen: React.FC = () => {
                     let allData: any[] = [];
                     let currentPage = 1;
                     let hasMoreData = true;
+                    let failedAttempts = 0;
+                    const MAX_FAILED_ATTEMPTS = 3;
 
-                    while (hasMoreData) {
-                        let apiUrl = '';
-                        const baseUrl = chart.url.split('?')[0];
+                    // Log progress
+                    console.log(`Fetching data for ${chart.title}...`);
 
-                        if (selectedLocation && selectedLocation !== 'all') {
-                            // Untuk semua endpoint gunakan format yang sama
-                            apiUrl = `${baseUrl}/${selectedLocation}?page=${currentPage}&limit=1000`;
+                    while (hasMoreData && failedAttempts < MAX_FAILED_ATTEMPTS) {
+                        try {
+                            let apiUrl = '';
+                            const baseUrl = chart.url.split('?')[0];
 
-                            // time range
+                            if (selectedLocation && selectedLocation !== 'all' && selectedLocation !== '') {
+                                // Untuk lokasi spesifik
+                                apiUrl = `${baseUrl}/${selectedLocation}?page=${currentPage}&limit=500`;
+                            } else {
+                                // Untuk semua lokasi
+                                apiUrl = `${baseUrl}?page=${currentPage}&limit=500`;
+                            }
+
+                            // Tambahkan time range filter
                             if (selectedTimeRange !== 'ALL') {
                                 apiUrl += `&range=${selectedTimeRange}`;
                             }
-                        } else {
-                            // Jika tidak ada lokasi yang dipilih
-                            apiUrl = `${baseUrl}?page=${currentPage}&limit=1000`;
 
-                            // time range
-                            if (selectedTimeRange !== 'ALL') {
-                                apiUrl += `&range=${selectedTimeRange}`;
+                            console.log(`Fetching page ${currentPage} from ${apiUrl}`);
+
+                            const response = await fetch(apiUrl);
+                            if (!response.ok) {
+                                throw new Error(`API responded with status ${response.status}`);
                             }
-                        }
 
-                        const response = await fetch(apiUrl);
-                        if (!response.ok) {
-                            throw new Error(`API responded with status ${response.status}`);
-                        }
+                            const json = await response.json();
+                            console.log(`Received ${json.data?.length || 0} records, totalPage: ${json.totalPage || 0}`);
 
-                        const json = await response.json();
+                            if (json.success && json.data && Array.isArray(json.data) && json.data.length > 0) {
+                                // Validasi data
+                                const validData = json.data.filter(item => item && typeof item === 'object');
+                                console.log(`${validData.length} valid records found on page ${currentPage}`);
 
-                        if (json.success && json.data.length > 0) {
-                            allData = [...allData, ...json.data];
-                            currentPage++;
-                            hasMoreData = currentPage <= json.totalPage;
-                        } else {
-                            hasMoreData = false;
+                                allData = [...allData, ...validData];
+                                currentPage++;
+
+                                // Check if we've reached the last page
+                                hasMoreData = json.totalPage ? currentPage <= json.totalPage : false;
+                            } else {
+                                console.log(`No more data found for ${chart.title} at page ${currentPage}`);
+                                hasMoreData = false;
+                            }
+                        } catch (error) {
+                            failedAttempts++;
+                            console.error(`Error fetching page ${currentPage} for ${chart.title}:`, error);
+
+                            if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
+                                console.error(`Max failed attempts reached for ${chart.title}, stopping pagination`);
+                                hasMoreData = false;
+                            } else {
+                                // Wait before retrying
+                                await new Promise(resolve => setTimeout(resolve, 1000));
+                            }
                         }
                     }
+
+                    console.log(`Total ${allData.length} records collected for ${chart.title}`);
 
                     return {
                         title: chart.title,
@@ -664,7 +1028,18 @@ const FeedsScreen: React.FC = () => {
                 })
             );
 
+            // Update notification
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Mengunduh Data Sensor",
+                    body: "Sedang mengkonversi data ke Excel...",
+                },
+                trigger: null,
+                identifier: notificationId.toString(),
+            });
+
             // Convert data to Excel format
+            console.log('Converting data to Excel format...');
             const base64Data: string = await convertToExcel(allSensorData);
 
             // Generate filename with timestamp
@@ -682,76 +1057,111 @@ const FeedsScreen: React.FC = () => {
 
             setDownloadState('downloading');
 
-            if (Platform.OS === 'android') {
-                try {
-                    // Request directory permissions for Android
-                    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+            // Simpan file ke cache terlebih dahulu
+            const tempFileUri = FileSystem.cacheDirectory + filename;
+            await FileSystem.writeAsStringAsync(tempFileUri, base64Data, {
+                encoding: FileSystem.EncodingType.Base64
+            });
 
-                    if (permissions.granted) {
-                        // Create file in the selected directory
-                        const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
-                            permissions.directoryUri,
-                            filename,
-                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                        );
+            // Set state ke completed
+            setDownloadState('completed');
 
-                        // Write the file content directly
-                        await FileSystem.writeAsStringAsync(fileUri, base64Data, {
-                            encoding: FileSystem.EncodingType.Base64
-                        });
+            // Update notifikasi ke selesai
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Unduh Selesai",
+                    body: `File ${filename} berhasil diunduh.`,
+                    data: { filepath: tempFileUri }
+                },
+                trigger: null,
+                identifier: notificationId.toString(),
+            });
 
-                        // Create a temporary copy in cache for sharing
-                        const tempFileUri = FileSystem.cacheDirectory + filename;
-                        await FileSystem.writeAsStringAsync(tempFileUri, base64Data, {
-                            encoding: FileSystem.EncodingType.Base64
-                        });
+            // Reset state after 2 seconds
+            setTimeout(() => {
+                setDownloadState('idle');
+            }, 2000);
 
-                        // Update notification to show completion
-                        await Notifications.scheduleNotificationAsync({
-                            content: {
-                                title: "Unduhan Selesai",
-                                body: `File ${filename} berhasil disimpan. Ketuk untuk membuka file.`,
-                                data: {
-                                    filepath: fileUri,
-                                    tempFilepath: tempFileUri
-                                },
-                            },
-                            trigger: null,
-                            identifier: notificationId.toString(),
-                        });
+            // Tampilkan alert dengan opsi penyimpanan yang lebih menarik
+            Alert.alert(
+                '📊 Data Siap Digunakan',
+                `${allSensorData.reduce((total, sensor) => total + sensor.data.length, 0)} data sensor telah berhasil diekspor. Apa yang ingin Anda lakukan dengan file Excel ini?`,
+                [
+                    {
+                        text: 'Bagikan',
+                        onPress: async () => {
+                            try {
+                                await Sharing.shareAsync(tempFileUri, {
+                                    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                    dialogTitle: 'Bagikan Data Sensor',
+                                    UTI: 'org.openxmlformats.spreadsheetml.sheet'
+                                });
+                            } catch (error) {
+                                console.error('Error sharing file:', error);
+                                Alert.alert('Error', 'Gagal membagikan file');
+                            }
+                        }
+                    },
+                    {
+                        text: 'Simpan ke Perangkat',
+                        onPress: async () => {
+                            try {
+                                if (Platform.OS === 'android') {
+                                    // Request directory permissions for Android
+                                    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
 
-                        setDownloadState('completed');
+                                    if (permissions.granted) {
+                                        // Create file in the selected directory
+                                        const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+                                            permissions.directoryUri,
+                                            filename,
+                                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                                        );
 
-                        // Reset state after 2 seconds
-                        setTimeout(() => {
-                            setDownloadState('idle');
-                        }, 2000);
+                                        // Write the file content directly
+                                        await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+                                            encoding: FileSystem.EncodingType.Base64
+                                        });
 
-                        Alert.alert(
-                            'Download Berhasil',
-                            `File telah berhasil disimpan di folder yang dipilih.`,
-                            [{ text: 'OK', style: 'default' }]
-                        );
-                    } else {
-                        await handleFileSharing(base64Data, filename, notificationId);
-                    }
-                } catch (error) {
-                    console.error('Error saving file on Android:', error);
-                    setDownloadState('error');
-                    setTimeout(() => {
-                        setDownloadState('idle');
-                    }, 2000);
-                    await handleFileSharing(base64Data, filename, notificationId);
-                }
-            } else {
-                await handleFileSharing(base64Data, filename, notificationId);
-            }
+                                        Alert.alert(
+                                            '✅ Berhasil Disimpan',
+                                            `File ${filename} telah disimpan ke folder yang Anda pilih.`,
+                                            [{ text: 'OK' }]
+                                        );
+                                    }
+                                } else if (Platform.OS === 'ios') {
+                                    // For iOS, share and ask them to save
+                                    await Sharing.shareAsync(tempFileUri, {
+                                        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                        dialogTitle: 'Simpan Data Sensor ke Perangkat',
+                                        UTI: 'org.openxmlformats.spreadsheetml.sheet'
+                                    });
+                                }
+                            } catch (error) {
+                                console.error('Error saving file:', error);
+                                Alert.alert(
+                                    '❌ Gagal Menyimpan',
+                                    'Terjadi kesalahan saat menyimpan file ke perangkat.',
+                                    [{ text: 'OK' }]
+                                );
+                            }
+                        },
+                        style: 'default'
+                    },
+                    {
+                        text: 'Tutup',
+                        style: 'cancel'
+                    },
+                ],
+                { cancelable: true }
+            );
         } catch (error) {
             console.error('Error downloading data:', error);
             setDownloadState('error');
             setTimeout(() => {
                 setDownloadState('idle');
             }, 2000);
+
             await Notifications.scheduleNotificationAsync({
                 content: {
                     title: "Error",
@@ -759,57 +1169,14 @@ const FeedsScreen: React.FC = () => {
                 },
                 trigger: null,
             });
-            Alert.alert('Download Error', 'Gagal mengunduh data. Silakan coba lagi.');
-        } finally {
-            setIsExporting(false);
-        }
-    };
-
-    // Helper function to handle file sharing
-    const handleFileSharing = async (base64Data: string, filename: string, notificationId: string) => {
-        try {
-            setDownloadState('downloading');
-            const fileUri = FileSystem.cacheDirectory + filename;
-            await FileSystem.writeAsStringAsync(fileUri, base64Data, {
-                encoding: FileSystem.EncodingType.Base64
-            });
-
-            await Sharing.shareAsync(fileUri, {
-                mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                dialogTitle: 'Export Data Sensor',
-                UTI: 'org.openxmlformats.spreadsheetml.sheet'
-            });
-
-            await Notifications.scheduleNotificationAsync({
-                content: {
-                    title: "Unduhan Selesai",
-                    body: `File ${filename} berhasil diunduh. Ketuk untuk membuka file.`,
-                    data: {
-                        filepath: fileUri,
-                        tempFilepath: fileUri
-                    },
-                },
-                trigger: null,
-                identifier: notificationId.toString(),
-            });
-
-            setDownloadState('completed');
-            setTimeout(() => {
-                setDownloadState('idle');
-            }, 2000);
 
             Alert.alert(
-                'Download Berhasil',
-                `File telah berhasil diunduh.`,
+                '❌ Ekspor Gagal',
+                `Gagal mengekspor data. Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
                 [{ text: 'OK', style: 'default' }]
             );
-        } catch (error) {
-            console.error('Error sharing file:', error);
-            setDownloadState('error');
-            setTimeout(() => {
-                setDownloadState('idle');
-            }, 2000);
-            throw new Error('Gagal membagikan file');
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -1147,6 +1514,93 @@ const FeedsScreen: React.FC = () => {
         };
     }, []);
 
+    // Handle untuk tombol download
+    const handleDownloadPress = () => {
+        if (isExporting) return;
+
+        Alert.alert(
+            '📊 Unduh Data Sensor',
+            'Pilih metode unduh yang diinginkan:',
+            [
+                {
+                    text: '❌ Batal',
+                    style: 'cancel'
+                },
+                {
+                    text: '📍 Data Lokasi Ini Saja',
+                    onPress: () => {
+                        if (selectedLocation && selectedLocation !== 'all' && selectedLocation !== '') {
+                            const locationName = locations.find(loc => String(loc.id_lokasi) === selectedLocation)?.nama_sungai || selectedLocation;
+
+                            Alert.alert(
+                                '📥 Konfirmasi Unduh',
+                                `Data sensor dari lokasi ${locationName} akan diunduh dari server dalam format Excel.\n\nProses ini akan menghasilkan dokumen yang lengkap dengan semua data dari lokasi ini.`,
+                                [
+                                    {
+                                        text: '❌ Batal',
+                                        style: 'cancel'
+                                    },
+                                    {
+                                        text: '✅ Unduh',
+                                        onPress: () => serverDownloadExcel(true)
+                                    }
+                                ],
+                                { cancelable: true }
+                            );
+                        } else {
+                            Alert.alert(
+                                '⚠️ Perhatian',
+                                'Silakan pilih lokasi spesifik terlebih dahulu untuk mengunduh data lokasi.',
+                                [{ text: 'OK' }]
+                            );
+                        }
+                    }
+                },
+                {
+                    text: '🌎 Semua Data Sensor',
+                    onPress: () => {
+                        Alert.alert(
+                            '📥 Konfirmasi Unduh',
+                            'Data dari SEMUA lokasi akan diunduh dari server dalam format Excel.\n\nFile yang dihasilkan mungkin berukuran besar. Pastikan koneksi internet stabil.',
+                            [
+                                {
+                                    text: '❌ Batal',
+                                    style: 'cancel'
+                                },
+                                {
+                                    text: '✅ Unduh',
+                                    onPress: () => serverDownloadExcel(false)
+                                }
+                            ],
+                            { cancelable: true }
+                        );
+                    }
+                },
+                {
+                    text: '📱 Data Lokal Saja',
+                    onPress: () => {
+                        Alert.alert(
+                            '📥 Unduh Data Lokal',
+                            'Unduh data yang sudah dimuat di aplikasi (hanya data yang sedang terlihat).\n\nMetode ini lebih cepat tapi hanya berisi data yang sudah dimuat di perangkat.',
+                            [
+                                {
+                                    text: '❌ Batal',
+                                    style: 'cancel'
+                                },
+                                {
+                                    text: '✅ Unduh Data Lokal',
+                                    onPress: downloadExcel
+                                }
+                            ],
+                            { cancelable: true }
+                        );
+                    }
+                }
+            ],
+            { cancelable: true }
+        );
+    };
+
     return (<>
         <View style={styles.container}>
             {/* Wrapper untuk tombol filter dengan animasi */}
@@ -1172,8 +1626,8 @@ const FeedsScreen: React.FC = () => {
                             </HStack>
                         </TouchableOpacity>
 
-                        {/* Download */}
-                        <TouchableOpacity onPress={downloadExcel} disabled={isExporting}>
+                        {/* Download - updated to use new function */}
+                        <TouchableOpacity onPress={handleDownloadPress} disabled={isExporting}>
                             <DownloadAnimation downloadState={downloadState} />
                         </TouchableOpacity>
                     </View>
