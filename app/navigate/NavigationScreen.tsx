@@ -10,6 +10,22 @@ import { AntDesign, MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-i
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// Debug utility functions
+const DEBUG = {
+    log: (message: string, data?: any) => {
+        console.log(`[Navigation Debug] ${message}`, data ? data : '');
+    },
+    error: (message: string, error?: any) => {
+        console.error(`[Navigation Error] ${message}`, error ? error : '');
+    },
+    warn: (message: string, data?: any) => {
+        console.warn(`[Navigation Warning] ${message}`, data ? data : '');
+    },
+    info: (message: string, data?: any) => {
+        console.info(`[Navigation Info] ${message}`, data ? data : '');
+    }
+};
+
 // Define the type for route params
 type RouteParams = {
     NavigationScreen: {
@@ -32,12 +48,16 @@ const NavigationScreen = () => {
     const route = useRoute<RouteProp<RouteParams, 'NavigationScreen'>>();
     const { latitude, longitude, name, address } = route.params;
 
+    DEBUG.log('Navigation Screen Initialized', { latitude, longitude, name, address });
+
     const destination = {
         latitude: parseFloat(latitude),
         longitude: parseFloat(longitude),
         name,
         address: address || ''
     };
+
+    DEBUG.log('Destination Set', destination);
 
     const webViewRef = useRef<WebView>(null);
     const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
@@ -62,20 +82,32 @@ const NavigationScreen = () => {
     useEffect(() => {
         const getUserLocation = async () => {
             try {
+                DEBUG.log('Requesting location permissions...');
                 const { status } = await Location.requestForegroundPermissionsAsync();
+
                 if (status !== 'granted') {
+                    DEBUG.error('Location permission denied');
                     Alert.alert('Izin Lokasi Diperlukan', 'Aplikasi membutuhkan akses lokasi untuk navigasi');
                     router.back();
                     return;
                 }
 
+                DEBUG.log('Location permission granted, getting current position...');
                 setIsLoading(true);
                 const location = await Location.getCurrentPositionAsync({
                     accuracy: Location.Accuracy.BestForNavigation,
                 });
+
+                DEBUG.log('Current position obtained', {
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                    accuracy: location.coords.accuracy
+                });
+
                 setUserLocation(location);
 
                 // Start watching location with high accuracy
+                DEBUG.log('Starting location watch...');
                 const subscription = await Location.watchPositionAsync(
                     {
                         accuracy: Location.Accuracy.BestForNavigation,
@@ -83,7 +115,18 @@ const NavigationScreen = () => {
                         timeInterval: 1000,
                     },
                     (location) => {
-                        if (!isNavigating) return;
+                        if (!isNavigating) {
+                            DEBUG.warn('Location update ignored - navigation stopped');
+                            return;
+                        }
+
+                        DEBUG.log('Location updated', {
+                            latitude: location.coords.latitude,
+                            longitude: location.coords.longitude,
+                            accuracy: location.coords.accuracy,
+                            speed: location.coords.speed,
+                            heading: location.coords.heading
+                        });
 
                         setUserLocation(location);
 
@@ -100,6 +143,13 @@ const NavigationScreen = () => {
                         if (webViewRef.current && webViewLoaded && isNavigating) {
                             try {
                                 const { latitude, longitude, accuracy } = location.coords;
+                                DEBUG.log('Updating WebView position', {
+                                    latitude,
+                                    longitude,
+                                    accuracy,
+                                    bearing
+                                });
+
                                 const updateScript = `
                                     try {
                                         if (window.updateUserPosition) {
@@ -113,16 +163,17 @@ const NavigationScreen = () => {
                                 `;
                                 webViewRef.current.injectJavaScript(updateScript);
                             } catch (error) {
-                                console.error('Error injecting script:', error);
+                                DEBUG.error('Error updating WebView position', error);
                             }
                         }
                     }
                 );
 
+                DEBUG.log('Location watch started successfully');
                 setLocationWatchId(subscription);
                 setIsLoading(false);
             } catch (error) {
-                console.error('Error starting navigation:', error);
+                DEBUG.error('Error in location handling', error);
                 Alert.alert('Error', 'Gagal memulai navigasi. Coba lagi.');
                 router.back();
             }
@@ -132,6 +183,7 @@ const NavigationScreen = () => {
 
         return () => {
             if (locationWatchId) {
+                DEBUG.log('Cleaning up location watch');
                 locationWatchId.remove();
             }
         };
@@ -139,7 +191,20 @@ const NavigationScreen = () => {
 
     // Initialize navigation when user location is available and WebView is loaded
     useEffect(() => {
-        if (!userLocation || !webViewRef.current || !webViewLoaded || !isNavigating) return;
+        if (!userLocation || !webViewRef.current || !webViewLoaded || !isNavigating) {
+            DEBUG.log('Navigation initialization skipped', {
+                hasUserLocation: !!userLocation,
+                hasWebViewRef: !!webViewRef.current,
+                isWebViewLoaded: webViewLoaded,
+                isNavigating
+            });
+            return;
+        }
+
+        DEBUG.log('Initializing navigation in WebView', {
+            userLocation: userLocation.coords,
+            destination
+        });
 
         const initScript = `
             try {
@@ -162,24 +227,30 @@ const NavigationScreen = () => {
 
         setTimeout(() => {
             if (webViewRef.current && isNavigating) {
+                DEBUG.log('Injecting navigation initialization script');
                 webViewRef.current.injectJavaScript(initScript);
             }
         }, 1000);
     }, [userLocation, destination, webViewLoaded]);
 
     const handleWebViewLoad = () => {
+        DEBUG.log('WebView loaded');
         setWebViewLoaded(true);
     };
 
     const handleWebViewMessage = (event: any) => {
         try {
             const data = JSON.parse(event.nativeEvent.data);
+            DEBUG.log('Received WebView message', data);
 
             if (data.type === 'exitNavigation') {
+                DEBUG.log('Exiting navigation');
                 cleanupAndGoBack();
             } else if (data.type === 'returnToMainMap') {
+                DEBUG.log('Returning to main map');
                 cleanupAndGoBack();
             } else if (data.type === 'routeInfo') {
+                DEBUG.log('Route info updated', data.data);
                 setNavigationInfo({
                     ...navigationInfo,
                     distance: data.data.formattedDistance || '-- m',
@@ -190,16 +261,18 @@ const NavigationScreen = () => {
                     remainingTime: data.data.remainingTime || '-- min'
                 });
             } else if (data.type === 'openGoogleMaps') {
+                DEBUG.log('Opening Google Maps', data.data);
                 const { latitude, longitude, name } = data.data;
                 const url = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=driving&destination_place_id=${encodeURIComponent(name)}`;
                 Linking.openURL(url);
             }
         } catch (error) {
-            console.error('Error handling WebView message:', error);
+            DEBUG.error('Error handling WebView message', error);
         }
     };
 
     const cleanupAndGoBack = () => {
+        DEBUG.log('Cleaning up and going back');
         setIsNavigating(false);
         if (locationWatchId) {
             locationWatchId.remove();
@@ -233,17 +306,17 @@ const NavigationScreen = () => {
                     left: 0;
                     right: 0;
                     background: rgba(16, 185, 129, 0.95);
-                    backdrop-filter: blur(10px);
-                    -webkit-backdrop-filter: blur(10px);
+                    backdrop-filter: blur(20px);
+                    -webkit-backdrop-filter: blur(20px);
                     color: white;
-                    padding: 16px 20px;
+                    padding: 20px;
                     z-index: 1000;
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
-                    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
-                    border-bottom-left-radius: 16px;
-                    border-bottom-right-radius: 16px;
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+                    border-bottom-left-radius: 24px;
+                    border-bottom-right-radius: 24px;
                 }
                 
                 .dest-info {
@@ -253,47 +326,38 @@ const NavigationScreen = () => {
                 
                 .dest-name {
                     font-weight: 700;
-                    font-size: 18px;
+                    font-size: 20px;
                     letter-spacing: -0.3px;
-                    margin-bottom: 2px;
+                    margin-bottom: 4px;
                 }
                 
                 .dest-address {
-                    font-size: 12px;
+                    font-size: 13px;
                     opacity: 0.9;
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
-                    max-width: 220px;
+                    max-width: 250px;
                     font-weight: 400;
                 }
                 
                 .nav-btn {
-                    width: 42px;
-                    height: 42px;
+                    width: 48px;
+                    height: 48px;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    border-radius: 12px;
+                    border-radius: 16px;
                     border: none;
                     cursor: pointer;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-                    transition: all 0.2s ease;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                    transition: all 0.3s ease;
+                    background: rgba(255, 255, 255, 0.2);
                 }
                 
                 .nav-btn:active {
                     transform: scale(0.95);
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-                }
-                
-                .back-btn {
-                    background: #3b82f6;
-                    color: white;
-                    margin-right: 10px;
-                }
-                
-                .close-btn {
-                    display: none;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
                 }
                 
                 .nav-info {
@@ -302,12 +366,12 @@ const NavigationScreen = () => {
                     left: 0;
                     right: 0;
                     background: white;
-                    border-top-left-radius: 24px;
-                    border-top-right-radius: 24px;
-                    box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+                    border-top-left-radius: 28px;
+                    border-top-right-radius: 28px;
+                    box-shadow: 0 -4px 30px rgba(0,0,0,0.15);
                     z-index: 1000;
-                    transform: translateY(calc(100% - 140px));
-                    transition: transform 0.3s ease;
+                    transform: translateY(calc(100% - 160px));
+                    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
                     max-height: 90vh;
                     overflow: hidden;
                 }
@@ -317,34 +381,37 @@ const NavigationScreen = () => {
                 }
                 
                 .nav-info-handle {
-                    width: 40px;
-                    height: 4px;
+                    width: 48px;
+                    height: 5px;
                     background: #e2e8f0;
-                    border-radius: 2px;
-                    margin: 12px auto;
+                    border-radius: 3px;
+                    margin: 16px auto;
                     cursor: pointer;
                 }
                 
                 .instruction {
                     display: flex;
                     align-items: center;
-                    margin: 0 20px 16px;
+                    margin: 0 24px 20px;
+                    background: #f8fafc;
+                    padding: 20px;
+                    border-radius: 20px;
                 }
                 
                 .turn-icon {
                     background: #f0f9ff;
-                    width: 52px;
-                    height: 52px;
-                    border-radius: 16px;
+                    width: 60px;
+                    height: 60px;
+                    border-radius: 20px;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    margin-right: 15px;
-                    box-shadow: 0 4px 10px rgba(59, 130, 246, 0.1);
+                    margin-right: 20px;
+                    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.15);
                 }
                 
                 .instruction-text {
-                    font-size: 16px;
+                    font-size: 18px;
                     font-weight: 600;
                     color: #1e293b;
                     flex: 1;
@@ -352,15 +419,15 @@ const NavigationScreen = () => {
                 }
                 
                 .next-instruction {
-                    font-size: 14px;
+                    font-size: 15px;
                     color: #64748b;
-                    margin-top: 4px;
+                    margin-top: 6px;
                 }
                 
                 .distance-time {
                     display: flex;
                     justify-content: space-between;
-                    padding: 16px 20px;
+                    padding: 20px 24px;
                     border-top: 1px solid #f1f5f9;
                     background: white;
                 }
@@ -369,17 +436,17 @@ const NavigationScreen = () => {
                     display: flex;
                     flex-direction: column;
                     align-items: center;
-                    padding: 0 12px;
+                    padding: 0 16px;
                 }
                 
                 .metric-value {
-                    font-size: 20px;
+                    font-size: 24px;
                     font-weight: 700;
                     color: #0f172a;
                 }
                 
                 .metric-label {
-                    font-size: 12px;
+                    font-size: 13px;
                     color: #64748b;
                     margin-top: 4px;
                     font-weight: 500;
@@ -388,51 +455,50 @@ const NavigationScreen = () => {
                 .directions-panel {
                     max-height: 0;
                     overflow: hidden;
-                    transition: max-height 0.3s ease;
+                    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
                     background: #f8fafc;
                 }
                 
                 .directions-panel.expanded {
-                    max-height: calc(90vh - 200px);
+                    max-height: calc(90vh - 220px);
                     overflow-y: auto;
-                    padding-bottom: 20px;
+                    padding-bottom: 24px;
                 }
                 
                 .direction-step {
                     display: flex;
                     align-items: center;
-                    padding: 12px 20px;
+                    padding: 16px 24px;
                     border-bottom: 1px solid #f1f5f9;
                     background: white;
-                }
-                
-                .direction-step:last-child {
-                    border-bottom: none;
+                    margin: 8px 16px;
+                    border-radius: 16px;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
                 }
                 
                 .step-icon {
-                    width: 40px;
-                    height: 40px;
-                    border-radius: 12px;
+                    width: 48px;
+                    height: 48px;
+                    border-radius: 16px;
                     background: #f8fafc;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    margin-right: 12px;
+                    margin-right: 16px;
                     flex-shrink: 0;
                 }
                 
                 .step-text {
                     flex: 1;
-                    font-size: 14px;
+                    font-size: 15px;
                     color: #334155;
                     line-height: 1.4;
                 }
                 
                 .step-distance {
-                    font-size: 12px;
+                    font-size: 13px;
                     color: #64748b;
-                    margin-top: 2px;
+                    margin-top: 4px;
                 }
 
                 .step-number {
@@ -441,37 +507,34 @@ const NavigationScreen = () => {
                     left: 0;
                     background: #3b82f6;
                     color: white;
-                    font-size: 10px;
+                    font-size: 11px;
                     font-weight: 600;
-                    padding: 2px 6px;
-                    border-radius: 0 0 8px 0;
+                    padding: 3px 8px;
+                    border-radius: 0 0 12px 0;
                 }
 
                 .step-container {
                     position: relative;
-                    margin: 8px 0;
-                }
-
-                .step-container:first-child {
-                    margin-top: 0;
-                }
-
-                .step-container:last-child {
-                    margin-bottom: 0;
+                    margin: 12px 0;
                 }
 
                 .expand-button {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    padding: 12px;
+                    padding: 16px;
                     background: #f8fafc;
                     border-top: 1px solid #f1f5f9;
                     cursor: pointer;
+                    transition: all 0.3s ease;
+                }
+
+                .expand-button:hover {
+                    background: #f1f5f9;
                 }
 
                 .expand-button-text {
-                    font-size: 14px;
+                    font-size: 15px;
                     font-weight: 600;
                     color: #3b82f6;
                     margin-left: 8px;
@@ -479,106 +542,127 @@ const NavigationScreen = () => {
                 
                 .google-maps-btn {
                     position: absolute;
-                    bottom: 180px;
-                    right: 20px;
-                    background: #4285F4;
+                    bottom: 200px;
+                    right: 24px;
+                    background: rgba(66, 133, 244, 0.95);
                     color: white;
-                    padding: 12px 24px;
-                    border-radius: 16px;
+                    padding: 14px 28px;
+                    border-radius: 20px;
                     display: flex;
                     align-items: center;
-                    gap: 8px;
+                    gap: 10px;
                     font-weight: 600;
-                    font-size: 14px;
-                    box-shadow: 0 4px 15px rgba(66, 133, 244, 0.3);
+                    font-size: 15px;
+                    box-shadow: 0 4px 20px rgba(66, 133, 244, 0.3);
                     z-index: 100;
                     border: none;
                     cursor: pointer;
-                    transition: all 0.2s ease;
+                    transition: all 0.3s ease;
                     backdrop-filter: blur(10px);
                     -webkit-backdrop-filter: blur(10px);
-                    background: rgba(66, 133, 244, 0.95);
                 }
                 
                 .google-maps-btn:active {
                     transform: scale(0.98);
-                    box-shadow: 0 2px 8px rgba(66, 133, 244, 0.2);
+                    box-shadow: 0 2px 10px rgba(66, 133, 244, 0.2);
                 }
                 
                 .action-buttons {
                     position: absolute;
-                    bottom: 100px;
-                    right: 20px;
+                    bottom: 120px;
+                    right: 24px;
                     display: flex;
                     flex-direction: column;
-                    gap: 12px;
+                    gap: 16px;
                     z-index: 1000;
                 }
                 
                 .action-btn {
-                    background: white;
-                    width: 54px;
-                    height: 54px;
-                    border-radius: 15px;
+                    background: rgba(255, 255, 255, 0.95);
+                    width: 60px;
+                    height: 60px;
+                    border-radius: 20px;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
                     border: none;
                     cursor: pointer;
-                    transition: all 0.2s ease;
+                    transition: all 0.3s ease;
+                    backdrop-filter: blur(10px);
+                    -webkit-backdrop-filter: blur(10px);
                 }
                 
                 .action-btn:active {
                     transform: scale(0.95);
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
                 }
 
                 .speed-indicator {
                     position: absolute;
-                    top: 100px;
-                    right: 20px;
+                    top: 120px;
+                    right: 24px;
                     background: rgba(255, 255, 255, 0.95);
-                    padding: 12px 16px;
-                    border-radius: 16px;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                    padding: 16px 20px;
+                    border-radius: 20px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
                     display: flex;
                     flex-direction: column;
                     align-items: center;
                     z-index: 1000;
+                    backdrop-filter: blur(10px);
+                    -webkit-backdrop-filter: blur(10px);
                 }
 
                 .speed-value {
-                    font-size: 24px;
+                    font-size: 28px;
                     font-weight: 700;
                     color: #0f172a;
                 }
 
                 .speed-label {
-                    font-size: 12px;
+                    font-size: 13px;
                     color: #64748b;
-                    margin-top: 2px;
+                    margin-top: 4px;
+                    font-weight: 500;
                 }
 
                 .compass {
                     position: absolute;
-                    top: 180px;
-                    right: 20px;
-                    width: 60px;
-                    height: 60px;
+                    top: 200px;
+                    right: 24px;
+                    width: 70px;
+                    height: 70px;
                     background: rgba(255, 255, 255, 0.95);
-                    border-radius: 30px;
+                    border-radius: 35px;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
                     z-index: 1000;
+                    backdrop-filter: blur(10px);
+                    -webkit-backdrop-filter: blur(10px);
                 }
 
                 .compass-arrow {
-                    width: 30px;
-                    height: 30px;
+                    width: 36px;
+                    height: 36px;
                     transition: transform 0.3s ease;
+                }
+
+                .mapboxgl-ctrl-top-right {
+                    top: 100px;
+                }
+
+                .mapboxgl-ctrl-group {
+                    border-radius: 16px !important;
+                    overflow: hidden;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+                }
+
+                .mapboxgl-ctrl-group button {
+                    width: 48px !important;
+                    height: 48px !important;
                 }
             </style>
         </head>
@@ -608,15 +692,7 @@ const NavigationScreen = () => {
             
             <div class="nav-info" id="nav-info">
                 <div class="nav-info-handle"></div>
-                <div class="instruction">
-                    <div class="turn-icon" id="turn-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                    </div>
-                    <div>
-                        <div class="instruction-text" id="instruction">Menghitung rute ke tujuan...</div>
-                        <div class="next-instruction" id="next-instruction"></div>
-                    </div>
-                </div>
+                
                 
                 <div class="distance-time">
                     <div class="metric-item">
@@ -625,7 +701,7 @@ const NavigationScreen = () => {
                     </div>
                     
                     <div class="metric-item">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/></svg>
                     </div>
                     
                     <div class="metric-item">
@@ -645,7 +721,7 @@ const NavigationScreen = () => {
             </div>
             
             <button class="google-maps-btn" onclick="openGoogleMaps()">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
                 Maps
             </button>
             
@@ -677,9 +753,30 @@ const NavigationScreen = () => {
                 function initializeMap() {
                     map = new mapboxgl.Map({
                         container: 'map',
-                        style: 'mapbox://styles/mapbox/navigation-day-v1',
+                        style: 'mapbox://styles/mapbox/navigation-night-v1',
                         center: [userLng, userLat],
-                        zoom: 13
+                        zoom: 15,
+                        pitch: 60,
+                        bearing: 0,
+                        antialias: true
+                    });
+
+                    // Add 3D building layer
+                    map.on('load', () => {
+                        map.addLayer({
+                            'id': '3d-buildings',
+                            'source': 'composite',
+                            'source-layer': 'building',
+                            'filter': ['==', 'extrude', 'true'],
+                            'type': 'fill-extrusion',
+                            'minzoom': 15,
+                            'paint': {
+                                'fill-extrusion-color': '#aaa',
+                                'fill-extrusion-height': ['get', 'height'],
+                                'fill-extrusion-base': ['get', 'min_height'],
+                                'fill-extrusion-opacity': 0.6
+                            }
+                        });
                     });
                     
                     // Make sure global functions are available
