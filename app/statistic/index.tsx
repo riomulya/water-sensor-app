@@ -134,7 +134,7 @@ export default function StatisticsScreen() {
             } else {
                 // For specific location
                 apiUrl = `${API_URL}data_combined/paginated/${selectedLocation}?page=${currentPage}&limit=${pageSize}`;
-                console.log(`Fetching sensor data for location ${selectedLocation} from: ${apiUrl}`);
+                console.log(`Fetching sensor data for location ${selectedLocation} from: ${apiUrl}, page: ${currentPage}`);
             }
 
             const response = await fetch(apiUrl);
@@ -146,7 +146,12 @@ export default function StatisticsScreen() {
             if (responseData.success && Array.isArray(responseData.data)) {
                 apiData = responseData.data;
                 setTotalRecords(responseData.total || apiData.length);
-                setTotalPages(responseData.totalPage || 1);
+
+                // Calculate total pages based on total records and page size
+                const calculatedTotalPages = Math.ceil((responseData.total || apiData.length) / pageSize);
+                setTotalPages(calculatedTotalPages || 1);
+
+                console.log(`Total records: ${responseData.total}, Total pages: ${calculatedTotalPages}`);
             } else if (Array.isArray(responseData)) {
                 apiData = responseData;
                 setTotalRecords(apiData.length);
@@ -154,11 +159,14 @@ export default function StatisticsScreen() {
             } else if (responseData.data && Array.isArray(responseData.data)) {
                 apiData = responseData.data;
                 setTotalRecords(responseData.total || apiData.length);
-                setTotalPages(responseData.totalPage || 1);
+
+                // Calculate total pages based on total records and page size
+                const calculatedTotalPages = Math.ceil((responseData.total || apiData.length) / pageSize);
+                setTotalPages(calculatedTotalPages || 1);
             }
 
             console.log("Sensor data received:", apiData ?
-                `${apiData.length} items of ${responseData.total || 'unknown'} total (Page ${currentPage}/${responseData.totalPage || 1})` :
+                `${apiData.length} items of ${responseData.total || 'unknown'} total (Page ${currentPage}/${responseData.totalPage || Math.ceil((responseData.total || apiData.length) / pageSize) || 1})` :
                 'No data');
 
             // Map API response fields to component expected fields
@@ -276,7 +284,13 @@ export default function StatisticsScreen() {
                         <View style={styles.contentContainer}>
                             <StatsSummaryCards sensorData={sensorData} />
                             <SensorTrendsChart sensorData={sensorData} />
-                            <SensorDataTable sensorData={sensorData} />
+                            <SensorDataTable
+                                sensorData={sensorData}
+                                onRequestPage={handlePageChange}
+                                totalRecords={totalRecords}
+                                currentPage={currentPage}
+                                totalPages={totalPages}
+                            />
 
                             <View style={styles.footer}>
                                 <Text size="xs" style={styles.footerText}>
@@ -286,16 +300,6 @@ export default function StatisticsScreen() {
                                 <Text size="xs" style={styles.footerText}>
                                     Menampilkan {sensorData.length} dari {totalRecords.toLocaleString()} data
                                 </Text>
-                                {currentPage < totalPages && !loading && (
-                                    <TouchableOpacity
-                                        style={styles.loadMoreButton}
-                                        onPress={loadMoreData}
-                                    >
-                                        <Text size="xs" style={styles.loadMoreButtonText}>
-                                            Muat lebih banyak data ({currentPage}/{totalPages})
-                                        </Text>
-                                    </TouchableOpacity>
-                                )}
                                 {loading && currentPage > 1 && (
                                     <ActivityIndicator size="small" color="#3b82f6" style={styles.loadMoreIndicator} />
                                 )}
@@ -375,17 +379,6 @@ const styles = StyleSheet.create({
         color: '#94a3b8',
         textAlign: 'center',
         marginBottom: 4,
-    },
-    loadMoreButton: {
-        marginTop: 12,
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        backgroundColor: '#e2e8f0',
-        borderRadius: 20,
-    },
-    loadMoreButtonText: {
-        color: '#3b82f6',
-        fontWeight: '500',
     },
     loadMoreIndicator: {
         marginTop: 12,

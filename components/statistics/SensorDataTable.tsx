@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Dimensions, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
 import { SENSOR_LABELS, SENSOR_UNITS } from '@/constants/api';
 import moment from 'moment';
@@ -28,14 +28,45 @@ interface SensorData {
 
 interface SensorDataTableProps {
     sensorData: SensorData[] | null;
+    onRequestPage?: (page: number) => void;
+    totalRecords?: number;
+    currentPage?: number;
+    totalPages?: number;
 }
 
 const { width } = Dimensions.get('window');
 
-const SensorDataTable: React.FC<SensorDataTableProps> = ({ sensorData }) => {
-    const [page, setPage] = useState(1);
-    const pageSize = 10;
-    const maxPage = sensorData && Array.isArray(sensorData) ? Math.ceil(sensorData.length / pageSize) : 1;
+const SensorDataTable: React.FC<SensorDataTableProps> = ({
+    sensorData,
+    onRequestPage,
+    totalRecords = 0,
+    currentPage = 1,
+    totalPages = 1
+}) => {
+    const [localPage, setLocalPage] = useState(1);
+    const pageSize = 25;
+    const [isLoadingNextPage, setIsLoadingNextPage] = useState(false);
+
+    // Update internal page when currentPage from props changes
+    useEffect(() => {
+        setIsLoadingNextPage(false);
+    }, [currentPage]);
+
+    // Calculate the number of local pages based on the data we have
+    const totalLocalPages = sensorData && Array.isArray(sensorData)
+        ? Math.ceil(sensorData.length / pageSize)
+        : 1;
+
+    // Calculate total server pages (using the data from props)
+    const totalServerPages = totalPages;
+
+    // Decide which pagination system to use
+    const useServerPagination = totalServerPages > 1;
+
+    // Calculate the max page for the current view
+    const maxPage = useServerPagination
+        ? totalLocalPages + (totalServerPages - Math.ceil(sensorData?.length || 0 / 100))
+        : totalLocalPages;
 
     // Animation values
     const tableOpacity = useSharedValue(1);
@@ -50,7 +81,20 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({ sensorData }) => {
 
     const handlePageChange = (newPage: number) => {
         const updatePage = (p: number) => {
-            setPage(p);
+            setLocalPage(p);
+
+            // Jika data yang diminta tidak ada dalam memory, minta dari server
+            const localDataAvailable = sensorData && (p * pageSize <= sensorData.length);
+
+            if (onRequestPage && !localDataAvailable) {
+                // Hitung halaman server yang sesuai
+                const serverPage = Math.floor((p * pageSize) / 100) + 1;
+                console.log(`Requesting server page ${serverPage} for local page ${p}`);
+
+                setIsLoadingNextPage(true);
+                onRequestPage(serverPage);
+            }
+
             setTimeout(() => {
                 tableOpacity.value = withTiming(1, { duration: 300 });
                 tableTranslateY.value = withTiming(0, { duration: 300 });
@@ -130,10 +174,16 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({ sensorData }) => {
         );
     }
 
-    // Get paginated data
+    // Get paginated data - show 25 items per page from the local data
+    const startIndex = (localPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
     const paginatedData = Array.isArray(sensorData)
-        ? sensorData.slice((page - 1) * pageSize, page * pageSize)
+        ? sensorData.slice(startIndex, endIndex)
         : [];
+
+    // Calculate what to display in pagination
+    const startRecord = startIndex + 1;
+    const endRecord = Math.min(startIndex + paginatedData.length, sensorData?.length || 0);
 
     return (
         <MotiView
@@ -152,17 +202,25 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({ sensorData }) => {
                             </Text>
                         </View>
 
-                        <Button
-                            size="sm"
-                            onPress={handleExport}
-                            variant="outline"
-                            style={styles.exportButton}
-                        >
-                            <Feather name="download" size={16} color="#3b82f6" />
-                            <Text size="xs" style={styles.exportButtonText}>
-                                Ekspor
-                            </Text>
-                        </Button>
+                        <View style={styles.headerActions}>
+                            <View style={styles.pageInfo}>
+                                <Text size="xs" style={styles.pageInfoText}>
+                                    {totalRecords > 0 ? `${totalRecords} total data` : ''}
+                                </Text>
+                            </View>
+
+                            <Button
+                                size="sm"
+                                onPress={handleExport}
+                                variant="outline"
+                                style={styles.exportButton}
+                            >
+                                <Feather name="download" size={16} color="#3b82f6" />
+                                <Text size="xs" style={styles.exportButtonText}>
+                                    Ekspor
+                                </Text>
+                            </Button>
+                        </View>
                     </View>
 
                     {/* Table Header */}
@@ -251,64 +309,94 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({ sensorData }) => {
                         transition={{ type: 'timing', duration: 500, delay: 800 }}
                     >
                         <Text size="xs" style={styles.paginationInfo}>
-                            Menampilkan {sensorData && Array.isArray(sensorData) && sensorData.length > 0
-                                ? `${(page - 1) * pageSize + 1} - ${Math.min(page * pageSize, sensorData.length)} dari ${sensorData.length}`
-                                : '0'} data
+                            {`Menampilkan ${startRecord} - ${endRecord} data`}
                         </Text>
 
-                        <View style={styles.paginationControls}>
+                        <View style={styles.paginationText}>
+                            <Text size="md" style={styles.pageNumberText}>
+                                Halaman {localPage} dari {Math.ceil(totalRecords / pageSize)}
+                            </Text>
+                        </View>
+
+                        <View style={styles.paginationControlsVertical}>
                             <TouchableOpacity
                                 onPress={() => handlePageChange(1)}
-                                disabled={page <= 1}
-                                style={[styles.paginationButton, page <= 1 ? styles.paginationButtonDisabled : null]}
+                                disabled={localPage <= 1}
+                                style={[
+                                    styles.paginationButtonLarge,
+                                    localPage <= 1 ? styles.paginationButtonDisabled : null
+                                ]}
                             >
                                 <MaterialIcons
                                     name="first-page"
-                                    size={18}
-                                    color={page <= 1 ? "#cbd5e1" : "#3b82f6"}
+                                    size={24}
+                                    color={localPage <= 1 ? "#cbd5e1" : "#3b82f6"}
+                                    style={styles.buttonIcon}
                                 />
+                                <Text size="xs" style={localPage <= 1 ? styles.buttonTextDisabled : styles.buttonText}>
+                                    Halaman Pertama
+                                </Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
-                                onPress={() => handlePageChange(Math.max(1, page - 1))}
-                                disabled={page <= 1}
-                                style={[styles.paginationButton, page <= 1 ? styles.paginationButtonDisabled : null]}
+                                onPress={() => handlePageChange(Math.max(1, localPage - 1))}
+                                disabled={localPage <= 1}
+                                style={[
+                                    styles.paginationButtonLarge,
+                                    localPage <= 1 ? styles.paginationButtonDisabled : null
+                                ]}
                             >
                                 <MaterialIcons
                                     name="chevron-left"
-                                    size={20}
-                                    color={page <= 1 ? "#cbd5e1" : "#3b82f6"}
+                                    size={24}
+                                    color={localPage <= 1 ? "#cbd5e1" : "#3b82f6"}
+                                    style={styles.buttonIcon}
                                 />
-                            </TouchableOpacity>
-
-                            <View style={styles.pageIndicator}>
-                                <Text size="xs" style={styles.paginationText}>
-                                    {page} / {maxPage}
+                                <Text size="xs" style={localPage <= 1 ? styles.buttonTextDisabled : styles.buttonText}>
+                                    Halaman Sebelumnya
                                 </Text>
-                            </View>
-
-                            <TouchableOpacity
-                                onPress={() => handlePageChange(Math.min(maxPage, page + 1))}
-                                disabled={page >= maxPage}
-                                style={[styles.paginationButton, page >= maxPage ? styles.paginationButtonDisabled : null]}
-                            >
-                                <MaterialIcons
-                                    name="chevron-right"
-                                    size={20}
-                                    color={page >= maxPage ? "#cbd5e1" : "#3b82f6"}
-                                />
                             </TouchableOpacity>
 
                             <TouchableOpacity
-                                onPress={() => handlePageChange(maxPage)}
-                                disabled={page >= maxPage}
-                                style={[styles.paginationButton, page >= maxPage ? styles.paginationButtonDisabled : null]}
+                                onPress={() => handlePageChange(localPage + 1)}
+                                disabled={localPage >= Math.ceil(totalRecords / pageSize) || isLoadingNextPage}
+                                style={[
+                                    styles.paginationButtonLarge,
+                                    (localPage >= Math.ceil(totalRecords / pageSize) || isLoadingNextPage) ? styles.paginationButtonDisabled : null
+                                ]}
+                            >
+                                {isLoadingNextPage ? (
+                                    <ActivityIndicator size="small" color="#3b82f6" style={styles.buttonIcon} />
+                                ) : (
+                                    <MaterialIcons
+                                        name="chevron-right"
+                                        size={24}
+                                        color={localPage >= Math.ceil(totalRecords / pageSize) ? "#cbd5e1" : "#3b82f6"}
+                                        style={styles.buttonIcon}
+                                    />
+                                )}
+                                <Text size="xs" style={localPage >= Math.ceil(totalRecords / pageSize) ? styles.buttonTextDisabled : styles.buttonText}>
+                                    {isLoadingNextPage ? 'Memuat...' : 'Halaman Berikutnya'}
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                onPress={() => handlePageChange(Math.ceil(totalRecords / pageSize))}
+                                disabled={localPage >= Math.ceil(totalRecords / pageSize) || isLoadingNextPage}
+                                style={[
+                                    styles.paginationButtonLarge,
+                                    (localPage >= Math.ceil(totalRecords / pageSize) || isLoadingNextPage) ? styles.paginationButtonDisabled : null
+                                ]}
                             >
                                 <MaterialIcons
                                     name="last-page"
-                                    size={18}
-                                    color={page >= maxPage ? "#cbd5e1" : "#3b82f6"}
+                                    size={24}
+                                    color={localPage >= Math.ceil(totalRecords / pageSize) ? "#cbd5e1" : "#3b82f6"}
+                                    style={styles.buttonIcon}
                                 />
+                                <Text size="xs" style={localPage >= Math.ceil(totalRecords / pageSize) ? styles.buttonTextDisabled : styles.buttonText}>
+                                    Halaman Terakhir
+                                </Text>
                             </TouchableOpacity>
                         </View>
                     </MotiView>
@@ -444,44 +532,74 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     paginationContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+        flexDirection: 'column',
         alignItems: 'center',
-        paddingTop: 12,
+        justifyContent: 'center',
+        paddingTop: 16,
     },
     paginationInfo: {
         color: '#64748b',
+        marginBottom: 12,
+        textAlign: 'center',
     },
-    paginationControls: {
+    paginationText: {
+        marginBottom: 16,
+    },
+    pageNumberText: {
+        color: '#334155',
+        fontWeight: '600',
+        fontSize: 16,
+        textAlign: 'center',
+    },
+    paginationControlsVertical: {
+        width: '100%',
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        justifyContent: 'center',
+        backgroundColor: '#f8fafc',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 8,
+    },
+    paginationButtonLarge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#f8fafc',
-        borderRadius: 8,
-        padding: 4,
-    },
-    paginationButton: {
-        padding: 4,
-    },
-    paginationButtonDisabled: {
-        opacity: 0.5,
-    },
-    pageIndicator: {
-        paddingHorizontal: 8,
-        paddingVertical: 2,
+        justifyContent: 'flex-start',
         backgroundColor: 'white',
-        borderRadius: 4,
-        marginHorizontal: 4,
-        minWidth: 36,
-        alignItems: 'center',
+        borderRadius: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        marginBottom: 8,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.05,
         shadowRadius: 2,
         elevation: 1,
     },
-    paginationText: {
-        color: '#334155',
+    paginationButtonDisabled: {
+        opacity: 0.5,
+        backgroundColor: '#f1f5f9',
+    },
+    buttonText: {
+        color: '#3b82f6',
         fontWeight: '500',
+    },
+    buttonTextDisabled: {
+        color: '#94a3b8',
+        fontWeight: '500',
+    },
+    buttonIcon: {
+        marginRight: 10,
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    pageInfo: {
+        marginRight: 8,
+    },
+    pageInfoText: {
+        color: '#64748b',
     },
 });
 
