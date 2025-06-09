@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Dimensions, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
 import { SENSOR_LABELS, SENSOR_UNITS } from '@/constants/api';
 import moment from 'moment';
@@ -109,24 +109,36 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
         });
     };
 
-    const handleExport = async () => {
+    const handleExport = async (currentPageOnly: boolean = false) => {
         if (!sensorData || !Array.isArray(sensorData) || sensorData.length === 0) return;
 
         try {
             // Create CSV content
             let csvContent = 'Timestamp,Turbidity,pH,Temperature,Speed,Accel X,Accel Y,Accel Z\n';
 
-            sensorData.forEach(data => {
-                if (!data || typeof data !== 'object') return;
+            // Pilih data yang akan diekspor: hanya halaman saat ini atau semua data
+            let dataToExport;
+            if (currentPageOnly) {
+                dataToExport = paginatedData.filter(data => data && typeof data === 'object');
+                console.log(`Exporting current page only: ${dataToExport.length} records`);
+            } else {
+                dataToExport = sensorData.filter(data => data && typeof data === 'object');
+                console.log(`Exporting all data: ${dataToExport.length} records`);
+            }
 
-                const timestamp = data.timestamp ? moment(data.timestamp).format('YYYY-MM-DD HH:mm:ss') : '';
-                const turbidity = typeof data.turbidity === 'number' ? data.turbidity : '';
-                const ph = typeof data.ph === 'number' ? data.ph : '';
-                const temperature = typeof data.temperature === 'number' ? data.temperature : '';
-                const speed = typeof data.speed === 'number' ? data.speed : '';
-                const accel_x = typeof data.accel_x === 'number' ? data.accel_x : '';
-                const accel_y = typeof data.accel_y === 'number' ? data.accel_y : '';
-                const accel_z = typeof data.accel_z === 'number' ? data.accel_z : '';
+            // Gunakan data yang valid saja
+            dataToExport.forEach(data => {
+                // Format timestamp agar kompatibel dengan Excel (quote untuk menghindari konversi otomatis Excel)
+                const timestamp = data.timestamp ? `"${moment(data.timestamp).format('YYYY-MM-DD HH:mm:ss')}"` : '';
+
+                // Format nilai dengan presisi 2 desimal, gunakan titik sebagai pemisah desimal
+                const turbidity = typeof data.turbidity === 'number' ? data.turbidity.toFixed(2) : '';
+                const ph = typeof data.ph === 'number' ? data.ph.toFixed(2) : '';
+                const temperature = typeof data.temperature === 'number' ? data.temperature.toFixed(2) : '';
+                const speed = typeof data.speed === 'number' ? data.speed.toFixed(2) : '';
+                const accel_x = typeof data.accel_x === 'number' ? data.accel_x.toFixed(2) : '';
+                const accel_y = typeof data.accel_y === 'number' ? data.accel_y.toFixed(2) : '';
+                const accel_z = typeof data.accel_z === 'number' ? data.accel_z.toFixed(2) : '';
 
                 csvContent += `${timestamp},${turbidity},${ph},${temperature},${speed},${accel_x},${accel_y},${accel_z}\n`;
             });
@@ -145,6 +157,10 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
                     UTI: 'public.comma-separated-values-text'
                 });
             }
+
+            // Tampilkan pesan konfirmasi
+            console.log(`Successfully exported ${dataToExport.length} records to CSV`);
+
         } catch (error) {
             console.error('Error exporting data:', error);
         }
@@ -211,7 +227,26 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
 
                             <Button
                                 size="sm"
-                                onPress={handleExport}
+                                onPress={() => {
+                                    Alert.alert(
+                                        'Ekspor Data',
+                                        'Pilih data yang ingin diekspor',
+                                        [
+                                            {
+                                                text: 'Halaman Ini',
+                                                onPress: () => handleExport(true)
+                                            },
+                                            {
+                                                text: 'Semua Data',
+                                                onPress: () => handleExport(false)
+                                            },
+                                            {
+                                                text: 'Batal',
+                                                style: 'cancel'
+                                            }
+                                        ]
+                                    );
+                                }}
                                 variant="outline"
                                 style={styles.exportButton}
                             >
