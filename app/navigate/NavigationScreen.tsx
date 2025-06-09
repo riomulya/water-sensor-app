@@ -23,6 +23,18 @@ const DEBUG = {
     },
     info: (message: string, data?: any) => {
         console.info(`[Navigation Info] ${message}`, data ? data : '');
+    },
+    position: (location: Location.LocationObject) => {
+        const { latitude, longitude, altitude, accuracy, altitudeAccuracy, heading, speed } = location.coords;
+        const speedInKmh = speed ? (speed * 3.6).toFixed(1) : '0';
+        console.log('\n=== USER POSITION UPDATE ===');
+        console.log(`📍 Coordinates: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+        console.log(`📏 Accuracy: ${accuracy?.toFixed(2)}m`);
+        console.log(`⬆️ Altitude: ${altitude?.toFixed(2)}m (Accuracy: ${altitudeAccuracy?.toFixed(2)}m)`);
+        console.log(`🧭 Heading: ${heading?.toFixed(2)}°`);
+        console.log(`🚗 Speed: ${speed?.toFixed(2)} m/s (${speedInKmh} km/h)`);
+        console.log(`⏰ Timestamp: ${new Date(location.timestamp).toLocaleTimeString()}`);
+        console.log('===========================\n');
     }
 };
 
@@ -77,6 +89,8 @@ const NavigationScreen = () => {
     const [isNavigating, setIsNavigating] = useState(true);
     const [isExpanded, setIsExpanded] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(false);
+    const [lastUpdateTime, setLastUpdateTime] = useState<number>(0);
+    const UPDATE_INTERVAL = 1000; // Update every 1 second
 
     // Get user location when component mounts
     useEffect(() => {
@@ -111,8 +125,8 @@ const NavigationScreen = () => {
                 const subscription = await Location.watchPositionAsync(
                     {
                         accuracy: Location.Accuracy.BestForNavigation,
-                        distanceInterval: 5,
-                        timeInterval: 1000,
+                        distanceInterval: 1, // Update every 1 meter
+                        timeInterval: 1000, // Update every 1 second
                     },
                     (location) => {
                         if (!isNavigating) {
@@ -120,23 +134,26 @@ const NavigationScreen = () => {
                             return;
                         }
 
-                        DEBUG.log('Location updated', {
-                            latitude: location.coords.latitude,
-                            longitude: location.coords.longitude,
-                            accuracy: location.coords.accuracy,
-                            speed: location.coords.speed,
-                            heading: location.coords.heading
-                        });
+                        const currentTime = Date.now();
+                        if (currentTime - lastUpdateTime < UPDATE_INTERVAL) {
+                            return; // Skip if not enough time has passed
+                        }
+                        setLastUpdateTime(currentTime);
+
+                        // Log detailed position information
+                        DEBUG.position(location);
 
                         setUserLocation(location);
 
                         // Update speed and bearing
-                        const speed = location.coords.speed ? (location.coords.speed * 3.6).toFixed(1) : '0';
+                        // Convert m/s to km/h: multiply by 3.6 (1 m/s = 3.6 km/h)
+                        const speedInMps = location.coords.speed || 0;
+                        const speedInKmh = (speedInMps * 3.6).toFixed(1);
                         const bearing = location.coords.heading || 0;
 
                         setNavigationInfo(prev => ({
                             ...prev,
-                            currentSpeed: `${speed} km/h`,
+                            currentSpeed: `${speedInKmh} km/h`,
                             bearing: bearing
                         }));
 
@@ -147,13 +164,19 @@ const NavigationScreen = () => {
                                     latitude,
                                     longitude,
                                     accuracy,
-                                    bearing
+                                    bearing,
+                                    speed: speedInKmh
                                 });
 
                                 const updateScript = `
                                     try {
                                         if (window.updateUserPosition) {
                                             window.updateUserPosition(${latitude}, ${longitude}, ${accuracy || 0}, ${bearing});
+                                            // Update speed display
+                                            const speedValue = document.getElementById('speed-value');
+                                            if (speedValue) {
+                                                speedValue.textContent = '${speedInKmh}';
+                                            }
                                             true;
                                         }
                                     } catch(e) {
@@ -622,14 +645,13 @@ const NavigationScreen = () => {
 
                 .speed-label {
                     font-size: 13px;
-                    color: #64748b;
-                    margin-top: 4px;
+                    color: #64748b;                    
                     font-weight: 500;
                 }
 
                 .compass {
                     position: absolute;
-                    top: 200px;
+                    top: 210px;
                     right: 24px;
                     width: 70px;
                     height: 70px;
@@ -906,22 +928,41 @@ const NavigationScreen = () => {
                     userBearing = Number(bearing) || 0;
                     
                     if (userMarker && map) {
-                        userMarker.setLngLat([userLng, userLat]);
+                        // Smoothly update marker position
+                        const currentLngLat = userMarker.getLngLat();
+                        const newLngLat = new mapboxgl.LngLat(userLng, userLat);
                         
-                        // Update compass
-                        const compassArrow = document.getElementById('compass-arrow');
-                        if (compassArrow) {
-                            compassArrow.style.transform = \`rotate(\${userBearing}deg)\`;
+                        // Calculate distance between current and new position
+                        const distance = currentLngLat.distanceTo(newLngLat);
+                        
+                        // Only update if distance is significant (more than 1 meter)
+                        if (distance > 1) {
+                            userMarker.setLngLat([userLng, userLat]);
+                            
+                            // Update compass with smooth rotation
+                            const compassArrow = document.getElementById('compass-arrow');
+                            if (compassArrow) {
+                                compassArrow.style.transition = 'transform 0.3s ease-out';
+                                compassArrow.style.transform = \`rotate(\${userBearing}deg)\`;
+                            }
+                            
+                            // Update speed indicator
+                            const speedValue = document.getElementById('speed-value');
+                            if (speedValue) {
+                                speedValue.textContent = Math.round(userBearing);
+                            }
+                            
+                            // Update map view to follow user
+                            map.easeTo({
+                                center: [userLng, userLat],
+                                bearing: userBearing,
+                                pitch: 60,
+                                duration: 1000
+                            });
+                            
+                            // Update route if needed
+                            getDirections();
                         }
-                        
-                        // Update speed indicator
-                        const speedValue = document.getElementById('speed-value');
-                        if (speedValue) {
-                            speedValue.textContent = Math.round(userBearing);
-                        }
-                        
-                        // Update route
-                        getDirections();
                     }
                 }
                 
@@ -983,13 +1024,15 @@ const NavigationScreen = () => {
                                     }
                                 }));
                                 
+                                // Update map bounds to include both user and destination
                                 const bounds = new mapboxgl.LngLatBounds(
                                     [userLng, userLat],
                                     [destLng, destLat]
                                 );
                                 map.fitBounds(bounds, {
                                     padding: 50,
-                                    maxZoom: 15
+                                    maxZoom: 15,
+                                    duration: 1000
                                 });
                             }
                         })
