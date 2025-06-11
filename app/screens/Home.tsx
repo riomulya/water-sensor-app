@@ -51,6 +51,7 @@ import { useForegroundService } from '@/hooks/useForegroundService';
 import { useForm, Controller } from "react-hook-form";
 import { logout } from '@/controllers/auth';
 import { router } from 'expo-router';
+import { useUserStore } from '../stores/userStore';
 import CustomDrawer from '../../components/CustomDrawer';
 import { Switch } from '@/components/ui/switch';
 import * as Location from 'expo-location';
@@ -244,6 +245,11 @@ const HomeScreen = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoadingLocations, setIsLoadingLocations] = useState(false);
     const [locationsError, setLocationsError] = useState('');
+    const { userData, loadUserData } = useUserStore();
+
+    useEffect(() => {
+        loadUserData();
+    }, []);
 
     // Tambah ref untuk input
     const riverNameInputRef = useRef<TextInput>(null);
@@ -830,8 +836,12 @@ const HomeScreen = () => {
                     onInitialized={(zoomToGeoJSON) =>
                         (zoomToGeoJSONFuncRef.current = zoomToGeoJSON)
                     }
-                    onMapPress={handleMapPress}
-                    onLocationSelect={handleSelectExistingLocation}
+                    onMapPress={userData?.role === 'guest' ? () => {
+                        Alert.alert('Maaf', 'Anda tidak memiliki akses ke fitur ini')
+                    } : handleMapPress}
+                    onLocationSelect={userData?.role === 'guest' ? () => {
+                        Alert.alert('Maaf', 'Anda tidak memiliki akses ke fitur ini')
+                    } : handleSelectExistingLocation}
                     onGetCurrentLocation={(getCurrentLocationFunc) =>
                         (getCurrentLocationFuncRef.current = getCurrentLocationFunc)
                     }
@@ -1015,7 +1025,7 @@ const HomeScreen = () => {
                                         <BottomSheetContent>
                                             {activeTab === 'location' ? (
                                                 <>
-                                                    <View style={styles.searchContainer}>
+                                                    <View className='mx-4 p-4' style={styles.searchContainer}>
                                                         <TextInput
                                                             placeholder="Cari lokasi..."
                                                             placeholderTextColor="#94a3b8"
@@ -1035,7 +1045,7 @@ const HomeScreen = () => {
                                                             </Text>
                                                         </Center>
                                                     ) : (
-                                                        <View style={styles.locationCard}>
+                                                        <View className='mx-4' style={styles.locationCard}>
                                                             <View style={styles.locationHeader}>
                                                                 <AntDesign name="enviromento" size={24} color="#3b82f6" />
                                                                 <Text style={styles.locationTitle} className='text-emerald-300'>
@@ -1062,9 +1072,11 @@ const HomeScreen = () => {
 
                                                             <HStack className="gap-2 mt-4">
                                                                 <BottomSheetItem
-                                                                    style={styles.outlineButton}
+                                                                    style={userData?.role === 'guest' ? styles.actionButtonDisabled : styles.outlineButton}
                                                                     closeOnSelect={false}
-                                                                    onPress={handleDeleteLocation}
+                                                                    onPress={userData?.role === 'guest' ? () => {
+                                                                        Alert.alert('Maaf', 'Anda tidak memiliki akses ke fitur ini')
+                                                                    } : () => handleDeleteLocation}
                                                                 >
                                                                     <BottomSheetItemText style={styles.outlineButtonText}>
                                                                         Hapus Lokasi
@@ -1146,9 +1158,12 @@ const HomeScreen = () => {
                                                                     </View>
                                                                     <HStack className="">
                                                                         <BottomSheetItem
-                                                                            style={styles.actionButton}
+                                                                            style={userData?.role === 'guest' ? styles.actionButtonDisabled : styles.actionButton}
                                                                             closeOnSelect={false}
-                                                                            onPress={() => handleSelectExistingLocation(item)}
+                                                                            onPress={userData?.role === 'guest' ? () => {
+                                                                                Alert.alert('Maaf', 'Anda tidak memiliki akses ke fitur ini')
+                                                                            } : () => handleSelectExistingLocation(item)}
+                                                                        // disabled={userData?.role === 'guest'}
                                                                         >
                                                                             <BottomSheetItemText style={styles.actionButtonText}>
                                                                                 Set sebagai Monitoring
@@ -1602,7 +1617,16 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: '600',
     },
-
+    actionButtonDisabled: {
+        flex: 1,
+        backgroundColor: 'red',
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 8,
+        opacity: 0.5,
+    },
     // Lists
     listContent: {
         paddingHorizontal: 16,

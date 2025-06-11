@@ -31,6 +31,7 @@ import { Heading } from "@/components/ui/heading";
 import { Center } from "@/components/ui/center";
 import { HStack } from "@/components/ui/hstack";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useUserStore } from '../stores/userStore';
 
 type RootStackParamList = {
     Home: undefined;
@@ -44,20 +45,9 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 // Custom AppBar component with menu button
 const AppBar = ({ onMenuPress, onLogoutPress }: { onMenuPress: () => void, onLogoutPress: () => void }) => {
-    const [userData, setUserData] = useState<{ role: string } | null>(null);
+    const { userData, loadUserData } = useUserStore();
 
     useEffect(() => {
-        const loadUserData = async () => {
-            try {
-                const storedUserData = await AsyncStorage.getItem('userData');
-                if (storedUserData) {
-                    setUserData(JSON.parse(storedUserData));
-                }
-            } catch (error) {
-                console.error('Error loading user data:', error);
-            }
-        };
-
         loadUserData();
     }, []);
 
