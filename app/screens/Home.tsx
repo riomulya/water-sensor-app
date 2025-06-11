@@ -286,7 +286,7 @@ const HomeScreen = () => {
                     render: ({ id }) => (
                         <Toast nativeID={"toast-" + id} action="success" variant="solid">
                             <ToastTitle>Connected</ToastTitle>
-                            <ToastDescription>Successfully connected to server</ToastDescription>
+                            <ToastDescription>Successfully connected to MQTT server</ToastDescription>
                         </Toast>
                     ),
                 });
@@ -322,7 +322,7 @@ const HomeScreen = () => {
                     render: ({ id }) => (
                         <Toast nativeID={"toast-" + id} action="error" variant="solid">
                             <ToastTitle>Disconnected</ToastTitle>
-                            <ToastDescription>Lost connection to server</ToastDescription>
+                            <ToastDescription>Lost connection to MQTT server</ToastDescription>
                         </Toast>
                     ),
                 });
@@ -863,6 +863,14 @@ const HomeScreen = () => {
                     bottom: 120,
                     left: 25,
                     zIndex: 0,
+                    shadowColor: '#7F5DF0',
+                    shadowOffset: {
+                        width: 0,
+                        height: 10,
+                    },
+                    shadowOpacity: 0.25,
+                    shadowRadius: 3.5,
+                    elevation: 5,
                 }}
             >
                 <AntDesign name="team" size={35} color="#ea5757" />
@@ -872,10 +880,9 @@ const HomeScreen = () => {
             <Fab
                 size="sm"
                 isHovered={false}
-                isDisabled={!mqttData?.message}
                 isPressed={true}
                 onPress={() => {
-                    if (!mqttData?.message?.latitude || !mqttData?.message?.longitude) {
+                    if (!mqttData?.message?.latitude && !mqttData?.message?.longitude) {
                         toast.show({
                             placement: "top",
                             render: ({ id }) => (
@@ -899,6 +906,14 @@ const HomeScreen = () => {
                     bottom: 180,
                     left: 25,
                     zIndex: 0,
+                    shadowColor: '#7F5DF0',
+                    shadowOffset: {
+                        width: 0,
+                        height: 10,
+                    },
+                    shadowOpacity: 0.25,
+                    shadowRadius: 3.5,
+                    elevation: 5,
                 }}
             >
                 <AntDesign name="rocket1" size={35} color="#ea5757" />
@@ -913,7 +928,17 @@ const HomeScreen = () => {
                     isPressed={true}
                     onPress={() => setBottomSheetOpen(true)}
                     placement='bottom right'
-                    style={{ backgroundColor: 'white', bottom: 120, right: 25, zIndex: 0 }}
+                    style={{
+                        backgroundColor: 'white', bottom: 120, right: 25, zIndex: 0,
+                        shadowColor: '#7F5DF0',
+                        shadowOffset: {
+                            width: 0,
+                            height: 10,
+                        },
+                        shadowOpacity: 0.25,
+                        shadowRadius: 3.5,
+                        elevation: 5,
+                    }}
                 >
                     <BottomSheetTrigger>
                         <AntDesign name={activeTab === 'location' ? "enviromento" : "piechart"} size={35} color="#ea5757" />
@@ -1781,5 +1806,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: 12,
         width: '100%',
+    },
+    shadow: {
+        shadowColor: '#7F5DF0',
+        shadowOffset: {
+            width: 0,
+            height: 10,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.5,
+        elevation: 5,
     },
 });
