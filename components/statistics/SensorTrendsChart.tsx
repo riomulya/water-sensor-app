@@ -1,19 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { StyleSheet, View, Dimensions, TouchableOpacity } from 'react-native';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
+import { StyleSheet, View, Dimensions, TouchableOpacity, Modal } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { LineChart } from 'react-native-gifted-charts';
 import moment from 'moment';
 import { SENSOR_LABELS, SENSOR_UNITS } from '@/constants/api';
 import { MotiView } from 'moti';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming, runOnJS } from 'react-native-reanimated';
 
 // Local components
 import { Text } from '@/components/ui/text';
-import {
-    Select, SelectBackdrop, SelectContent, SelectDragIndicator,
-    SelectDragIndicatorWrapper, SelectItem, SelectPortal,
-    SelectTrigger, SelectInput
-} from '@/components/ui/select';
 
 // Types
 type SensorType = 'accel_x' | 'accel_y' | 'accel_z' | 'turbidity' | 'ph' | 'temperature' | 'speed';
@@ -40,32 +34,33 @@ const CHART_WIDTH = width - 64; // Adjusted to prevent overflow
 
 const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => {
     const [selectedSensor, setSelectedSensor] = useState<SensorType>('turbidity');
-    const chartOpacity = useSharedValue(0);
-    const chartTranslateY = useSharedValue(20);
+    const [modalVisible, setModalVisible] = useState(false);
+    const [isChartVisible, setIsChartVisible] = useState(true);
 
-    const animatedChartStyle = useAnimatedStyle(() => {
-        return {
-            opacity: chartOpacity.value,
-            transform: [{ translateY: chartTranslateY.value }]
-        };
-    });
+    // Handle sensor type change with simpler animation approach
+    const handleSensorChange = (value: SensorType) => {
+        try {
+            // Hide chart first
+            setIsChartVisible(false);
 
-    // Animate chart when sensor type changes
-    const handleSensorChange = (value: string) => {
-        const updateSelectedSensor = (val: string) => {
-            setSelectedSensor(val as SensorType);
-        };
-
-        chartOpacity.value = withTiming(0, { duration: 300 });
-        chartTranslateY.value = withTiming(20, { duration: 300 }, () => {
-            // Use runOnJS to call setState from the UI thread
-            runOnJS(updateSelectedSensor)(value);
-
+            // Change sensor type after a short delay
             setTimeout(() => {
-                chartOpacity.value = withTiming(1, { duration: 500 });
-                chartTranslateY.value = withTiming(0, { duration: 500 });
-            }, 100);
-        });
+                setSelectedSensor(value);
+
+                // Show chart again after another short delay
+                setTimeout(() => {
+                    setIsChartVisible(true);
+                }, 100);
+            }, 300);
+
+            // Close modal
+            setModalVisible(false);
+        } catch (error) {
+            console.error('Error changing sensor type:', error);
+            // Fallback to direct state update without animation
+            setSelectedSensor(value);
+            setModalVisible(false);
+        }
     };
 
     const chartData = useMemo(() => {
@@ -81,10 +76,18 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
             return chronologicalData
                 .filter(data => data && typeof data === 'object')
                 .map((data, index) => {
-                    const value = data[selectedSensor];
-                    if (typeof value !== 'number' || isNaN(value)) {
+                    // Check if the selected sensor property exists and is a valid number
+                    if (!data || typeof data !== 'object' || !(selectedSensor in data)) {
                         return null;
                     }
+
+                    const value = data[selectedSensor];
+
+                    // Strict validation for numeric values
+                    if (value === null || value === undefined || typeof value !== 'number' || isNaN(value)) {
+                        return null;
+                    }
+
                     return {
                         value,
                         dataPointText: value.toFixed(1),
@@ -108,14 +111,20 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
         }
 
         try {
+            // Ensure selected sensor is valid
+            if (!selectedSensor || typeof selectedSensor !== 'string') {
+                console.warn('Invalid sensor type for stats calculation');
+                return { min: 0, max: 0, avg: 0, current: 0, unit: '' };
+            }
+
             // Filter out invalid values first
             const values = sensorData
-                .filter(d => d && typeof d === 'object')
+                .filter(d => d && typeof d === 'object' && selectedSensor in d)
                 .map(d => {
                     const value = d[selectedSensor];
-                    return typeof value === 'number' && !isNaN(value) ? value : null;
+                    return value !== null && value !== undefined && typeof value === 'number' && !isNaN(value) ? value : null;
                 })
-                .filter(v => v !== null) as number[];
+                .filter((v): v is number => v !== null);
 
             if (values.length === 0) {
                 return { min: 0, max: 0, avg: 0, current: 0, unit: SENSOR_UNITS[selectedSensor] || '' };
@@ -126,9 +135,15 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
             const sum = values.reduce((acc, val) => acc + val, 0);
             const avg = sum / values.length;
             const current = values[0];
-            const unit = SENSOR_UNITS[selectedSensor];
+            const unit = SENSOR_UNITS[selectedSensor] || '';
 
-            return { min, max, avg, current, unit };
+            return {
+                min: isFinite(min) ? min : 0,
+                max: isFinite(max) ? max : 0,
+                avg: isFinite(avg) ? avg : 0,
+                current: isFinite(current) ? current : 0,
+                unit
+            };
         } catch (error) {
             console.error('Error calculating sensor stats:', error);
             return { min: 0, max: 0, avg: 0, current: 0, unit: SENSOR_UNITS[selectedSensor] || '' };
@@ -165,12 +180,6 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
         { label: SENSOR_LABELS.accel_y, value: 'accel_y' },
         { label: SENSOR_LABELS.accel_z, value: 'accel_z' }
     ];
-
-    // Initialize animations when component mounts
-    React.useEffect(() => {
-        chartOpacity.value = withTiming(1, { duration: 800 });
-        chartTranslateY.value = withTiming(0, { duration: 800 });
-    }, []);
 
     if (!sensorData || sensorData.length === 0) {
         return (
@@ -213,29 +222,52 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                         </View>
 
                         <View style={styles.selectorContainer}>
-                            <Select
-                                selectedValue={selectedSensor}
-                                onValueChange={handleSensorChange}
+                            <TouchableOpacity
+                                style={styles.selectorButton}
+                                onPress={() => setModalVisible(true)}
                             >
-                                <SelectTrigger variant="outline" size="sm" style={styles.selectTrigger}>
-                                    <SelectInput placeholder="Pilih sensor" style={styles.selectInput} />
-                                </SelectTrigger>
-                                <SelectPortal>
-                                    <SelectBackdrop />
-                                    <SelectContent style={styles.selectContent}>
-                                        <SelectDragIndicatorWrapper>
-                                            <SelectDragIndicator />
-                                        </SelectDragIndicatorWrapper>
-                                        {sensorOptions.map(option => (
-                                            <SelectItem
+                                <Text size="sm">{SENSOR_LABELS[selectedSensor]}</Text>
+                                <Feather name="chevron-down" size={16} color="#64748b" style={{ marginLeft: 4 }} />
+                            </TouchableOpacity>
+
+                            <Modal
+                                visible={modalVisible}
+                                transparent={true}
+                                animationType="fade"
+                                onRequestClose={() => setModalVisible(false)}
+                            >
+                                <TouchableOpacity
+                                    style={styles.modalOverlay}
+                                    activeOpacity={1}
+                                    onPress={() => setModalVisible(false)}
+                                >
+                                    <View style={styles.modalContent}>
+                                        {sensorOptions.map((option) => (
+                                            <TouchableOpacity
                                                 key={option.value}
-                                                label={option.label}
-                                                value={option.value}
-                                            />
+                                                style={[
+                                                    styles.optionItem,
+                                                    selectedSensor === option.value && styles.selectedOption
+                                                ]}
+                                                onPress={() => handleSensorChange(option.value as SensorType)}
+                                            >
+                                                <Text
+                                                    size="sm"
+                                                    style={[
+                                                        styles.optionText,
+                                                        selectedSensor === option.value && styles.selectedOptionText
+                                                    ]}
+                                                >
+                                                    {option.label}
+                                                </Text>
+                                                {selectedSensor === option.value && (
+                                                    <Feather name="check" size={16} color="#3b82f6" />
+                                                )}
+                                            </TouchableOpacity>
                                         ))}
-                                    </SelectContent>
-                                </SelectPortal>
-                            </Select>
+                                    </View>
+                                </TouchableOpacity>
+                            </Modal>
                         </View>
                     </View>
 
@@ -246,7 +278,14 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                         </Text>
                     </View>
 
-                    <Animated.View style={[styles.chartContainer, animatedChartStyle]}>
+                    <MotiView
+                        style={styles.chartContainer}
+                        animate={{
+                            opacity: isChartVisible ? 1 : 0,
+                            translateY: isChartVisible ? 0 : 20
+                        }}
+                        transition={{ type: 'timing', duration: 300 }}
+                    >
                         {chartData.length > 0 ? (
                             <LineChart
                                 data={chartData}
@@ -274,7 +313,7 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                                 </Text>
                             </View>
                         )}
-                    </Animated.View>
+                    </MotiView>
 
                     <View style={styles.statsContainer}>
                         <View style={styles.statItem}>
@@ -362,15 +401,51 @@ const styles = StyleSheet.create({
         zIndex: 50,
         minWidth: 120,
     },
-    selectTrigger: {
+    selectorButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderWidth: 1,
         borderColor: '#e2e8f0',
+        borderRadius: 8,
         backgroundColor: '#f8fafc',
     },
-    selectInput: {
-        fontSize: 13,
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
-    selectContent: {
-        zIndex: 1000,
+    modalContent: {
+        width: '80%',
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    optionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+    },
+    selectedOption: {
+        backgroundColor: '#ebf5ff',
+    },
+    optionText: {
+        color: '#334155',
+    },
+    selectedOptionText: {
+        color: '#3b82f6',
+        fontWeight: 'bold',
     },
     titleContainer: {
         marginBottom: 16,
