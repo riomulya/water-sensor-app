@@ -33,8 +33,8 @@ const CARD_WIDTH = width * 0.46;
 
 // Group sensors by type for better organization
 const SENSOR_GROUPS = {
-    water: ['turbidity', 'ph', 'temperature', 'speed'],
-    motion: ['accel_x', 'accel_y', 'accel_z']
+    water: ['turbidity', 'ph', 'temperature'],
+    motion: ['speed', 'accel_x', 'accel_y', 'accel_z']
 };
 
 const StatsSummaryCards: React.FC<StatsSummaryCardsProps> = ({ sensorData }) => {
@@ -252,7 +252,7 @@ const StatsSummaryCards: React.FC<StatsSummaryCardsProps> = ({ sensorData }) => 
 
                     <View style={styles.statsGrid}>
                         <View style={styles.statsItem}>
-                            <Text size="xs" style={styles.statLabel}>Rata-rata</Text>
+                            <Text size="xs" style={styles.statLabel}>AVG</Text>
                             <Text size="sm" bold style={styles.statValue}>
                                 {typeof item.avg === 'number' ? item.avg.toFixed(1) : 'N/A'}
                             </Text>

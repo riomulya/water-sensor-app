@@ -125,6 +125,10 @@ export default function LocationsScreen() {
         Keyboard.dismiss();
     };
 
+    const handleGoBack = () => {
+        router.back();
+    };
+
     const renderItem = ({ item }: { item: Location }) => (
         <View style={styles.card}>
             <View style={styles.headerRow}>
@@ -163,6 +167,12 @@ export default function LocationsScreen() {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
+                <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={handleGoBack}
+                >
+                    <Ionicons name="arrow-back" size={24} color="#1e293b" />
+                </TouchableOpacity>
                 <Text style={styles.screenTitle}>Lokasi Sensor</Text>
                 <Link href="/locations/add" asChild>
                     <TouchableOpacity style={styles.addButton}>
@@ -265,6 +275,13 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: '700',
         color: '#1e293b',
+    },
+    backButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     addButton: {
         backgroundColor: '#3b82f6',

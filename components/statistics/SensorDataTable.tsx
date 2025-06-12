@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Dimensions, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
+import { StyleSheet, View, Dimensions, TouchableOpacity, ActivityIndicator, Alert, Pressable, Platform } from 'react-native';
+import { Feather, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { SENSOR_LABELS, SENSOR_UNITS } from '@/constants/api';
 import moment from 'moment';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import { MotiView } from 'moti';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withTiming, runOnJS } from 'react-native-reanimated';
 
 // Local components
@@ -46,6 +47,7 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
     const [localPage, setLocalPage] = useState(1);
     const pageSize = 25;
     const [isLoadingNextPage, setIsLoadingNextPage] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
 
     // Update internal page when currentPage from props changes
     useEffect(() => {
@@ -113,6 +115,8 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
         if (!sensorData || !Array.isArray(sensorData) || sensorData.length === 0) return;
 
         try {
+            setIsExporting(true);
+
             // Create CSV content
             let csvContent = 'Timestamp,Turbidity,pH,Temperature,Speed,Accel X,Accel Y,Accel Z\n';
 
@@ -143,26 +147,106 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
                 csvContent += `${timestamp},${turbidity},${ph},${temperature},${speed},${accel_x},${accel_y},${accel_z}\n`;
             });
 
-            // Create a temporary file
+            // Create filename with timestamp
             const fileDate = moment().format('YYYY-MM-DD_HH-mm-ss');
-            const filePath = `${FileSystem.documentDirectory}water_sensor_data_${fileDate}.csv`;
+            const fileName = `water_sensor_data_${fileDate}.csv`;
 
-            await FileSystem.writeAsStringAsync(filePath, csvContent);
+            // Temporarily save file to app's cache directory
+            const tempFilePath = `${FileSystem.cacheDirectory}${fileName}`;
+            await FileSystem.writeAsStringAsync(tempFilePath, csvContent);
 
-            // Share the file
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(filePath, {
-                    mimeType: 'text/csv',
-                    dialogTitle: 'Ekspor Data Sensor',
-                    UTI: 'public.comma-separated-values-text'
-                });
-            }
+            // Show export options to user
+            Alert.alert(
+                'Ekspor Data',
+                'Pilih metode ekspor data',
+                [
+                    {
+                        text: 'Simpan ke Perangkat',
+                        onPress: async () => {
+                            try {
+                                if (Platform.OS === 'android') {
+                                    // Request directory permissions for Android
+                                    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
 
-            // Tampilkan pesan konfirmasi
-            console.log(`Successfully exported ${dataToExport.length} records to CSV`);
+                                    if (permissions.granted) {
+                                        // Create file in the selected directory
+                                        const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+                                            permissions.directoryUri,
+                                            fileName,
+                                            'text/csv'
+                                        );
+
+                                        // Read the cached file
+                                        const fileContent = await FileSystem.readAsStringAsync(tempFilePath);
+
+                                        // Write to the selected directory
+                                        await FileSystem.writeAsStringAsync(fileUri, fileContent, {
+                                            encoding: FileSystem.EncodingType.UTF8
+                                        });
+
+                                        Alert.alert(
+                                            '✅ Berhasil Disimpan',
+                                            `File ${fileName} telah disimpan ke folder yang Anda pilih.`,
+                                            [{ text: 'OK' }]
+                                        );
+                                    }
+                                } else {
+                                    // For iOS, use sharing API
+                                    await Sharing.shareAsync(tempFilePath, {
+                                        mimeType: 'text/csv',
+                                        dialogTitle: 'Simpan file CSV',
+                                        UTI: 'public.comma-separated-values-text'
+                                    });
+                                }
+                            } catch (error) {
+                                console.error('Error saving to selected folder:', error);
+                                Alert.alert(
+                                    'Ekspor Gagal',
+                                    `Terjadi kesalahan saat menyimpan file: ${error.message}`,
+                                    [{ text: 'OK' }]
+                                );
+                            }
+                        }
+                    },
+                    {
+                        text: 'Bagikan',
+                        onPress: async () => {
+                            try {
+                                if (await Sharing.isAvailableAsync()) {
+                                    await Sharing.shareAsync(tempFilePath, {
+                                        mimeType: 'text/csv',
+                                        dialogTitle: 'Bagikan Data Sensor',
+                                        UTI: 'public.comma-separated-values-text'
+                                    });
+                                }
+                            } catch (error) {
+                                console.error('Error sharing file:', error);
+                                Alert.alert(
+                                    'Bagikan Gagal',
+                                    `Terjadi kesalahan saat membagikan file: ${error.message}`,
+                                    [{ text: 'OK' }]
+                                );
+                            }
+                        }
+                    },
+                    {
+                        text: 'Batal',
+                        style: 'cancel'
+                    }
+                ]
+            );
+
+            console.log(`Successfully prepared ${dataToExport.length} records for export`);
 
         } catch (error) {
             console.error('Error exporting data:', error);
+            Alert.alert(
+                'Ekspor Gagal',
+                `Terjadi kesalahan saat mengekspor data: ${error.message}`,
+                [{ text: 'OK' }]
+            );
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -193,9 +277,16 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
     // Get paginated data - show 25 items per page from the local data
     const startIndex = (localPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
-    const paginatedData = Array.isArray(sensorData)
-        ? sensorData.slice(startIndex, endIndex)
+
+    // Sort the data by timestamp in descending order (newest first)
+    const sortedData = Array.isArray(sensorData)
+        ? [...sensorData].sort((a, b) => {
+            if (!a?.timestamp || !b?.timestamp) return 0;
+            return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        })
         : [];
+
+    const paginatedData = sortedData.slice(startIndex, endIndex);
 
     // Calculate what to display in pagination
     const startRecord = startIndex + 1;
@@ -225,36 +316,53 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
                                 </Text>
                             </View>
 
-                            <Button
-                                size="sm"
-                                onPress={() => {
-                                    Alert.alert(
-                                        'Ekspor Data',
-                                        'Pilih data yang ingin diekspor',
-                                        [
-                                            {
-                                                text: 'Halaman Ini',
-                                                onPress: () => handleExport(true)
-                                            },
-                                            {
-                                                text: 'Semua Data',
-                                                onPress: () => handleExport(false)
-                                            },
-                                            {
-                                                text: 'Batal',
-                                                style: 'cancel'
-                                            }
-                                        ]
-                                    );
-                                }}
-                                variant="outline"
-                                style={styles.exportButton}
+                            <MotiView
+                                from={{ scale: 0.95, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ type: 'spring' }}
                             >
-                                <Feather name="download" size={16} color="#3b82f6" />
-                                <Text size="xs" style={styles.exportButtonText}>
-                                    Ekspor
-                                </Text>
-                            </Button>
+                                <Pressable
+                                    onPress={() => {
+                                        Alert.alert(
+                                            'Ekspor Data',
+                                            'Pilih data yang ingin diekspor',
+                                            [
+                                                {
+                                                    text: 'Halaman Ini',
+                                                    onPress: () => handleExport(true)
+                                                },
+                                                {
+                                                    text: 'Semua Data',
+                                                    onPress: () => handleExport(false)
+                                                },
+                                                {
+                                                    text: 'Batal',
+                                                    style: 'cancel'
+                                                }
+                                            ]
+                                        );
+                                    }}
+                                    style={({ pressed }) => [
+                                        styles.exportButtonContainer,
+                                        pressed && styles.exportButtonPressed
+                                    ]}
+                                    android_ripple={{ color: '#dbeafe', borderless: false, radius: 24 }}
+                                >
+                                    <LinearGradient
+                                        colors={isExporting ? ['#bfdbfe', '#93c5fd'] : ['#eff6ff', '#dbeafe']}
+                                        style={styles.exportButtonGradient}
+                                    >
+                                        {isExporting ? (
+                                            <ActivityIndicator size="small" color="#3b82f6" style={{ marginRight: 8 }} />
+                                        ) : (
+                                            <Ionicons name="download-outline" size={18} color="#3b82f6" style={{ marginRight: 8 }} />
+                                        )}
+                                        <Text size="sm" style={styles.exportButtonText}>
+                                            {isExporting ? 'Mengekspor...' : 'Export'}
+                                        </Text>
+                                    </LinearGradient>
+                                </Pressable>
+                            </MotiView>
                         </View>
                     </View>
 
@@ -290,7 +398,7 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
                             }
 
                             const timestamp = item.timestamp
-                                ? moment(item.timestamp).format('DD/MM HH:mm')
+                                ? moment(item.timestamp).format('DD/MM HH:mm:ss')
                                 : 'N/A';
                             const turbidity = typeof item.turbidity === 'number'
                                 ? `${item.turbidity.toFixed(1)} ${SENSOR_UNITS.turbidity}`
@@ -484,15 +592,30 @@ const styles = StyleSheet.create({
         marginLeft: 8,
         color: '#334155',
     },
-    exportButton: {
+    exportButtonContainer: {
+        borderRadius: 12,
+        overflow: 'hidden',
+        elevation: 2,
+        shadowColor: '#1e40af',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    exportButtonGradient: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        paddingVertical: 10,
+        paddingHorizontal: 10,
+        borderRadius: 12,
     },
     exportButtonText: {
         color: '#3b82f6',
-        marginLeft: 4,
+        fontWeight: '600',
+        fontSize: 14,
+        letterSpacing: -0.2,
+    },
+    exportButtonPressed: {
+        opacity: 0.9,
     },
     emptyContainer: {
         backgroundColor: '#f8fafc',
@@ -634,6 +757,7 @@ const styles = StyleSheet.create({
         marginRight: 8,
     },
     pageInfoText: {
+        marginLeft: 10,
         color: '#64748b',
     },
 });

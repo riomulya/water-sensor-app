@@ -29,6 +29,17 @@ interface SensorTrendsChartProps {
     sensorData: SensorData[] | null;
 }
 
+interface DataPoint {
+    value: number;
+    dataPointText?: string;
+    label?: string;
+    labelComponent?: () => React.ReactNode;
+    labelTextStyle?: object;
+    timestamp?: string;
+    onPress?: () => void;
+    showTooltip?: boolean;
+}
+
 const { width } = Dimensions.get('window');
 const CHART_WIDTH = width - 64; // Adjusted to prevent overflow
 
@@ -69,11 +80,20 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
         }
 
         try {
-            // Reverse data so it's in chronological order
-            const chronologicalData = [...sensorData].reverse();
+            // Make a copy of the data to avoid mutation
+            const dataToSort = [...sensorData];
+
+            // Sort data by timestamp (oldest to newest)
+            const sortedData = dataToSort.sort((a, b) => {
+                if (!a.timestamp || !b.timestamp) return 0;
+                return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+            });
+
+            // Calculate how often to show labels based on data length
+            const labelModulo = sortedData.length > 15 ? 5 : 3;
 
             // Create chart data points
-            return chronologicalData
+            return sortedData
                 .filter(data => data && typeof data === 'object')
                 .map((data, index) => {
                     // Check if the selected sensor property exists and is a valid number
@@ -88,13 +108,26 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                         return null;
                     }
 
+                    // Format timestamp for display
+                    const timestamp = data.timestamp ? moment(data.timestamp).format('DD/MM/YYYY HH:mm:ss') : '';
+                    const shortTimestamp = data.timestamp ? moment(data.timestamp).format('HH:mm:ss') : '';
+
+                    // Only show label for every labelModulo data point
+                    const showLabel = index % labelModulo === 0;
+
+                    // Create the data point object
                     return {
                         value,
                         dataPointText: value.toFixed(1),
-                        label: index % 3 === 0 ?
-                            (data.timestamp ? moment(data.timestamp).format('DD/MM HH:mm') : '') : '',
-                        labelComponent: () => null,
-                        labelTextStyle: { fontSize: 8, color: '#64748b', marginTop: 4 }
+                        label: showLabel ? shortTimestamp : '',
+                        labelTextStyle: {
+                            fontSize: 9,
+                            color: '#64748b',
+                            marginTop: 4,
+                            width: 50,
+                            textAlign: 'center'
+                        },
+                        timestamp,
                     };
                 })
                 .filter(item => item !== null);
@@ -204,6 +237,25 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
         );
     }
 
+    // Custom pointer label component for the chart
+    const renderPointerLabel = (item: any) => {
+        if (!item || !item.timestamp) return null;
+
+        return (
+            <View style={styles.pointerLabel}>
+                <Text size="xs" bold style={styles.pointerTitle}>
+                    {SENSOR_LABELS[selectedSensor]}
+                </Text>
+                <Text size="sm" bold style={styles.pointerValue}>
+                    {item.value.toFixed(2)} {sensorStats.unit}
+                </Text>
+                <Text size="xs" style={styles.pointerTimestamp}>
+                    {item.timestamp}
+                </Text>
+            </View>
+        );
+    };
+
     return (
         <MotiView
             style={styles.container}
@@ -276,6 +328,9 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                             {SENSOR_LABELS[selectedSensor]}
                             {sensorStats.unit ? ` (${sensorStats.unit})` : ''}
                         </Text>
+                        <Text size="xs" style={styles.subtitle}>
+                            Ketuk titik data untuk melihat detail waktu
+                        </Text>
                     </View>
 
                     <MotiView
@@ -286,33 +341,65 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                         }}
                         transition={{ type: 'timing', duration: 300 }}
                     >
-                        {chartData.length > 0 ? (
-                            <LineChart
-                                data={chartData}
-                                height={180}
-                                width={CHART_WIDTH}
-                                noOfSections={5}
-                                areaChart
-                                yAxisTextStyle={{ color: '#64748b', fontSize: 10 }}
-                                color={getChartColor()}
-                                startFillColor={getChartColor()}
-                                endFillColor={`${getChartColor()}00`}
-                                startOpacity={0.8}
-                                endOpacity={0.1}
-                                spacing={chartData.length > 20 ? 8 : 16}
-                                thickness={2}
-                                hideDataPoints={chartData.length > 15}
-                                hideRules
-                                adjustToWidth
-                                curved
-                            />
-                        ) : (
-                            <View style={styles.noDataContainer}>
-                                <Text size="sm" style={styles.noDataText}>
-                                    Tidak cukup data untuk membuat grafik
-                                </Text>
-                            </View>
-                        )}
+                        <TouchableOpacity
+                            activeOpacity={1}
+                            style={styles.chartTouchable}
+                        >
+                            {chartData.length > 0 ? (
+                                <LineChart
+                                    data={chartData}
+                                    height={180}
+                                    width={CHART_WIDTH}
+                                    noOfSections={5}
+                                    areaChart
+                                    yAxisTextStyle={{ color: '#64748b', fontSize: 10 }}
+                                    color={getChartColor()}
+                                    startFillColor={getChartColor()}
+                                    endFillColor={`${getChartColor()}00`}
+                                    startOpacity={0.8}
+                                    endOpacity={0.1}
+                                    spacing={chartData.length > 15 ? 20 : 30}
+                                    thickness={2}
+                                    hideDataPoints={false}
+                                    dataPointsColor={getChartColor()}
+                                    dataPointsRadius={3}
+                                    focusEnabled
+                                    showDataPointOnFocus
+                                    showTextOnFocus
+                                    textFontSize={10}
+                                    textShiftY={-15}
+                                    textShiftX={-10}
+                                    textColor="#334155"
+                                    hideRules
+                                    adjustToWidth
+                                    curved
+                                    xAxisLabelTextStyle={{ width: 50, textAlign: 'center' }}
+                                    xAxisLabelsHeight={25}
+                                    pointerConfig={{
+                                        pointerStripHeight: 160,
+                                        pointerStripColor: 'lightgray',
+                                        pointerStripWidth: 2,
+                                        pointerColor: getChartColor(),
+                                        radius: 6,
+                                        pointerLabelWidth: 180,
+                                        pointerLabelHeight: 90,
+                                        activatePointersOnLongPress: false,
+                                        autoAdjustPointerLabelPosition: true,
+                                        pointerLabelComponent: renderPointerLabel,
+                                        stripOverPointer: true,
+                                        shiftPointerLabelX: 0,
+                                        shiftPointerLabelY: 0,
+                                        hidePointers: false,
+                                    }}
+                                />
+                            ) : (
+                                <View style={styles.noDataContainer}>
+                                    <Text size="sm" style={styles.noDataText}>
+                                        Tidak cukup data untuk membuat grafik
+                                    </Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
                     </MotiView>
 
                     <View style={styles.statsContainer}>
@@ -453,10 +540,18 @@ const styles = StyleSheet.create({
     title: {
         color: '#334155',
     },
+    subtitle: {
+        color: '#64748b',
+        marginTop: 4,
+    },
     chartContainer: {
         alignItems: 'center',
         marginBottom: 16,
         paddingRight: 8,
+    },
+    chartTouchable: {
+        position: 'relative',
+        width: '100%',
     },
     noDataContainer: {
         height: 180,
@@ -497,6 +592,31 @@ const styles = StyleSheet.create({
     },
     statValue: {
         color: '#334155',
+    },
+    pointerLabel: {
+        backgroundColor: 'white',
+        borderRadius: 8,
+        padding: 12,
+        width: 170,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    pointerTitle: {
+        color: '#334155',
+        marginBottom: 4,
+    },
+    pointerValue: {
+        color: '#0f172a',
+        fontWeight: 'bold',
+        marginBottom: 4,
+        fontSize: 16,
+    },
+    pointerTimestamp: {
+        color: '#64748b',
+        marginTop: 4,
     },
 });
 
