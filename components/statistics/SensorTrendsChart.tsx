@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { StyleSheet, View, Dimensions, TouchableOpacity, Modal } from 'react-native';
+import { StyleSheet, View, Dimensions, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LineChart } from 'react-native-gifted-charts';
 import moment from 'moment';
@@ -329,7 +329,7 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                             {sensorStats.unit ? ` (${sensorStats.unit})` : ''}
                         </Text>
                         <Text size="xs" style={styles.subtitle}>
-                            Ketuk titik data untuk melihat detail waktu
+                            Geser horizontal untuk melihat data lainnya. Ketuk titik data untuk detail.
                         </Text>
                     </View>
 
@@ -346,52 +346,62 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                             style={styles.chartTouchable}
                         >
                             {chartData.length > 0 ? (
-                                <LineChart
-                                    data={chartData}
-                                    height={180}
-                                    width={CHART_WIDTH}
-                                    noOfSections={5}
-                                    areaChart
-                                    yAxisTextStyle={{ color: '#64748b', fontSize: 10 }}
-                                    color={getChartColor()}
-                                    startFillColor={getChartColor()}
-                                    endFillColor={`${getChartColor()}00`}
-                                    startOpacity={0.8}
-                                    endOpacity={0.1}
-                                    spacing={chartData.length > 15 ? 20 : 30}
-                                    thickness={2}
-                                    hideDataPoints={false}
-                                    dataPointsColor={getChartColor()}
-                                    dataPointsRadius={3}
-                                    focusEnabled
-                                    showDataPointOnFocus
-                                    showTextOnFocus
-                                    textFontSize={10}
-                                    textShiftY={-15}
-                                    textShiftX={-10}
-                                    textColor="#334155"
-                                    hideRules
-                                    adjustToWidth
-                                    curved
-                                    xAxisLabelTextStyle={{ width: 50, textAlign: 'center' }}
-                                    xAxisLabelsHeight={25}
-                                    pointerConfig={{
-                                        pointerStripHeight: 160,
-                                        pointerStripColor: 'lightgray',
-                                        pointerStripWidth: 2,
-                                        pointerColor: getChartColor(),
-                                        radius: 6,
-                                        pointerLabelWidth: 180,
-                                        pointerLabelHeight: 90,
-                                        activatePointersOnLongPress: false,
-                                        autoAdjustPointerLabelPosition: true,
-                                        pointerLabelComponent: renderPointerLabel,
-                                        stripOverPointer: true,
-                                        shiftPointerLabelX: 0,
-                                        shiftPointerLabelY: 0,
-                                        hidePointers: false,
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    contentContainerStyle={{
+                                        paddingHorizontal: 10
                                     }}
-                                />
+                                    scrollEventThrottle={16}
+                                    decelerationRate="fast"
+                                >
+                                    <LineChart
+                                        data={chartData}
+                                        height={180}
+                                        width={Math.max(CHART_WIDTH, chartData.length * 20)}
+                                        noOfSections={5}
+                                        areaChart
+                                        yAxisTextStyle={{ color: '#64748b', fontSize: 10 }}
+                                        color={getChartColor()}
+                                        startFillColor={getChartColor()}
+                                        endFillColor={`${getChartColor()}00`}
+                                        startOpacity={0.8}
+                                        endOpacity={0.1}
+                                        spacing={chartData.length > 15 ? 20 : 30}
+                                        thickness={2}
+                                        hideDataPoints={false}
+                                        dataPointsColor={getChartColor()}
+                                        dataPointsRadius={3}
+                                        focusEnabled
+                                        showDataPointOnFocus
+                                        showTextOnFocus
+                                        textFontSize={10}
+                                        textShiftY={-15}
+                                        textShiftX={-10}
+                                        textColor="#334155"
+                                        hideRules
+                                        adjustToWidth={false}
+                                        curved
+                                        xAxisLabelTextStyle={{ width: 50, textAlign: 'center' }}
+                                        xAxisLabelsHeight={25}
+                                        pointerConfig={{
+                                            pointerStripHeight: 160,
+                                            pointerStripColor: 'lightgray',
+                                            pointerStripWidth: 2,
+                                            pointerColor: getChartColor(),
+                                            radius: 6,
+                                            pointerLabelWidth: 180,
+                                            pointerLabelHeight: 90,
+                                            activatePointersOnLongPress: false,
+                                            autoAdjustPointerLabelPosition: true,
+                                            pointerLabelComponent: renderPointerLabel,
+                                            stripOverPointer: true,
+                                            shiftPointerLabelX: 0,
+                                            shiftPointerLabelY: 0,
+                                            hidePointers: false,
+                                        }}
+                                    />
+                                </ScrollView>
                             ) : (
                                 <View style={styles.noDataContainer}>
                                     <Text size="sm" style={styles.noDataText}>
@@ -548,6 +558,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 16,
         paddingRight: 8,
+        width: '100%',
+        overflow: 'hidden',
     },
     chartTouchable: {
         position: 'relative',
