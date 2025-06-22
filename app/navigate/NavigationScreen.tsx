@@ -28,11 +28,11 @@ const DEBUG = {
         const { latitude, longitude, altitude, accuracy, altitudeAccuracy, heading, speed } = location.coords;
         const speedInKmh = speed ? (speed * 3.6).toFixed(1) : '0';
         console.log('\n=== USER POSITION UPDATE ===');
-        console.log(`📍 Coordinates: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-        console.log(`📏 Accuracy: ${accuracy?.toFixed(2)}m`);
-        console.log(`⬆️ Altitude: ${altitude?.toFixed(2)}m (Accuracy: ${altitudeAccuracy?.toFixed(2)}m)`);
-        console.log(`🧭 Heading: ${heading?.toFixed(2)}°`);
-        console.log(`🚗 Speed: ${speed?.toFixed(2)} m/s (${speedInKmh} km/h)`);
+        console.log(`📍 Koordinat: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+        console.log(`📏 Akurasi: ${accuracy?.toFixed(2)}m`);
+        console.log(`⬆️ Ketinggian: ${altitude?.toFixed(2)}m (Akurasi: ${altitudeAccuracy?.toFixed(2)}m)`);
+        console.log(`🧭 Sudut: ${heading?.toFixed(2)}°`);
+        console.log(`🚗 Kecepatan: ${speed?.toFixed(2)} m/s (${speedInKmh} km/jam)`);
         console.log(`⏰ Timestamp: ${new Date(location.timestamp).toLocaleTimeString()}`);
         console.log('===========================\n');
     }
@@ -77,12 +77,12 @@ const NavigationScreen = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [navigationInfo, setNavigationInfo] = useState({
         distance: '-- m',
-        time: '-- min',
+        time: '-- menit',
         instruction: 'Menghitung rute...',
         nextInstruction: '',
         remainingDistance: '-- m',
-        remainingTime: '-- min',
-        currentSpeed: '0 km/h',
+        remainingTime: '-- menit',
+        currentSpeed: '0 km/jam',
         bearing: 0
     });
     const [webViewLoaded, setWebViewLoaded] = useState(false);
@@ -146,14 +146,13 @@ const NavigationScreen = () => {
                         setUserLocation(location);
 
                         // Update speed and bearing
-                        // Convert m/s to km/h: multiply by 3.6 (1 m/s = 3.6 km/h)
                         const speedInMps = location.coords.speed || 0;
                         const speedInKmh = (speedInMps * 3.6).toFixed(1);
                         const bearing = location.coords.heading || 0;
 
                         setNavigationInfo(prev => ({
                             ...prev,
-                            currentSpeed: `${speedInKmh} km/h`,
+                            currentSpeed: `${speedInKmh} km/jam`,
                             bearing: bearing
                         }));
 
@@ -168,20 +167,28 @@ const NavigationScreen = () => {
                                     speed: speedInKmh
                                 });
 
+                                // Directly update the values on every location update
+                                // This ensures both compass and speed are updated regardless of movement
                                 const updateScript = `
                                     try {
+                                        // Update speed - directly call helper function
+                                        updateSpeedDisplay('${speedInKmh}');
+                                        
+                                        // Update compass
+                                        const compassArrow = document.getElementById('compass-arrow');
+                                        if (compassArrow) {
+                                            compassArrow.style.transition = 'transform 0.3s ease-out';
+                                            compassArrow.style.transform = 'rotate(${bearing}deg)';
+                                        }
+                                        
+                                        // Update map position
                                         if (window.updateUserPosition) {
                                             window.updateUserPosition(${latitude}, ${longitude}, ${accuracy || 0}, ${bearing});
-                                            // Update speed display
-                                            const speedValue = document.getElementById('speed-value');
-                                            if (speedValue) {
-                                                speedValue.textContent = '${speedInKmh}';
-                                            }
-                                            true;
                                         }
+                                        true;
                                     } catch(e) {
                                         console.error('Error updating position:', e);
-                                        true;
+                                        false;
                                     }
                                 `;
                                 webViewRef.current.injectJavaScript(updateScript);
@@ -277,11 +284,11 @@ const NavigationScreen = () => {
                 setNavigationInfo({
                     ...navigationInfo,
                     distance: data.data.formattedDistance || '-- m',
-                    time: data.data.formattedTime || '-- min',
+                    time: data.data.formattedTime || '-- menit',
                     instruction: data.data.instruction || 'Menghitung rute...',
                     nextInstruction: data.data.nextInstruction || '',
                     remainingDistance: data.data.remainingDistance || '-- m',
-                    remainingTime: data.data.remainingTime || '-- min'
+                    remainingTime: data.data.remainingTime || '-- menit'
                 });
             } else if (data.type === 'openGoogleMaps') {
                 DEBUG.log('Opening Google Maps', data.data);
@@ -545,7 +552,7 @@ const NavigationScreen = () => {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    padding: 16px;
+                    padding: 5px;
                     background: #f8fafc;
                     border-top: 1px solid #f1f5f9;
                     cursor: pointer;
@@ -635,6 +642,7 @@ const NavigationScreen = () => {
                     z-index: 1000;
                     backdrop-filter: blur(10px);
                     -webkit-backdrop-filter: blur(10px);
+                    min-width: 80px;
                 }
 
                 .speed-value {
@@ -696,18 +704,18 @@ const NavigationScreen = () => {
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
                 </button>
                 <div class="dest-info">
-                    <div class="dest-name" id="dest-name">Loading...</div>
+                    <div class="dest-name" id="dest-name">Memuat...</div>
                     <div class="dest-address" id="dest-address"></div>
                 </div>
             </div>
             
             <div class="speed-indicator">
-                <div class="speed-value" id="speed-value">0</div>
-                <div class="speed-label">km/h</div>
+                <div class="speed-value" id="speed-value">0.0</div>
+                <div class="speed-label">km/jam</div>
             </div>
 
             <div class="compass">
-                <svg class="compass-arrow" id="compass-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <svg class="compass-arrow" id="compass-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3b82f6" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 2L12 22M12 2L8 6M12 2L16 6"/>
                 </svg>
             </div>
@@ -744,7 +752,7 @@ const NavigationScreen = () => {
             
             <button class="google-maps-btn" onclick="openGoogleMaps()">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                Maps
+                Google Maps
             </button>
             
             <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
@@ -762,7 +770,7 @@ const NavigationScreen = () => {
                 let userLng = ${DEFAULT_LNG};
                 let destLat = 0;
                 let destLng = 0;
-                let destName = "Destination";
+                let destName = "Tujuan";
                 let destAddress = "";
                 
                 // Initialize map
@@ -770,6 +778,9 @@ const NavigationScreen = () => {
                     initializeMap();
                     setupDirectionsPanel();
                     setupCompass();
+                    
+                    // Show initial speed
+                    updateSpeedDisplay('0.0');
                 });
                 
                 function initializeMap() {
@@ -782,6 +793,9 @@ const NavigationScreen = () => {
                         bearing: 0,
                         antialias: true
                     });
+
+                    // Initialize window.currentSpeed
+                    window.currentSpeed = '0.0';
 
                     // Add 3D building layer
                     map.on('load', () => {
@@ -822,6 +836,7 @@ const NavigationScreen = () => {
                         startY = e.touches[0].clientY;
                         currentY = navInfo.getBoundingClientRect().top;
                         isDragging = true;
+                        e.preventDefault(); // Prevent default behavior
                     });
 
                     handle.addEventListener('touchmove', (e) => {
@@ -829,9 +844,10 @@ const NavigationScreen = () => {
                         const deltaY = e.touches[0].clientY - startY;
                         const newY = Math.max(0, Math.min(window.innerHeight - 140, currentY + deltaY));
                         navInfo.style.transform = \`translateY(\${newY}px)\`;
+                        e.preventDefault(); // Prevent default behavior
                     });
 
-                    handle.addEventListener('touchend', () => {
+                    handle.addEventListener('touchend', (e) => {
                         isDragging = false;
                         const currentTransform = navInfo.style.transform;
                         const currentY = parseInt(currentTransform.replace('translateY(', '').replace('px)', ''));
@@ -845,13 +861,15 @@ const NavigationScreen = () => {
                             document.getElementById('directions-panel').classList.remove('expanded');
                             expandButton.style.display = 'flex';
                         }
+                        e.preventDefault(); // Prevent default behavior
                     });
 
                     // Handle expand button click
-                    expandButton.addEventListener('click', () => {
+                    expandButton.addEventListener('click', (e) => {
                         navInfo.classList.add('expanded');
                         document.getElementById('directions-panel').classList.add('expanded');
                         expandButton.style.display = 'none';
+                        e.preventDefault(); // Prevent default behavior
                     });
 
                     // Add collapse button to directions panel
@@ -863,20 +881,33 @@ const NavigationScreen = () => {
                         <span class="expand-button-text">Tutup Rute</span>
                     \`;
                     
-                    collapseButton.addEventListener('click', () => {
+                    collapseButton.addEventListener('click', (e) => {
                         navInfo.classList.remove('expanded');
                         document.getElementById('directions-panel').classList.remove('expanded');
                         expandButton.style.display = 'flex';
+                        e.preventDefault(); // Prevent default behavior
                     });
                     
                     directionsPanel.insertBefore(collapseButton, directionsPanel.firstChild);
 
                     // Prevent scrolling of the map when interacting with the panel
+                    directionsPanel.addEventListener('touchmove', (e) => {
+                        e.stopPropagation();
+                    }, { passive: false });
+                    
                     navInfo.addEventListener('touchmove', (e) => {
-                        if (navInfo.classList.contains('expanded')) {
+                        // Only stop propagation if we're in the expanded directions panel
+                        // or if we're dragging the handle
+                        if (navInfo.classList.contains('expanded') || isDragging) {
                             e.stopPropagation();
                         }
                     }, { passive: false });
+                    
+                    // Prevent body scrolling when the directions panel is expanded
+                    document.body.style.overflow = 'hidden';
+                    document.body.style.position = 'fixed';
+                    document.body.style.width = '100%';
+                    document.body.style.height = '100%';
                 }
 
                 function setupCompass() {
@@ -891,7 +922,7 @@ const NavigationScreen = () => {
                     userLng = Number(uLng);
                     destLat = Number(dLat);
                     destLng = Number(dLng);
-                    destName = name || "Destination";
+                    destName = name || "Tujuan";
                     destAddress = address || "";
                     
                     document.getElementById("dest-name").textContent = destName;
@@ -935,32 +966,25 @@ const NavigationScreen = () => {
                         // Calculate distance between current and new position
                         const distance = currentLngLat.distanceTo(newLngLat);
                         
-                        // Only update if distance is significant (more than 1 meter)
-                        if (distance > 1) {
-                            userMarker.setLngLat([userLng, userLat]);
-                            
-                            // Update compass with smooth rotation
-                            const compassArrow = document.getElementById('compass-arrow');
-                            if (compassArrow) {
-                                compassArrow.style.transition = 'transform 0.3s ease-out';
-                                compassArrow.style.transform = \`rotate(\${userBearing}deg)\`;
-                            }
-                            
-                            // Update speed indicator
-                            const speedValue = document.getElementById('speed-value');
-                            if (speedValue) {
-                                speedValue.textContent = Math.round(userBearing);
-                            }
-                            
-                            // Update map view to follow user
-                            map.easeTo({
-                                center: [userLng, userLat],
-                                bearing: userBearing,
-                                pitch: 60,
-                                duration: 1000
-                            });
-                            
-                            // Update route if needed
+                        userMarker.setLngLat([userLng, userLat]);
+                        
+                        // Always update compass
+                        const compassArrow = document.getElementById('compass-arrow');
+                        if (compassArrow) {
+                            compassArrow.style.transition = 'transform 0.3s ease-out';
+                            compassArrow.style.transform = \`rotate(\${userBearing}deg)\`;
+                        }
+                        
+                        // Always update map view to follow user regardless of distance
+                        map.easeTo({
+                            center: [userLng, userLat],
+                            bearing: userBearing,
+                            pitch: 60,
+                            duration: 1000
+                        });
+                        
+                        // Only update route if distance is significant
+                        if (distance > 5) {
                             getDirections();
                         }
                     }
@@ -972,7 +996,7 @@ const NavigationScreen = () => {
                         map.removeSource('route');
                     }
                     
-                    fetch(\`https://api.mapbox.com/directions/v5/mapbox/driving/\${userLng},\${userLat};\${destLng},\${destLat}?geometries=geojson&steps=true&access_token=\${mapboxgl.accessToken}\`)
+                    fetch(\`https://api.mapbox.com/directions/v5/mapbox/driving/\${userLng},\${userLat};\${destLng},\${destLat}?geometries=geojson&steps=true&language=id&access_token=\${mapboxgl.accessToken}\`)
                         .then(response => response.json())
                         .then(data => {
                             if (data.routes && data.routes.length > 0) {
@@ -1008,7 +1032,14 @@ const NavigationScreen = () => {
                                 document.getElementById('distance').textContent = formatDistance(distance);
                                 document.getElementById('time').textContent = formatTime(duration);
                                 
-                                updateDirectionsPanel(route.legs[0].steps);
+                                // Translate instructions to Indonesian
+                                const translatedSteps = route.legs[0].steps.map(step => {
+                                    const translatedStep = {...step};
+                                    translatedStep.maneuver.instruction = translateInstruction(step.maneuver.instruction);
+                                    return translatedStep;
+                                });
+                                
+                                updateDirectionsPanel(translatedSteps);
                         
                                 window.ReactNativeWebView?.postMessage(JSON.stringify({
                                     type: 'routeInfo',
@@ -1017,8 +1048,8 @@ const NavigationScreen = () => {
                                         formattedDistance: formatDistance(distance),
                                         time: duration,
                                         formattedTime: formatTime(duration),
-                                        instruction: route.legs[0].steps[0].maneuver.instruction,
-                                        nextInstruction: route.legs[0].steps[1]?.maneuver.instruction || '',
+                                        instruction: translateInstruction(route.legs[0].steps[0].maneuver.instruction),
+                                        nextInstruction: route.legs[0].steps[1] ? translateInstruction(route.legs[0].steps[1].maneuver.instruction) : '',
                                         remainingDistance: formatDistance(route.legs[0].distance),
                                         remainingTime: formatTime(route.legs[0].duration)
                                     }
@@ -1041,9 +1072,129 @@ const NavigationScreen = () => {
                         });
                 }
                 
+                function translateInstruction(instruction) {
+                    if (!instruction) return '';
+                    
+                    // Common English to Indonesian translations for navigation instructions
+                    const translations = {
+                        // Directions
+                        'north': 'utara',
+                        'south': 'selatan',
+                        'east': 'timur',
+                        'west': 'barat',
+                        'northwest': 'barat laut',
+                        'northeast': 'timur laut',
+                        'southwest': 'barat daya',
+                        'southeast': 'tenggara',
+                        
+                        // Actions
+                        'Turn left': 'Belok kiri',
+                        'Turn right': 'Belok kanan',
+                        'Turn slight left': 'Belok sedikit ke kiri',
+                        'Turn slight right': 'Belok sedikit ke kanan',
+                        'Turn sharp left': 'Belok tajam ke kiri',
+                        'Turn sharp right': 'Belok tajam ke kanan',
+                        'Make a U-turn': 'Putar balik',
+                        'Continue': 'Lanjutkan',
+                        'Continue straight': 'Lanjutkan lurus',
+                        'Keep left': 'Tetap di kiri',
+                        'Keep right': 'Tetap di kanan',
+                        'Merge': 'Bergabung',
+                        'Enter roundabout': 'Masuk bundaran',
+                        'Exit roundabout': 'Keluar bundaran',
+                        'Arrive at destination': 'Tiba di tujuan',
+                        'Arrive at': 'Tiba di',
+                        'Your destination': 'Tujuan Anda',
+                        'Destination': 'Tujuan',
+                        'You have arrived': 'Anda telah tiba',
+                        
+                        // Prepositions
+                        'onto': 'ke',
+                        'on': 'di',
+                        'at': 'di',
+                        'toward': 'menuju',
+                        'towards': 'menuju',
+                        'to': 'ke',
+                        'via': 'melalui',
+                        'for': 'selama',
+                        
+                        // Road types
+                        'street': 'jalan',
+                        'road': 'jalan',
+                        'avenue': 'jalan',
+                        'highway': 'jalan raya',
+                        'motorway': 'jalan tol',
+                        'expressway': 'jalan tol',
+                        'freeway': 'jalan bebas hambatan',
+                        'roundabout': 'bundaran',
+                        'traffic circle': 'bundaran lalu lintas',
+                        'exit': 'keluar',
+                        'ramp': 'jalur masuk/keluar',
+                        'Drive': 'Berkendaralah',
+                        'Head': 'Arahkan',
+                        'Continue on': 'Lanjutkan di',
+                        'Take the': 'Ambil',
+                        'Take exit': 'Ambil jalan keluar',
+                        'Use lane': 'Gunakan jalur',
+                        'Use the lane': 'Gunakan jalur',
+                        'Stay on': 'Tetap di',
+                        'Keep on': 'Tetap di',
+                        'In': 'Dalam',
+                        'After': 'Setelah',
+                        'Before': 'Sebelum',
+                        'At the end': 'Di ujung',
+                        'At the': 'Di',
+                        'meters': 'meter',
+                        'miles': 'mil'
+                    };
+                    
+                    let translatedText = instruction;
+                    
+                    // Replace all occurrences of English terms with Indonesian equivalents
+                    Object.keys(translations).forEach(englishTerm => {
+                        const regex = new RegExp('\\\\b' + englishTerm + '\\\\b', 'gi');
+                        translatedText = translatedText.replace(regex, translations[englishTerm]);
+                    });
+                    
+                    // Special case for "Drive <direction> on <road>"
+                    translatedText = translatedText.replace(/Berkendaralah (utara|selatan|timur|barat|timur laut|tenggara|barat laut|barat daya) di/gi, 'Berkendaralah ke arah $1 di');
+                    
+                    // Special case for "Head <direction> on <road>"
+                    translatedText = translatedText.replace(/Arahkan (utara|selatan|timur|barat|timur laut|tenggara|barat laut|barat daya) di/gi, 'Arahkan ke $1 di');
+                    
+                    // Fix for "Jalan" duplication
+                    translatedText = translatedText.replace(/jalan jalan/gi, 'jalan');
+                    
+                    return translatedText;
+                }
+                
                 function updateDirectionsPanel(steps) {
                     const panel = document.getElementById('directions-panel');
                     panel.innerHTML = '';
+                    
+                    // Add collapse button first
+                    const collapseButton = document.createElement('div');
+                    collapseButton.className = 'expand-button';
+                    collapseButton.innerHTML = \`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+                        <span class="expand-button-text">Tutup Rute</span>
+                    \`;
+                    
+                    collapseButton.addEventListener('click', (e) => {
+                        document.getElementById('nav-info').classList.remove('expanded');
+                        panel.classList.remove('expanded');
+                        document.getElementById('expand-button').style.display = 'flex';
+                        e.preventDefault(); // Prevent default behavior
+                    });
+                    
+                    panel.appendChild(collapseButton);
+                    
+                    // Create a container for directions to enable scrolling only within this container
+                    const stepsContainer = document.createElement('div');
+                    stepsContainer.className = 'steps-container';
+                    stepsContainer.style.overflowY = 'auto';
+                    stepsContainer.style.maxHeight = 'calc(90vh - 280px)'; // Leave room for the header and close button
+                    stepsContainer.style.paddingBottom = '20px';
                     
                     steps.forEach((step, index) => {
                         const stepContainer = document.createElement('div');
@@ -1066,8 +1217,10 @@ const NavigationScreen = () => {
                         \`;
                         
                         stepContainer.appendChild(stepElement);
-                        panel.appendChild(stepContainer);
+                        stepsContainer.appendChild(stepContainer);
                     });
+                    
+                    panel.appendChild(stepsContainer);
                 }
 
                 function getDirectionIcon(type, modifier) {
@@ -1101,13 +1254,13 @@ const NavigationScreen = () => {
                 
                 function formatTime(seconds) {
                     if (seconds < 60) {
-                        return '<1 min';
+                        return '<1 menit';
                     } else if (seconds < 3600) {
-                        return Math.round(seconds / 60) + ' min';
+                        return Math.round(seconds / 60) + ' menit';
                     } else {
                         const hours = Math.floor(seconds / 3600);
                         const minutes = Math.round((seconds % 3600) / 60);
-                        return hours + ' jam ' + (minutes > 0 ? minutes + ' min' : '');
+                        return hours + ' jam ' + (minutes > 0 ? minutes + ' menit' : '');
                     }
                 }
                 
@@ -1134,6 +1287,15 @@ const NavigationScreen = () => {
                         }
                     }));
                 }
+
+                // Helper function to update speed display
+                function updateSpeedDisplay(speed) {
+                    const speedValue = document.getElementById('speed-value');
+                    if (speedValue) {
+                        speedValue.textContent = speed;
+                    }
+                    window.currentSpeed = speed;
+                }
             </script>
         </body>
         </html>
@@ -1151,32 +1313,57 @@ const NavigationScreen = () => {
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                     >
-                        <MotiView
-                            from={{ scale: 0.8, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{ type: 'timing', duration: 500 }}
-                        >
-                            <MaterialIcons name="navigation" size={40} color="white" />
-                        </MotiView>
+                        <View style={styles.loadingContentContainer}>
+                            <MotiView
+                                from={{ scale: 0.8, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ type: 'timing', duration: 500 }}
+                                style={styles.loadingIconContainer}
+                            >
+                                <View style={styles.loadingIconBackground}>
+                                    <MaterialIcons name="navigation" size={48} color="white" />
+                                </View>
+                            </MotiView>
 
-                        <MotiView
-                            from={{ translateY: 20, opacity: 0 }}
-                            animate={{ translateY: 0, opacity: 1 }}
-                            transition={{ type: 'timing', duration: 500, delay: 200 }}
-                            style={styles.loadingTitleContainer}
-                        >
-                            <Text style={styles.loadingTitle}>Memulai Navigasi</Text>
-                            <Text style={styles.loadingSubtitle}>Menyiapkan rute terbaik ke tujuan anda...</Text>
-                        </MotiView>
+                            <MotiView
+                                from={{ translateY: 20, opacity: 0 }}
+                                animate={{ translateY: 0, opacity: 1 }}
+                                transition={{ type: 'timing', duration: 500, delay: 200 }}
+                                style={styles.loadingTitleContainer}
+                            >
+                                <Text style={styles.loadingTitle}>Memulai Navigasi</Text>
+                                <Text style={styles.loadingSubtitle}>Menyiapkan rute terbaik ke tujuan anda...</Text>
+                            </MotiView>
 
-                        <MotiView
-                            from={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ type: 'timing', duration: 300, delay: 400 }}
-                            style={styles.loadingIndicatorContainer}
-                        >
-                            <ActivityIndicator size="large" color="rgba(255,255,255,0.8)" />
-                        </MotiView>
+                            <MotiView
+                                from={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ type: 'timing', duration: 300, delay: 400 }}
+                                style={styles.loadingIndicatorContainer}
+                            >
+                                <ActivityIndicator size="large" color="rgba(255,255,255,0.8)" />
+                            </MotiView>
+
+                            <MotiView
+                                from={{ opacity: 0, translateY: 20 }}
+                                animate={{ opacity: 1, translateY: 0 }}
+                                transition={{ type: 'timing', duration: 500, delay: 600 }}
+                                style={styles.loadingDetailsContainer}
+                            >
+                                <View style={styles.loadingDetailItem}>
+                                    <MaterialIcons name="my-location" size={22} color="rgba(255,255,255,0.8)" />
+                                    <Text style={styles.loadingDetailText}>Mendapatkan lokasi Anda</Text>
+                                </View>
+                                <View style={styles.loadingDetailItem}>
+                                    <MaterialIcons name="map" size={22} color="rgba(255,255,255,0.8)" />
+                                    <Text style={styles.loadingDetailText}>Memuat peta navigasi</Text>
+                                </View>
+                                <View style={styles.loadingDetailItem}>
+                                    <MaterialIcons name="directions" size={22} color="rgba(255,255,255,0.8)" />
+                                    <Text style={styles.loadingDetailText}>Menghitung rute optimal</Text>
+                                </View>
+                            </MotiView>
+                        </View>
                     </LinearGradient>
                 </View>
             ) : (
@@ -1215,22 +1402,71 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 30,
     },
-    loadingTitleContainer: {
-        marginTop: 30,
+    loadingContentContainer: {
+        flex: 1,
+        justifyContent: 'center',
         alignItems: 'center',
+        width: '100%',
+        paddingTop: 50, // Add extra padding at the top to prevent text cutting
+    },
+    loadingIconContainer: {
+        marginBottom: 30,
+    },
+    loadingIconBackground: {
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 5,
+    },
+    loadingTitleContainer: {
+        marginTop: 20,
+        alignItems: 'center',
+        paddingHorizontal: 40,
+        marginBottom: 10,
     },
     loadingTitle: {
-        fontSize: 24,
+        fontSize: 20,
         fontWeight: 'bold',
         color: 'white',
-        marginBottom: 8,
+        marginBottom: 12,
+        textAlign: 'center',
+        includeFontPadding: false,
+        textAlignVertical: 'center',
     },
     loadingSubtitle: {
-        fontSize: 14,
+        fontSize: 16,
         color: 'rgba(255,255,255,0.8)',
         textAlign: 'center',
+        lineHeight: 22,
     },
     loadingIndicatorContainer: {
-        marginTop: 40,
+        marginTop: 30,
+        marginBottom: 30,
+    },
+    loadingDetailsContainer: {
+        width: '100%',
+        maxWidth: 300,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 16,
+        padding: 20,
+        marginTop: 10,
+    },
+    loadingDetailItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 8,
+    },
+    loadingDetailText: {
+        color: 'rgba(255,255,255,0.9)',
+        fontSize: 15,
+        marginLeft: 12,
+        fontWeight: '500',
     }
 }); 
