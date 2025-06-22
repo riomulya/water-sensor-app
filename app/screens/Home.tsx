@@ -152,7 +152,7 @@ const sensorConfigs: SensorConfig[] = [
         id: 'turbidity',
         name: 'Tingkat Kekeruhan',
         min: 0,
-        max: 100,
+        max: 500,
         unit: 'NTU',
         thresholds: [
             { value: 0, label: 'Jernih', color: '#87CEEB' },
@@ -164,7 +164,7 @@ const sensorConfigs: SensorConfig[] = [
     {
         id: 'temperature',
         name: 'Suhu Air',
-        min: 0,
+        min: -100,
         max: 100,
         unit: '°C',
         thresholds: [
@@ -289,6 +289,65 @@ const HomeScreen = () => {
                             <ToastDescription>Successfully connected to MQTT server</ToastDescription>
                         </Toast>
                     ),
+                });
+            });
+
+            // Add listener for location updates from other devices
+            socketRef.current?.on('updateLocation', (data) => {
+                console.log('📍 Received location update from another device:', data);
+                // Update local state with the new location
+                if (data && data.latitude && data.longitude) {
+                    // Prevent updating if it's the same location (prevent loops)
+                    const currentLatitude = savedLocation?.latitude;
+                    const currentLongitude = savedLocation?.longitude;
+                    const newLatitude = parseFloat(data.latitude);
+                    const newLongitude = parseFloat(data.longitude);
+
+                    // Skip update if same coordinates or same ID (prevents loops)
+                    if (savedLocation?.id_lokasi === data.id_lokasi ||
+                        (currentLatitude === newLatitude && currentLongitude === newLongitude)) {
+                        console.log('Skipping duplicate location update');
+                        return;
+                    }
+
+                    const updatedLocation = {
+                        id_lokasi: data.id_lokasi,
+                        nama_sungai: data.nama_sungai || data.name || 'Lokasi Sungai',
+                        address: data.alamat || data.address || 'Alamat tidak tersedia',
+                        latitude: newLatitude,
+                        longitude: newLongitude
+                    };
+
+                    setSavedLocation(updatedLocation);
+                    setDestination({
+                        latitude: updatedLocation.latitude,
+                        longitude: updatedLocation.longitude
+                    });
+
+                    // Display toast notification
+                    toast.show({
+                        placement: 'top',
+                        render: () => (
+                            <Toast action="info">
+                                <ToastTitle>Lokasi monitoring diperbarui</ToastTitle>
+                                <ToastDescription>{updatedLocation.nama_sungai}</ToastDescription>
+                            </Toast>
+                        )
+                    });
+                }
+            });
+
+            socketRef.current?.on('clearLocation', () => {
+                console.log('📍 Received clear location from another device:');
+                setSavedLocation(null);
+                // Display toast notification
+                toast.show({
+                    placement: 'top',
+                    render: () => (
+                        <Toast >
+                            <ToastTitle>Lokasi monitoring dihapus</ToastTitle>
+                        </Toast>
+                    )
                 });
             });
 
@@ -636,12 +695,8 @@ const HomeScreen = () => {
                     text={`${clampedValue.toFixed(2)}`}
                     textStyle={[styles.speedometerText, { marginTop: -10 }]}
                     labelStyle={styles.speedometerLabel}
-                // style={{ marginVertical: 8 }}
                 />
                 <Text style={styles.speedometerLabel}>{item.unit}</Text>
-                <Text style={styles.statusText}>
-                    {activeThreshold.label}
-                </Text>
             </View>
         );
     };
@@ -1101,7 +1156,7 @@ const HomeScreen = () => {
                                                                     closeOnSelect={false}
                                                                     onPress={userData?.role === 'guest' ? () => {
                                                                         Alert.alert('Maaf', 'Anda tidak memiliki akses ke fitur ini')
-                                                                    } : () => handleDeleteLocation}
+                                                                    } : handleDeleteLocation}
                                                                 >
                                                                     <BottomSheetItemText style={styles.outlineButtonText}>
                                                                         Hapus Lokasi
@@ -1188,7 +1243,6 @@ const HomeScreen = () => {
                                                                             onPress={userData?.role === 'guest' ? () => {
                                                                                 Alert.alert('Maaf', 'Anda tidak memiliki akses ke fitur ini')
                                                                             } : () => handleSelectExistingLocation(item)}
-                                                                        // disabled={userData?.role === 'guest'}
                                                                         >
                                                                             <BottomSheetItemText style={styles.actionButtonText}>
                                                                                 Set sebagai Monitoring
