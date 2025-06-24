@@ -7,5 +7,7 @@
 
 export const port = "https://server-water-sensors.onrender.com/"
 
+export const ml = "https://pw-brin-ml.onrender.com/"
+
 // For debugging:
 console.log('API Base URL:', port);

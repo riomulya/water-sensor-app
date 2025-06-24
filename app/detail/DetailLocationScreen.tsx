@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ButtonText } from '@/components/ui/button';
 import { useLocalSearchParams } from 'expo-router';
 import { useRouter } from 'expo-router';
-import { port } from '@/constants/https';
+import { port, ml } from '@/constants/https';
 import { DataTable } from 'react-native-paper';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -50,6 +50,16 @@ interface CombinedData {
 interface EnhancedCombinedData extends CombinedData {
     formattedDate: string;
     rowNumber: number;
+}
+
+// Prediction response interface
+interface PredictionResponse {
+    n_step: number;
+    pH_pred: number;
+    quality: string;
+    temperature_pred: number;
+    turbidity_pred: number;
+    reason: string;
 }
 
 // Define download state type
@@ -408,12 +418,28 @@ const DetailLocationScreen = () => {
     const [viewMode, setViewMode] = useState<'table' | 'list'>('list');
     const flatListRef = useRef<FlatList>(null);
 
-    // Add state for screen orientation
-    const [isLandscape, setIsLandscape] = useState(false);
+    // Prediction state
+    const [predictionTimeRange, setPredictionTimeRange] = useState<number>(36);
+    const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
+    const [isPredictionLoading, setIsPredictionLoading] = useState(false);
+
+    // Time range options for prediction
+    const timeRangeOptions = {
+        '1 jam': 12,
+        '3 jam': 36,
+        '6 jam': 72,
+        '12 jam': 144,
+        '1 hari': 288,
+        '3 hari': 864,
+        '1 minggu': 2016
+    };
 
     // Add loading transition state
     const [isLoadingTransition, setIsLoadingTransition] = useState(false);
     const [isNewDataSet, setIsNewDataSet] = useState(false);
+
+    // Add state for screen orientation
+    const [isLandscape, setIsLandscape] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -1270,6 +1296,226 @@ const DetailLocationScreen = () => {
         );
     };
 
+    // New function to fetch prediction data
+    const fetchPrediction = useCallback(async (n_step: number) => {
+        if (!allCombinedData || allCombinedData.length === 0) return;
+
+        setIsPredictionLoading(true);
+
+        try {
+            // Get latest sensor data for prediction input
+            const latestData = [...allCombinedData].sort((a, b) =>
+                new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime()
+            )[0];
+
+            const requestData = {
+                pH_t: latestData.nilai_ph,
+                temperature_t: latestData.nilai_temperature,
+                turbidity_t: latestData.nilai_turbidity,
+                n_step: n_step
+            };
+
+            // Use the complete URL with the specific endpoint
+            const mlEndpoint = `${ml}predict_regresi_class`;
+            console.log('Sending prediction request to:', mlEndpoint);
+            console.log('Request data:', JSON.stringify(requestData));
+
+            const response = await fetch(mlEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(requestData),
+            });
+
+            // Check if response is OK
+            if (!response.ok) {
+                // Try to get the error text
+                const errorText = await response.text();
+                console.error('ML API error response:', response.status, errorText);
+                throw new Error(`API returned ${response.status}: ${errorText.substring(0, 100)}...`);
+            }
+
+            // Get response text first to debug
+            const responseText = await response.text();
+            console.log('ML API raw response:', responseText.substring(0, 100));
+
+            // Check if response is valid JSON
+            try {
+                const result = JSON.parse(responseText);
+                console.log('Parsed prediction result:', result);
+                setPrediction(result);
+            } catch (parseError) {
+                console.error('Error parsing JSON:', parseError);
+                throw new Error('Invalid JSON response from ML API');
+            }
+        } catch (error) {
+            console.error('Error fetching prediction:', error);
+            // More detailed error for debugging
+            if (error instanceof Error) {
+                console.error('Error details:', error.message);
+            }
+            Alert.alert('Error', 'Gagal memuat prediksi kualitas air. Coba lagi nanti.');
+        } finally {
+            setIsPredictionLoading(false);
+        }
+    }, [allCombinedData]);
+
+    // Load prediction on initial data load
+    useEffect(() => {
+        if (allCombinedData.length > 0 && !prediction) {
+            fetchPrediction(predictionTimeRange);
+        }
+    }, [allCombinedData, fetchPrediction, prediction, predictionTimeRange]);
+
+    // Update prediction when time range changes
+    useEffect(() => {
+        if (allCombinedData.length > 0) {
+            fetchPrediction(predictionTimeRange);
+        }
+    }, [predictionTimeRange, fetchPrediction, allCombinedData]);
+
+    // Utility function to get color based on quality
+    const getQualityColor = (quality: string) => {
+        switch (quality) {
+            case 'Sangat Layak':
+                return '#10b981'; // Green
+            case 'Layak':
+                return '#3b82f6'; // Blue
+            case 'Kurang Layak':
+                return '#f59e0b'; // Yellow
+            case 'Tidak Layak':
+                return '#ef4444'; // Red
+            default:
+                return '#64748b'; // Default gray
+        }
+    };
+
+    // Prediction animation component
+    const PredictionCard = ({ isLoading, prediction }: { isLoading: boolean, prediction: PredictionResponse | null }) => {
+        return (
+            <MotiView
+                style={styles.predictionCard}
+                from={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'timing', duration: 300 }}
+            >
+                <View style={styles.predictionHeader}>
+                    <Text style={styles.predictionTitle}>Prediksi Kualitas Air</Text>
+                    <Text style={styles.predictionSubtitle}>
+                        Waktu prediksi: {Object.entries(timeRangeOptions).find(([_, value]) => value === predictionTimeRange)?.[0] || '3 jam'}
+                    </Text>
+                </View>
+
+                {isLoading ? (
+                    <View style={styles.predictionLoading}>
+                        <MotiView
+                            from={{ rotate: '0deg' }}
+                            animate={{ rotate: '360deg' }}
+                            transition={{
+                                loop: true,
+                                repeatReverse: false,
+                                duration: 1000,
+                                type: 'timing',
+                                easing: Easing.linear,
+                            }}
+                            style={{ marginBottom: 8 }}
+                        >
+                            <Feather name="refresh-cw" size={24} color="#3b82f6" />
+                        </MotiView>
+                        <Text style={styles.predictionLoadingText}>Memuat prediksi...</Text>
+                    </View>
+                ) : prediction ? (
+                    <View style={styles.predictionContent}>
+                        <MotiView
+                            style={[
+                                styles.qualityIndicator,
+                                { backgroundColor: getQualityColor(prediction.quality) }
+                            ]}
+                            from={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ type: 'spring', damping: 12 }}
+                        >
+                            <Text style={styles.qualityText}>{prediction.quality}</Text>
+                        </MotiView>
+
+                        {/* Alasan kualitas */}
+                        <MotiView
+                            style={styles.reasonContainer}
+                            from={{ opacity: 0, translateY: 5 }}
+                            animate={{ opacity: 1, translateY: 0 }}
+                            transition={{ delay: 200 }}
+                        >
+                            <Text style={styles.reasonText}>{prediction.reason}</Text>
+                        </MotiView>
+
+                        <View style={styles.predictionGrid}>
+                            <View style={styles.predictionItem}>
+                                <Text style={styles.predictionLabel}>pH</Text>
+                                <Text style={[
+                                    styles.predictionValue,
+                                    { color: prediction.pH_pred < 6 ? '#ef4444' : '#10b981' }
+                                ]}>
+                                    {prediction.pH_pred.toFixed(2)}
+                                </Text>
+                            </View>
+
+                            <View style={styles.predictionItem}>
+                                <Text style={styles.predictionLabel}>Suhu</Text>
+                                <Text style={[
+                                    styles.predictionValue,
+                                    { color: prediction.temperature_pred > 30 ? '#ef4444' : '#3b82f6' }
+                                ]}>
+                                    {prediction.temperature_pred.toFixed(2)}°C
+                                </Text>
+                            </View>
+
+                            <View style={styles.predictionItem}>
+                                <Text style={styles.predictionLabel}>Turbidity</Text>
+                                <Text style={styles.predictionValue}>
+                                    {prediction.turbidity_pred.toFixed(2)} NTU
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+                ) : (
+                    <View style={styles.predictionError}>
+                        <MaterialIcons name="error-outline" size={24} color="#ef4444" />
+                        <Text style={styles.predictionErrorText}>Gagal memuat prediksi</Text>
+                    </View>
+                )}
+
+                <View style={styles.timeRangeSelector}>
+                    <Text style={styles.timeRangeLabel}>Rentang Waktu:</Text>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.timeRangeOptions}
+                    >
+                        {Object.entries(timeRangeOptions).map(([label, value]) => (
+                            <TouchableOpacity
+                                key={value}
+                                style={[
+                                    styles.timeRangeOption,
+                                    predictionTimeRange === value && styles.timeRangeOptionActive
+                                ]}
+                                onPress={() => setPredictionTimeRange(value)}
+                            >
+                                <Text style={[
+                                    styles.timeRangeOptionText,
+                                    predictionTimeRange === value && styles.timeRangeOptionTextActive
+                                ]}>
+                                    {label}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+            </MotiView>
+        );
+    };
+
     // Render content
     if (isMapFullscreen) {
         return renderFullscreenMap();
@@ -1291,31 +1537,47 @@ const DetailLocationScreen = () => {
                     animate={{ opacity: 1 }}
                     transition={{ duration: 800 }}
                 >
-                    {/* Header Section */}
+                    {/* Header Section - ENHANCED */}
                     <MotiView
                         style={styles.headerContainer}
-                        from={{ translateY: -50, opacity: 0 }}
+                        from={{ translateY: -20, opacity: 0 }}
                         animate={{ translateY: 0, opacity: 1 }}
-                        transition={{ type: 'spring', damping: 10 }}
+                        transition={{ type: 'spring', damping: 15 }}
                     >
-                        <TouchableOpacity onPress={handleBack}>
+                        <TouchableOpacity
+                            style={styles.backButton}
+                            onPress={handleBack}
+                            activeOpacity={0.7}
+                        >
                             <MotiView
                                 animate={{ scale: 1 }}
                                 transition={{ type: 'spring' }}
+                                style={styles.backButtonInner}
                             >
-                                <Feather name="arrow-left" size={28} color="#2563eb" />
+                                <Feather name="arrow-left" size={22} color="white" />
                             </MotiView>
                         </TouchableOpacity>
 
-                        <MotiText
-                            from={{ scale: 0.8, opacity: 0 }}
+                        <MotiView
+                            style={styles.titleContainer}
+                            from={{ scale: 0.95, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
-                            transition={{ delay: 200 }}
+                            transition={{ delay: 150, type: 'spring', damping: 12 }}
                         >
-                            <Heading size="xl" className="text-blue-600">
+                            <Heading size="xl" className="text-blue-700" numberOfLines={2} style={styles.titleText}>
                                 {data?.nama_sungai || 'Loading...'}
                             </Heading>
-                        </MotiText>
+                            {data && (
+                                <MotiText
+                                    from={{ opacity: 0 }}
+                                    animate={{ opacity: 0.7 }}
+                                    transition={{ delay: 300 }}
+                                    style={styles.subtitleText}
+                                >
+                                    ID Lokasi: {data.id_lokasi}
+                                </MotiText>
+                            )}
+                        </MotiView>
                     </MotiView>
 
                     {/* Info Cards */}
@@ -1366,13 +1628,19 @@ const DetailLocationScreen = () => {
                     >
                         <View style={styles.coordinateBadge}>
                             <MaterialIcons name="gps-fixed" size={16} color="#3b82f6" />
-                            <Text className="text-blue-600 ml-2">Lat : {parseFloat(data?.lat || '0').toFixed(8)}</Text>
+                            <Text className="text-blue-600 ml-2">Lat : {parseFloat(data?.lat || '0').toFixed(6)}</Text>
                         </View>
                         <View style={styles.coordinateBadge}>
                             <MaterialIcons name="gps-not-fixed" size={16} color="#3b82f6" />
-                            <Text className="text-blue-600 ml-2">Lon : {parseFloat(data?.lon || '0').toFixed(8)}</Text>
+                            <Text className="text-blue-600 ml-2">Lon : {parseFloat(data?.lon || '0').toFixed(6)}</Text>
                         </View>
                     </MotiView>
+
+                    {/* Prediction Section - NEW */}
+                    <PredictionCard
+                        isLoading={isPredictionLoading}
+                        prediction={prediction}
+                    />
 
                     {/* Download Button */}
                     {allCombinedData.length > 0 && (
@@ -1463,12 +1731,49 @@ const styles = StyleSheet.create({
     },
     headerContainer: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start', // Changed from center to allow title to expand
         marginBottom: 24,
-        padding: 16,
+        paddingVertical: 20,
+        paddingHorizontal: 16,
         backgroundColor: 'white',
         borderRadius: 16,
         elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    backButton: {
+        marginRight: 16,
+        marginTop: 4, // Align with title vertically
+    },
+    backButtonInner: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#3b82f6',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#3b82f6',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 4,
+    },
+    titleContainer: {
+        flex: 1,
+        paddingRight: 8, // Give some space on the right
+    },
+    titleText: {
+        fontSize: 22,
+        lineHeight: 30,
+        fontWeight: 'bold',
+        color: '#1e40af',
+    },
+    subtitleText: {
+        fontSize: 14,
+        color: '#64748b',
+        marginTop: 4,
     },
     infoGrid: {
         flexDirection: 'row',
@@ -1873,6 +2178,139 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 8,
         elevation: 5,
+    },
+    // Prediction styles
+    predictionCard: {
+        backgroundColor: 'white',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 24,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    predictionHeader: {
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+        paddingBottom: 12,
+        marginBottom: 16,
+    },
+    predictionTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#334155',
+        marginBottom: 4,
+    },
+    predictionSubtitle: {
+        fontSize: 14,
+        color: '#64748b',
+    },
+    predictionContent: {
+        alignItems: 'center',
+    },
+    qualityIndicator: {
+        paddingVertical: 8,
+        paddingHorizontal: 20,
+        borderRadius: 20,
+        marginBottom: 16,
+    },
+    qualityText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 16,
+    },
+    reasonContainer: {
+        backgroundColor: '#f8fafc',
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        width: '100%',
+    },
+    reasonText: {
+        textAlign: 'center',
+        fontSize: 14,
+        color: '#475569',
+        lineHeight: 20,
+    },
+    predictionGrid: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        width: '100%',
+        marginBottom: 16,
+    },
+    predictionItem: {
+        flex: 1,
+        alignItems: 'center',
+        padding: 8,
+    },
+    predictionLabel: {
+        fontSize: 14,
+        color: '#64748b',
+        marginBottom: 4,
+    },
+    predictionValue: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    predictionLoading: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+    },
+    predictionLoadingText: {
+        color: '#64748b',
+        marginTop: 8,
+    },
+    predictionError: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+    },
+    predictionErrorText: {
+        color: '#ef4444',
+        marginLeft: 8,
+    },
+    timeRangeSelector: {
+        marginTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+        paddingTop: 16,
+    },
+    timeRangeLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#475569',
+        marginBottom: 8,
+    },
+    timeRangeOptions: {
+        flexDirection: 'row',
+        paddingBottom: 4,
+    },
+    timeRangeOption: {
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        marginRight: 8,
+        borderRadius: 16,
+        backgroundColor: '#f1f5f9',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    timeRangeOptionActive: {
+        backgroundColor: '#3b82f6',
+        borderColor: '#2563eb',
+    },
+    timeRangeOptionText: {
+        fontSize: 14,
+        color: '#475569',
+    },
+    timeRangeOptionTextActive: {
+        color: 'white',
+        fontWeight: '500',
     },
 });
 
