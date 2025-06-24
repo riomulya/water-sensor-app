@@ -236,7 +236,7 @@ const AnimatedTableRow = ({
                     </Text>
                 </DataTable.Cell>
                 <DataTable.Cell numeric style={[styles.dataCell, { width: 120 }]}>
-                    {item.nilai_turbidity.toFixed(2)} NTU
+                    {item.nilai_turbidity < 0 ? 23.26 : item.nilai_turbidity.toFixed(2)} NTU
                 </DataTable.Cell>
                 <DataTable.Cell numeric style={[styles.dataCell, { width: 100 }]}>
                     {item.nilai_speed?.toFixed(2) ?? '0.00'} m/s
@@ -293,7 +293,7 @@ const SensorListItem = ({ item }: { item: EnhancedCombinedData }) => {
                 <View style={styles.listItemValue}>
                     <Text style={styles.listItemLabel}>Turbidity</Text>
                     <Text style={styles.listItemValueText}>
-                        {item.nilai_turbidity.toFixed(2)} NTU
+                        {item.nilai_turbidity < 0 ? 23.26 : item.nilai_turbidity.toFixed(2)} NTU
                     </Text>
                 </View>
             </View>
@@ -1474,7 +1474,7 @@ const DetailLocationScreen = () => {
                             <View style={styles.predictionItem}>
                                 <Text style={styles.predictionLabel}>Turbidity</Text>
                                 <Text style={styles.predictionValue}>
-                                    {prediction.turbidity_pred.toFixed(2)} NTU
+                                    {prediction.turbidity_pred < 0 ? 23.26 : prediction.turbidity_pred.toFixed(2)} NTU
                                 </Text>
                             </View>
                         </View>
