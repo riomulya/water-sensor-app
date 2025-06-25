@@ -243,7 +243,7 @@ const StatsSummaryCards: React.FC<StatsSummaryCardsProps> = ({ sensorData }) => 
                 <View style={styles.cardBody}>
                     <View style={styles.currentValueContainer}>
                         <Text size="xl" bold style={[styles.currentValue, { color: item.color }]}>
-                            {typeof item.current === 'number' ? item.current.toFixed(1) : 'N/A'}
+                            {typeof item.current === 'number' ? item.current.toFixed(2) : 'N/A'}
                         </Text>
                         <Text size="xs" style={styles.unitText}>
                             {item.unit}

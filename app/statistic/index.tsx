@@ -297,9 +297,6 @@ export default function StatisticsScreen() {
                                     Data terakhir diperbarui: {sensorData && sensorData[0]?.timestamp ?
                                         new Date(sensorData[0].timestamp).toLocaleString('id-ID') : '-'}
                                 </Text>
-                                <Text size="xs" style={styles.footerText}>
-                                    Menampilkan {sensorData.length} dari {totalRecords.toLocaleString()} data
-                                </Text>
                                 {loading && currentPage > 1 && (
                                     <ActivityIndicator size="small" color="#3b82f6" style={styles.loadMoreIndicator} />
                                 )}

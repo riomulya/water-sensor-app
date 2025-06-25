@@ -89,11 +89,17 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                 return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
             });
 
+            // Limit the number of data points to prevent bitmap size issues
+            const maxDataPoints = 100;
+            const dataToUse = sortedData.length > maxDataPoints
+                ? sortedData.slice(sortedData.length - maxDataPoints)
+                : sortedData;
+
             // Calculate how often to show labels based on data length
-            const labelModulo = sortedData.length > 15 ? 5 : 3;
+            const labelModulo = dataToUse.length > 15 ? 5 : 3;
 
             // Create chart data points
-            return sortedData
+            return dataToUse
                 .filter(data => data && typeof data === 'object')
                 .map((data, index) => {
                     // Check if the selected sensor property exists and is a valid number
@@ -256,6 +262,24 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
         );
     };
 
+    // Calculate a safe chart width based on the number of data points
+    const calculateChartWidth = () => {
+        if (!chartData || chartData.length === 0) return CHART_WIDTH;
+
+        // Set a reasonable spacing per data point
+        const pointSpacing = 20;
+
+        // Calculate width based on data points, but cap it to prevent bitmap issues
+        const calculatedWidth = Math.min(
+            chartData.length * pointSpacing,
+            // Limit maximum width to prevent bitmap size issues
+            2000
+        );
+
+        // Return the larger of the calculated width or the minimum chart width
+        return Math.max(calculatedWidth, CHART_WIDTH);
+    };
+
     return (
         <MotiView
             style={styles.container}
@@ -358,7 +382,7 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                                     <LineChart
                                         data={chartData}
                                         height={180}
-                                        width={Math.max(CHART_WIDTH, chartData.length * 20)}
+                                        width={calculateChartWidth()}
                                         noOfSections={5}
                                         areaChart
                                         yAxisTextStyle={{ color: '#64748b', fontSize: 10 }}
@@ -369,7 +393,7 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                                         endOpacity={0.1}
                                         spacing={chartData.length > 15 ? 20 : 30}
                                         thickness={2}
-                                        hideDataPoints={false}
+                                        hideDataPoints={chartData.length > 50}
                                         dataPointsColor={getChartColor()}
                                         dataPointsRadius={3}
                                         focusEnabled
@@ -560,6 +584,7 @@ const styles = StyleSheet.create({
         paddingRight: 8,
         width: '100%',
         overflow: 'hidden',
+        maxHeight: 220,
     },
     chartTouchable: {
         position: 'relative',
