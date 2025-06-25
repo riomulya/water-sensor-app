@@ -2349,6 +2349,7 @@ const styles = StyleSheet.create({
     },
     fullscreenMapContainer: {
         flex: 1,
+        marginTop: 30,
         backgroundColor: '#0f172a',
     },
     fullscreenMapHeader: {

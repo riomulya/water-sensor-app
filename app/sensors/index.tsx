@@ -388,6 +388,8 @@ export default function AnomalyScreen() {
 
             const result: ApiResponse = await response.json();
 
+            console.log('Result:', result.data.length);
+
             if (!result.success) {
                 throw new Error('API returned unsuccessful response');
             }
