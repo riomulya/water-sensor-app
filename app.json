@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "water sensor app",
+    "name": "FLUVIX",
     "slug": "water-sensor-app",
-    "version": "1.0.1",
+    "version": "1.1.1",
     "orientation": "portrait",
-    "icon": "./assets/images/LogoSplash.png",
+    "icon": "./assets/images/logo_icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -25,12 +25,12 @@
       "assets/**/*.ttf"
     ],
     "splash": {
-      "image": "./assets/images/LogoSplash.png",
+      "image": "./assets/images/logo_icon.png",
       "resizeMode": "contain"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.watersensor.app",
+      "bundleIdentifier": "com.fluvix.app",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification",
@@ -46,9 +46,9 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/LogoSplash.png"
+        "foregroundImage": "./assets/images/logo_icon.png"
       },
-      "package": "com.watersensor.app",
+      "package": "com.fluvix.app",
       "permissions": [
         "ACCESS_BACKGROUND_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
@@ -87,12 +87,12 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/LogoSplash.png",
+          "icon": "./assets/images/logo_icon.png",
           "color": "#2196F3",
           "androidMode": "collapse",
           "androidCollapsedTitle": "Sensor Monitoring",
           "androidNotification": {
-            "icon": "./assets/images/LogoSplash.png",
+            "icon": "./assets/images/logo_icon.png",
             "color": "#2196F3",
             "sound": "default",
             "priority": "max",
