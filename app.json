@@ -30,7 +30,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fluvix.app",
+      "bundleIdentifier": "com.watersensor.app",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification",
@@ -48,7 +48,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo_icon.png"
       },
-      "package": "com.fluvix.app",
+      "package": "com.watersensor.app",
       "permissions": [
         "ACCESS_BACKGROUND_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
