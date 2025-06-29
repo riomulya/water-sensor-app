@@ -26,7 +26,8 @@
     ],
     "splash": {
       "image": "./assets/images/logo_icon.png",
-      "resizeMode": "contain"
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
@@ -46,7 +47,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo_icon.png"
+        "foregroundImage": "./assets/images/logo_icon.png",
+        "backgroundColor": "#ffffff"
       },
       "package": "com.watersensor.app",
       "permissions": [
