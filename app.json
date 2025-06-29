@@ -4,7 +4,7 @@
     "slug": "water-sensor-app",
     "version": "1.1.1",
     "orientation": "portrait",
-    "icon": "./assets/images/logo_icon_android.png",
+    "icon": "./assets/images/logo_icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#FFFFFF",
@@ -47,7 +47,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo_icon_android.png",
+        "foregroundImage": "./assets/images/logo_icon.png",
         "backgroundColor": "#FFFFFF"
       },
       "package": "com.watersensor.app",
