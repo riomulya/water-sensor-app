@@ -224,7 +224,7 @@ const LoginScreen = () => {
                         transition={{ type: 'timing', duration: 500 }}
                     >
                         <Image
-                            source={require('@/assets/images/logo.png')}
+                            source={require('@/assets/images/logo_nama.png')}
                             style={styles.logo}
                         />
                     </MotiView>
