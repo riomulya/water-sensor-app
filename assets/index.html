@@ -550,8 +550,7 @@
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
-        timeZone: 'Asia/Jakarta'
+        second: '2-digit'
       })}</span>
             </div>
           </div>
@@ -753,6 +752,8 @@
     // Fungsi pembuatan popup sensor
     function createSensorPopup(properties) {
       const tanggal = new Date(properties.tanggal);
+      // Manually adjust time by subtracting 7 hours to convert from GMT+7 to UTC+0
+      const utcTanggal = new Date(tanggal.getTime() - (7 * 60 * 60 * 1000));
       const options = {
         weekday: 'long',
         year: 'numeric',
@@ -760,8 +761,7 @@
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        timeZone: 'Asia/Jakarta',
-        timeZoneName: 'short'
+        second: '2-digit'
       };
 
       // Ensure valid numbers with fallbacks
@@ -810,7 +810,7 @@
           <div style="background-color: white; padding: 15px; border-bottom: 1px solid #eee;">
             <div style="margin-bottom: 10px; font-weight: 500; color: #555;">
               <span style="color: #777; font-size: 13px;">WAKTU PENGAMBILAN</span><br>
-              <span style="font-size: 15px;">${tanggal.toLocaleDateString('id-ID', options)}</span>
+              <span style="font-size: 15px;">${utcTanggal.toLocaleDateString('id-ID', options)}</span>
             </div>
           </div>
           

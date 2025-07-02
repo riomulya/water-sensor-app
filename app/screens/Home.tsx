@@ -1379,13 +1379,13 @@ const HomeScreen = () => {
                                 </Text>
                             </View>
                         </View>
-                        <ModalCloseButton onPress={handleCloseAddressDialog}>
+                        {/* <ModalCloseButton onPress={handleCloseAddressDialog}>
                             <Icon
                                 as={CloseIcon}
                                 size="md"
                                 className="stroke-background-400 group-[:hover]/modal-close-button:stroke-background-700"
                             />
-                        </ModalCloseButton>
+                        </ModalCloseButton> */}
                     </ModalHeader>
                     <ModalBody className="mt-3 mb-4">
                         <View className="gap-3">
