@@ -452,7 +452,7 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
                         transition={{ type: 'timing', duration: 500, delay: 800 }}
                     >
                         <Text size="xs" style={styles.paginationInfo}>
-                            {`Menampilkan ${startRecord} - ${endRecord} data`}
+                            {localPage === Math.ceil(totalRecords / pageSize) ? `Menampilkan ${startRecord} - ${totalRecords} data` : `Menampilkan ${startRecord} - ${endRecord} data`}
                         </Text>
 
                         <View style={styles.paginationText}>
