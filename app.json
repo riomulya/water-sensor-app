@@ -9,6 +9,16 @@
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#FFFFFF",
     "newArchEnabled": true,
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/051b409b-ee75-41db-9fef-078d6cdc3f37",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
+    },
     "assetBundlePatterns": [
       "**/*",
       "./assets/images/marker_base_location.png",
@@ -37,6 +47,10 @@
           "remote-notification",
           "fetch",
           "location",
+          "processing",
+          "remote-notification",
+          "fetch",
+          "location",
           "processing"
         ],
         "NSLocationWhenInUseUsageDescription": "This app needs access to location to monitor water quality.",
@@ -56,7 +70,20 @@
         "RECEIVE_BOOT_COMPLETED",
         "WAKE_LOCK",
         "FOREGROUND_SERVICE",
-        "SCHEDULE_EXACT_ALARM"
+        "SCHEDULE_EXACT_ALARM",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK",
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK",
+        "FOREGROUND_SERVICE",
+        "SCHEDULE_EXACT_ALARM",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK"
       ],
       "googleServicesFile": "./google-services.json"
     },
