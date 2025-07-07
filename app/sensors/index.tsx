@@ -381,7 +381,7 @@ export default function AnomalyScreen() {
             setLoading(true);
             setLoadingProgress('Fetching sensor data...');
 
-            const response = await fetch('https://server-water-sensors.onrender.com/klasifikasi/all');
+            const response = await fetch(`${port}klasifikasi/all`);
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
             }
