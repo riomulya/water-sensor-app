@@ -3,9 +3,11 @@ import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
+import { port } from '@/constants/https';
+
 
 // API endpoint for fetching sensor data
-const API_ENDPOINT = 'https://api-watermon.onlimoni.online/getcurrentdata';
+const API_ENDPOINT = `${port}getcurrentdata`;
 
 type SensorData = {
     accel_x: number;
