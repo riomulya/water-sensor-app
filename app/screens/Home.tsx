@@ -831,11 +831,53 @@ const HomeScreen = () => {
         if (mqttData) {
             startService();
             // Update sensor data for background notifications
-
         } else {
             stopService();
         }
     }, [mqttData, sensorData]);
+
+    // Add a separate effect to start the service immediately when the component mounts
+    useEffect(() => {
+        // Start the service with initial data
+        const initService = async () => {
+            console.log('[HOME] Initializing background service...');
+            // Fetch data from API directly
+            try {
+                const response = await fetch('https://api-watermon.onlimoni.online/getcurrentdata');
+                const data = await response.json();
+
+                if (data.success && data.data && data.data.message) {
+                    const apiData = data.data.message;
+                    const initialData = {
+                        accel_x: parseFloat(apiData.accel_x) || 0,
+                        accel_y: parseFloat(apiData.accel_y) || 0,
+                        accel_z: parseFloat(apiData.accel_z) || 0,
+                        ph: parseFloat(apiData.ph) || 7,
+                        turbidity: parseFloat(apiData.turbidity) || 0,
+                        temperature: parseFloat(apiData.temperature) || 0,
+                        speed: parseFloat(apiData.speed) || 0,
+                    };
+
+                    console.log('[HOME] Starting service with API data:', initialData);
+                    setSensorData(initialData);
+                    await startService();
+                } else {
+                    console.log('[HOME] No valid API data, starting with default data');
+                    await startService();
+                }
+            } catch (error) {
+                console.error('[HOME] Error fetching initial API data:', error);
+                await startService();
+            }
+        };
+
+        initService();
+
+        // Cleanup on unmount
+        return () => {
+            stopService();
+        };
+    }, []);
 
     // Tambahkan state untuk drawer
     const [drawerOpen, setDrawerOpen] = useState(false);

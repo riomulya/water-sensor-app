@@ -115,8 +115,8 @@ const SensorTrendsChart: React.FC<SensorTrendsChartProps> = ({ sensorData }) => 
                     }
 
                     // Format timestamp for display
-                    const timestamp = data.timestamp ? moment(data.timestamp).format('DD/MM/YYYY HH:mm:ss') : '';
-                    const shortTimestamp = data.timestamp ? moment(data.timestamp).format('HH:mm:ss') : '';
+                    const timestamp = data.timestamp ? moment.utc(data.timestamp).format('DD/MM/YYYY HH:mm:ss') : '';
+                    const shortTimestamp = data.timestamp ? moment.utc(data.timestamp).format('HH:mm:ss') : '';
 
                     // Only show label for every labelModulo data point
                     const showLabel = index % labelModulo === 0;

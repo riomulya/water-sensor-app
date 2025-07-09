@@ -26,6 +26,123 @@ import {
 import { Input, InputField, InputIcon, InputSlot } from '@/components/ui/input';
 import { Box } from '@/components/ui/box';
 import { BottomSheetPortal } from '@/components/ui/bottomsheet';
+import {
+    AlertDialog,
+    AlertDialogBackdrop,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogBody,
+    AlertDialogFooter
+} from '@/components/ui/alert-dialog';
+import { LinearGradient } from 'expo-linear-gradient';
+
+// Custom Alert Dialog Components
+interface CustomAlertDialogProps {
+    visible: boolean;
+    onClose: () => void;
+    title: string;
+    message: string;
+    actions: {
+        text: string;
+        onPress: () => void;
+        type?: 'primary' | 'secondary' | 'cancel' | 'success' | 'error';
+        icon?: string;
+    }[];
+    icon?: {
+        name: string;
+        color: string;
+    };
+}
+
+const CustomAlertDialog: React.FC<CustomAlertDialogProps> = ({
+    visible,
+    onClose,
+    title,
+    message,
+    actions,
+    icon
+}) => {
+    return (
+        <AlertDialog isOpen={visible} onClose={onClose}>
+            <AlertDialogBackdrop />
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <View style={styles.dialogHeader}>
+                        {icon && (
+                            <Ionicons
+                                name={icon.name as any}
+                                size={32}
+                                color={icon.color}
+                                style={styles.dialogIcon}
+                            />
+                        )}
+                        <Text style={styles.dialogTitle}>
+                            {title}
+                        </Text>
+                    </View>
+                </AlertDialogHeader>
+                <AlertDialogBody>
+                    <Text style={styles.dialogMessage}>
+                        {message}
+                    </Text>
+                </AlertDialogBody>
+                <AlertDialogFooter>
+                    <View style={styles.dialogButtonContainerVertical}>
+                        {actions.map((action, index) => {
+                            const isCancel = action.type === 'cancel';
+                            const isSuccess = action.type === 'success';
+                            const isError = action.type === 'error';
+                            const isPrimary = action.type === 'primary' || (!action.type && !isCancel);
+
+                            let buttonStyle = styles.dialogPrimaryButtonFull;
+                            let textStyle = styles.dialogPrimaryButtonText;
+                            let gradientColors: [string, string] = ['#60a5fa', '#3b82f6'];
+
+                            if (isCancel) {
+                                buttonStyle = styles.dialogSecondaryButtonFull;
+                                textStyle = styles.dialogSecondaryButtonText;
+                            } else if (isSuccess) {
+                                gradientColors = ['#34d399', '#10b981'];
+                            } else if (isError) {
+                                gradientColors = ['#f87171', '#ef4444'];
+                            }
+
+                            return (
+                                <TouchableOpacity
+                                    key={index}
+                                    style={buttonStyle}
+                                    onPress={action.onPress}
+                                >
+                                    {!isCancel && (
+                                        <LinearGradient
+                                            colors={gradientColors}
+                                            style={StyleSheet.absoluteFill}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 0 }}
+                                        />
+                                    )}
+                                    <View style={styles.buttonContentRow}>
+                                        {action.icon && (
+                                            <Ionicons
+                                                name={action.icon as any}
+                                                size={18}
+                                                color={isCancel ? '#64748b' : 'white'}
+                                                style={{ marginRight: 8 }}
+                                            />
+                                        )}
+                                        <Text style={textStyle}>
+                                            {action.text}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+};
 
 // We're now importing chart types from the store
 // import type { DataPoint, ChartData } from '@/app/stores/chartStore';
@@ -775,10 +892,10 @@ const FeedsScreen: React.FC = () => {
             let downloadUrl = '';
             if (useCurrentLocation && selectedLocation && selectedLocation !== 'all' && selectedLocation !== '') {
                 // Download berdasarkan lokasi tertentu menggunakan endpoint yang benar
-                downloadUrl = `https://server-water-sensors.onrender.com/data_combined/export/${selectedLocation}`;
+                downloadUrl = `${port}data_combined/export/${selectedLocation}`;
             } else {
                 // Download semua data menggunakan endpoint yang benar
-                downloadUrl = `https://server-water-sensors.onrender.com/data_combined_export/all`;
+                downloadUrl = `${port}data_combined_export/all`;
             }
 
             console.log(`Mengunduh Excel dari: ${downloadUrl}`);
@@ -825,6 +942,8 @@ const FeedsScreen: React.FC = () => {
             }
 
             setDownloadState('completed');
+            setTempFileUri(uri);
+            setTempFileName(filename);
 
             // Update notifikasi ke selesai
             await Notifications.scheduleNotificationAsync({
@@ -837,84 +956,10 @@ const FeedsScreen: React.FC = () => {
                 identifier: notificationId,
             });
 
-            // Tampilkan alert dengan opsi penyimpanan
-            Alert.alert(
-                '📊 Unduhan Berhasil',
-                'File Excel telah berhasil diunduh. Apa yang ingin Anda lakukan dengan file ini?',
-                [
-                    {
-                        text: 'Bagikan',
-                        onPress: async () => {
-                            try {
-                                await Sharing.shareAsync(uri, {
-                                    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                                    dialogTitle: 'Bagikan Data Sensor',
-                                    UTI: 'org.openxmlformats.spreadsheetml.sheet'
-                                });
-                            } catch (error) {
-                                console.error('Error sharing file:', error);
-                                Alert.alert('Error', 'Gagal membagikan file');
-                            }
-                        }
-                    },
-                    {
-                        text: 'Simpan ke Perangkat',
-                        onPress: async () => {
-                            try {
-                                if (Platform.OS === 'android') {
-                                    // Request directory permissions for Android
-                                    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-
-                                    if (permissions.granted) {
-                                        // Create file in the selected directory
-                                        const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
-                                            permissions.directoryUri,
-                                            filename,
-                                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                                        );
-
-                                        // Read the cached file
-                                        const fileContent = await FileSystem.readAsStringAsync(uri, {
-                                            encoding: FileSystem.EncodingType.Base64
-                                        });
-
-                                        // Write to the selected directory
-                                        await FileSystem.writeAsStringAsync(fileUri, fileContent, {
-                                            encoding: FileSystem.EncodingType.Base64
-                                        });
-
-                                        Alert.alert(
-                                            '✅ Berhasil Disimpan',
-                                            `File ${filename} telah disimpan ke folder yang Anda pilih.`,
-                                            [{ text: 'OK' }]
-                                        );
-                                    }
-                                } else if (Platform.OS === 'ios') {
-                                    // For iOS, share and ask them to save
-                                    await Sharing.shareAsync(uri, {
-                                        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                                        dialogTitle: 'Simpan Data Sensor ke Perangkat',
-                                        UTI: 'org.openxmlformats.spreadsheetml.sheet'
-                                    });
-                                }
-                            } catch (error) {
-                                console.error('Error saving file:', error);
-                                Alert.alert(
-                                    '❌ Gagal Menyimpan',
-                                    'Terjadi kesalahan saat menyimpan file ke perangkat.',
-                                    [{ text: 'OK' }]
-                                );
-                            }
-                        },
-                        style: 'default'
-                    },
-                    {
-                        text: 'Tutup',
-                        style: 'cancel'
-                    },
-                ],
-                { cancelable: true }
-            );
+            // Show success dialog with options
+            setAlertTitle('📊 Unduhan Berhasil');
+            setAlertMessage('File Excel telah berhasil diunduh. Apa yang ingin Anda lakukan dengan file ini?');
+            setShowSuccessDialog(true);
 
             // Reset state setelah beberapa detik
             setTimeout(() => setDownloadState('idle'), 2000);
@@ -926,13 +971,70 @@ const FeedsScreen: React.FC = () => {
             // Reset state setelah beberapa detik
             setTimeout(() => setDownloadState('idle'), 2000);
 
-            Alert.alert(
-                '❌ Unduhan Gagal',
-                `Terjadi kesalahan saat mengunduh data dari server:\n\n${error instanceof Error ? error.message : 'Kesalahan tidak diketahui'}\n\nSilakan coba lagi nanti.`,
-                [{ text: 'OK' }]
-            );
+            setAlertTitle('❌ Unduhan Gagal');
+            setAlertMessage(`Terjadi kesalahan saat mengunduh data dari server:\n\n${error instanceof Error ? error.message : 'Kesalahan tidak diketahui'}\n\nSilakan coba lagi nanti.`);
+            setShowErrorDialog(true);
         } finally {
             setIsExporting(false);
+        }
+    };
+
+    const handleShareFile = async () => {
+        try {
+            await Sharing.shareAsync(tempFileUri, {
+                mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                dialogTitle: 'Bagikan Data Sensor',
+                UTI: 'org.openxmlformats.spreadsheetml.sheet'
+            });
+        } catch (error) {
+            console.error('Error sharing file:', error);
+            setAlertTitle('Error');
+            setAlertMessage('Gagal membagikan file');
+            setShowErrorDialog(true);
+        }
+    };
+
+    const handleSaveToDevice = async () => {
+        try {
+            if (Platform.OS === 'android') {
+                // Request directory permissions for Android
+                const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+
+                if (permissions.granted) {
+                    // Create file in the selected directory
+                    const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+                        permissions.directoryUri,
+                        tempFileName,
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    );
+
+                    // Read the cached file
+                    const fileContent = await FileSystem.readAsStringAsync(tempFileUri, {
+                        encoding: FileSystem.EncodingType.Base64
+                    });
+
+                    // Write to the selected directory
+                    await FileSystem.writeAsStringAsync(fileUri, fileContent, {
+                        encoding: FileSystem.EncodingType.Base64
+                    });
+
+                    setAlertTitle('✅ Berhasil Disimpan');
+                    setAlertMessage(`File ${tempFileName} telah disimpan ke folder yang Anda pilih.`);
+                    setShowSuccessDialog(true);
+                }
+            } else if (Platform.OS === 'ios') {
+                // For iOS, share and ask them to save
+                await Sharing.shareAsync(tempFileUri, {
+                    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    dialogTitle: 'Simpan Data Sensor ke Perangkat',
+                    UTI: 'org.openxmlformats.spreadsheetml.sheet'
+                });
+            }
+        } catch (error) {
+            console.error('Error saving file:', error);
+            setAlertTitle('❌ Gagal Menyimpan');
+            setAlertMessage('Terjadi kesalahan saat menyimpan file ke perangkat.');
+            setShowErrorDialog(true);
         }
     };
 
@@ -1044,6 +1146,7 @@ const FeedsScreen: React.FC = () => {
 
             // Generate filename with timestamp
             const filename = `water_sensor_data_${moment().format('YYYY-MM-DD_HH-mm-ss')}.xlsx`;
+            setTempFileName(filename);
 
             // Update notification to show downloading
             await Notifications.scheduleNotificationAsync({
@@ -1059,6 +1162,7 @@ const FeedsScreen: React.FC = () => {
 
             // Simpan file ke cache terlebih dahulu
             const tempFileUri = FileSystem.cacheDirectory + filename;
+            setTempFileUri(tempFileUri);
             await FileSystem.writeAsStringAsync(tempFileUri, base64Data, {
                 encoding: FileSystem.EncodingType.Base64
             });
@@ -1082,79 +1186,10 @@ const FeedsScreen: React.FC = () => {
                 setDownloadState('idle');
             }, 2000);
 
-            // Tampilkan alert dengan opsi penyimpanan yang lebih menarik
-            Alert.alert(
-                '📊 Data Siap Digunakan',
-                `${allSensorData.reduce((total, sensor) => total + sensor.data.length, 0)} data sensor telah berhasil diekspor. Apa yang ingin Anda lakukan dengan file Excel ini?`,
-                [
-                    {
-                        text: 'Bagikan',
-                        onPress: async () => {
-                            try {
-                                await Sharing.shareAsync(tempFileUri, {
-                                    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                                    dialogTitle: 'Bagikan Data Sensor',
-                                    UTI: 'org.openxmlformats.spreadsheetml.sheet'
-                                });
-                            } catch (error) {
-                                console.error('Error sharing file:', error);
-                                Alert.alert('Error', 'Gagal membagikan file');
-                            }
-                        }
-                    },
-                    {
-                        text: 'Simpan ke Perangkat',
-                        onPress: async () => {
-                            try {
-                                if (Platform.OS === 'android') {
-                                    // Request directory permissions for Android
-                                    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-
-                                    if (permissions.granted) {
-                                        // Create file in the selected directory
-                                        const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
-                                            permissions.directoryUri,
-                                            filename,
-                                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                                        );
-
-                                        // Write the file content directly
-                                        await FileSystem.writeAsStringAsync(fileUri, base64Data, {
-                                            encoding: FileSystem.EncodingType.Base64
-                                        });
-
-                                        Alert.alert(
-                                            '✅ Berhasil Disimpan',
-                                            `File ${filename} telah disimpan ke folder yang Anda pilih.`,
-                                            [{ text: 'OK' }]
-                                        );
-                                    }
-                                } else if (Platform.OS === 'ios') {
-                                    // For iOS, share and ask them to save
-                                    await Sharing.shareAsync(tempFileUri, {
-                                        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                                        dialogTitle: 'Simpan Data Sensor ke Perangkat',
-                                        UTI: 'org.openxmlformats.spreadsheetml.sheet'
-                                    });
-                                }
-                            } catch (error) {
-                                console.error('Error saving file:', error);
-                                Alert.alert(
-                                    '❌ Gagal Menyimpan',
-                                    'Terjadi kesalahan saat menyimpan file ke perangkat.',
-                                    [{ text: 'OK' }]
-                                );
-                            }
-                        },
-                        style: 'default'
-                    },
-                    {
-                        text: 'Tutup',
-                        style: 'cancel'
-                    },
-                ],
-                { cancelable: true }
-            );
+            // Show success dialog with options
+            setAlertTitle('📊 Data Siap Digunakan');
+            setAlertMessage(`${allSensorData.reduce((total, sensor) => total + sensor.data.length, 0)} data sensor telah berhasil diekspor. Apa yang ingin Anda lakukan dengan file Excel ini?`);
+            setShowSuccessDialog(true);
         } catch (error) {
             console.error('Error downloading data:', error);
             setDownloadState('error');
@@ -1170,11 +1205,9 @@ const FeedsScreen: React.FC = () => {
                 trigger: null,
             });
 
-            Alert.alert(
-                '❌ Ekspor Gagal',
-                `Gagal mengekspor data. Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                [{ text: 'OK', style: 'default' }]
-            );
+            setAlertTitle('❌ Ekspor Gagal');
+            setAlertMessage(`Gagal mengekspor data. Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            setShowErrorDialog(true);
         } finally {
             setIsExporting(false);
         }
@@ -1517,92 +1550,188 @@ const FeedsScreen: React.FC = () => {
     // Handle untuk tombol download
     const handleDownloadPress = () => {
         if (isExporting) return;
-
-        Alert.alert(
-            '📊 Unduh Data Sensor',
-            'Pilih metode unduh yang diinginkan:',
-            [
-                {
-                    text: '❌ Batal',
-                    style: 'cancel'
-                },
-                {
-                    text: '📍 Data Lokasi Ini Saja',
-                    onPress: () => {
-                        if (selectedLocation && selectedLocation !== 'all' && selectedLocation !== '') {
-                            const locationName = locations.find(loc => String(loc.id_lokasi) === selectedLocation)?.nama_sungai || selectedLocation;
-
-                            Alert.alert(
-                                '📥 Konfirmasi Unduh',
-                                `Data sensor dari lokasi ${locationName} akan diunduh dari server dalam format Excel.\n\nProses ini akan menghasilkan dokumen yang lengkap dengan semua data dari lokasi ini.`,
-                                [
-                                    {
-                                        text: '❌ Batal',
-                                        style: 'cancel'
-                                    },
-                                    {
-                                        text: '✅ Unduh',
-                                        onPress: () => serverDownloadExcel(true)
-                                    }
-                                ],
-                                { cancelable: true }
-                            );
-                        } else {
-                            Alert.alert(
-                                '⚠️ Perhatian',
-                                'Silakan pilih lokasi spesifik terlebih dahulu untuk mengunduh data lokasi.',
-                                [{ text: 'OK' }]
-                            );
-                        }
-                    }
-                },
-                {
-                    text: '🌎 Semua Data Sensor',
-                    onPress: () => {
-                        Alert.alert(
-                            '📥 Konfirmasi Unduh',
-                            'Data dari SEMUA lokasi akan diunduh dari server dalam format Excel.\n\nFile yang dihasilkan mungkin berukuran besar. Pastikan koneksi internet stabil.',
-                            [
-                                {
-                                    text: '❌ Batal',
-                                    style: 'cancel'
-                                },
-                                {
-                                    text: '✅ Unduh',
-                                    onPress: () => serverDownloadExcel(false)
-                                }
-                            ],
-                            { cancelable: true }
-                        );
-                    }
-                },
-                {
-                    text: '📱 Data Lokal Saja',
-                    onPress: () => {
-                        Alert.alert(
-                            '📥 Unduh Data Lokal',
-                            'Unduh data yang sudah dimuat di aplikasi (hanya data yang sedang terlihat).\n\nMetode ini lebih cepat tapi hanya berisi data yang sudah dimuat di perangkat.',
-                            [
-                                {
-                                    text: '❌ Batal',
-                                    style: 'cancel'
-                                },
-                                {
-                                    text: '✅ Unduh Data Lokal',
-                                    onPress: downloadExcel
-                                }
-                            ],
-                            { cancelable: true }
-                        );
-                    }
-                }
-            ],
-            { cancelable: true }
-        );
+        setShowDownloadOptionsDialog(true);
     };
+
+    // Add state for custom alert dialogs
+    const [showDownloadOptionsDialog, setShowDownloadOptionsDialog] = useState(false);
+    const [showDownloadLocationDialog, setShowDownloadLocationDialog] = useState(false);
+    const [showDownloadAllDialog, setShowDownloadAllDialog] = useState(false);
+    const [showDownloadLocalDialog, setShowDownloadLocalDialog] = useState(false);
+    const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+    const [showErrorDialog, setShowErrorDialog] = useState(false);
+    const [alertTitle, setAlertTitle] = useState('');
+    const [alertMessage, setAlertMessage] = useState('');
+    const [tempFileUri, setTempFileUri] = useState('');
+    const [tempFileName, setTempFileName] = useState('');
 
     return (<>
         <View style={styles.container}>
+            {/* Custom Alert Dialogs */}
+            <CustomAlertDialog
+                visible={showDownloadOptionsDialog}
+                onClose={() => setShowDownloadOptionsDialog(false)}
+                title="📊 Unduh Data Sensor"
+                message="Pilih metode unduh yang diinginkan:"
+                icon={{ name: "cloud-download-outline" as any, color: "#3b82f6" }}
+                actions={[
+                    {
+                        text: "Data Lokasi Ini Saja",
+                        onPress: () => {
+                            setShowDownloadOptionsDialog(false);
+                            if (selectedLocation && selectedLocation !== 'all' && selectedLocation !== '') {
+                                const locationName = locations.find(loc => String(loc.id_lokasi) === selectedLocation)?.nama_sungai || selectedLocation;
+                                setAlertTitle('📥 Konfirmasi Unduh');
+                                setAlertMessage(`Data sensor dari lokasi ${locationName} akan diunduh dari server dalam format Excel.\n\nProses ini akan menghasilkan dokumen yang lengkap dengan semua data dari lokasi ini.`);
+                                setShowDownloadLocationDialog(true);
+                            } else {
+                                setAlertTitle('⚠️ Perhatian');
+                                setAlertMessage('Silakan pilih lokasi spesifik terlebih dahulu untuk mengunduh data lokasi.');
+                                setShowErrorDialog(true);
+                            }
+                        },
+                        type: 'primary',
+                        icon: "location" as any
+                    },
+                    {
+                        text: "Semua Data Sensor",
+                        onPress: () => {
+                            setShowDownloadOptionsDialog(false);
+                            setAlertTitle('📥 Konfirmasi Unduh');
+                            setAlertMessage('Data dari SEMUA lokasi akan diunduh dari server dalam format Excel.\n\nFile yang dihasilkan mungkin berukuran besar. Pastikan koneksi internet stabil.');
+                            setShowDownloadAllDialog(true);
+                        },
+                        type: 'primary',
+                        icon: "globe-outline" as any
+                    },
+                    {
+                        text: "Batal",
+                        onPress: () => setShowDownloadOptionsDialog(false),
+                        type: 'cancel'
+                    }
+                ]}
+            />
+
+            <CustomAlertDialog
+                visible={showDownloadLocationDialog}
+                onClose={() => setShowDownloadLocationDialog(false)}
+                title={alertTitle}
+                message={alertMessage}
+                icon={{ name: "location" as any, color: "#3b82f6" }}
+                actions={[
+                    {
+                        text: "Unduh",
+                        onPress: () => {
+                            setShowDownloadLocationDialog(false);
+                            serverDownloadExcel(true);
+                        },
+                        type: 'success',
+                        icon: "download-outline" as any
+                    },
+                    {
+                        text: "Batal",
+                        onPress: () => setShowDownloadLocationDialog(false),
+                        type: 'cancel'
+                    }
+                ]}
+            />
+
+            <CustomAlertDialog
+                visible={showDownloadAllDialog}
+                onClose={() => setShowDownloadAllDialog(false)}
+                title={alertTitle}
+                message={alertMessage}
+                icon={{ name: "globe-outline" as any, color: "#3b82f6" }}
+                actions={[
+                    {
+                        text: "Unduh",
+                        onPress: () => {
+                            setShowDownloadAllDialog(false);
+                            serverDownloadExcel(false);
+                        },
+                        type: 'success',
+                        icon: "download-outline" as any
+                    },
+                    {
+                        text: "Batal",
+                        onPress: () => setShowDownloadAllDialog(false),
+                        type: 'cancel'
+                    }
+                ]}
+            />
+
+            <CustomAlertDialog
+                visible={showDownloadLocalDialog}
+                onClose={() => setShowDownloadLocalDialog(false)}
+                title={alertTitle}
+                message={alertMessage}
+                icon={{ name: "phone-portrait-outline" as any, color: "#3b82f6" }}
+                actions={[
+                    {
+                        text: "Unduh Data Lokal",
+                        onPress: () => {
+                            setShowDownloadLocalDialog(false);
+                            downloadExcel();
+                        },
+                        type: 'success',
+                        icon: "download-outline" as any
+                    },
+                    {
+                        text: "Batal",
+                        onPress: () => setShowDownloadLocalDialog(false),
+                        type: 'cancel'
+                    }
+                ]}
+            />
+
+            <CustomAlertDialog
+                visible={showSuccessDialog}
+                onClose={() => setShowSuccessDialog(false)}
+                title={alertTitle}
+                message={alertMessage}
+                icon={{ name: "checkmark-circle" as any, color: "#10b981" }}
+                actions={[
+                    {
+                        text: "Bagikan",
+                        onPress: () => {
+                            setShowSuccessDialog(false);
+                            handleShareFile();
+                        },
+                        type: 'primary',
+                        icon: "share-social-outline" as any
+                    },
+                    {
+                        text: "Simpan ke Perangkat",
+                        onPress: () => {
+                            setShowSuccessDialog(false);
+                            handleSaveToDevice();
+                        },
+                        type: 'primary',
+                        icon: "save-outline" as any
+                    },
+                    {
+                        text: "Tutup",
+                        onPress: () => setShowSuccessDialog(false),
+                        type: 'cancel'
+                    }
+                ]}
+            />
+
+            <CustomAlertDialog
+                visible={showErrorDialog}
+                onClose={() => setShowErrorDialog(false)}
+                title={alertTitle}
+                message={alertMessage}
+                icon={{ name: "alert-circle" as any, color: "#ef4444" }}
+                actions={[
+                    {
+                        text: "OK",
+                        onPress: () => setShowErrorDialog(false),
+                        type: 'error'
+                    }
+                ]}
+            />
+
             {/* Wrapper untuk tombol filter dengan animasi */}
             <Animated.View
                 style={[
@@ -2647,6 +2776,77 @@ const styles = StyleSheet.create({
         color: '#2196f3',
         fontSize: 14,
         fontWeight: '500',
+    },
+
+    // Custom dialog styles
+    dialogHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 8,
+    },
+    dialogIcon: {
+        marginRight: 12,
+    },
+    dialogTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#1e293b',
+    },
+    dialogMessage: {
+        color: '#64748b',
+        textAlign: 'center',
+        marginVertical: 16,
+        lineHeight: 22,
+    },
+    dialogButtonContainerVertical: {
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'stretch',
+        width: '100%',
+        gap: 12,
+    },
+    buttonContentRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    dialogPrimaryButtonFull: {
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    dialogSecondaryButtonFull: {
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f1f5f9',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        overflow: 'hidden',
+        elevation: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+    },
+    dialogPrimaryButtonText: {
+        color: 'white',
+        fontWeight: '600',
+    },
+    dialogSecondaryButtonText: {
+        color: '#64748b',
+        fontWeight: '600',
     },
 });
 

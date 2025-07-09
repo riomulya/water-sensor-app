@@ -12,6 +12,15 @@ import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withTim
 // Local components
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
+import { Modal } from 'react-native';
+import {
+    AlertDialog,
+    AlertDialogBackdrop,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogBody,
+    AlertDialogFooter
+} from '@/components/ui/alert-dialog';
 
 // Types
 interface SensorData {
@@ -35,6 +44,284 @@ interface SensorDataTableProps {
     totalPages?: number;
 }
 
+// Custom Export Alert Dialog Component
+interface ExportAlertDialogProps {
+    visible: boolean;
+    onClose: () => void;
+    onExportCurrentPage: () => void;
+    onExportAllData: () => void;
+    title: string;
+    message: string;
+}
+
+const ExportAlertDialog: React.FC<ExportAlertDialogProps> = ({
+    visible,
+    onClose,
+    onExportCurrentPage,
+    onExportAllData,
+    title,
+    message
+}) => {
+    return (
+        <AlertDialog isOpen={visible} onClose={onClose}>
+            <AlertDialogBackdrop />
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <View style={styles.dialogHeader}>
+                        <Ionicons name="download-outline" size={28} color="#3b82f6" style={styles.dialogIcon} />
+                        <Text size="xl" bold style={styles.dialogTitle}>
+                            {title}
+                        </Text>
+                    </View>
+                </AlertDialogHeader>
+                <AlertDialogBody>
+                    <Text size="sm" style={styles.dialogMessage}>
+                        {message}
+                    </Text>
+                </AlertDialogBody>
+                <AlertDialogFooter>
+                    <View style={styles.dialogButtonContainerVertical}>
+                        <TouchableOpacity
+                            style={styles.dialogPrimaryButtonFull}
+                            onPress={onExportCurrentPage}
+                        >
+                            <LinearGradient
+                                colors={['#60a5fa', '#3b82f6']}
+                                style={StyleSheet.absoluteFill}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            />
+                            <Text size="sm" style={styles.dialogPrimaryButtonText}>
+                                Halaman Ini
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.dialogPrimaryButtonFull}
+                            onPress={onExportAllData}
+                        >
+                            <LinearGradient
+                                colors={['#3b82f6', '#2563eb']}
+                                style={StyleSheet.absoluteFill}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            />
+                            <Text size="sm" style={styles.dialogPrimaryButtonText}>
+                                Semua Data
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.dialogSecondaryButtonFull}
+                            onPress={onClose}
+                        >
+                            <Text size="sm" style={styles.dialogSecondaryButtonText}>
+                                Batal
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+};
+
+// Success Alert Dialog
+interface SuccessAlertDialogProps {
+    visible: boolean;
+    onClose: () => void;
+    title: string;
+    message: string;
+}
+
+const SuccessAlertDialog: React.FC<SuccessAlertDialogProps> = ({
+    visible,
+    onClose,
+    title,
+    message
+}) => {
+    return (
+        <AlertDialog isOpen={visible} onClose={onClose}>
+            <AlertDialogBackdrop />
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <View style={styles.dialogHeader}>
+                        <Ionicons name="checkmark-circle" size={32} color="#10b981" style={styles.dialogIcon} />
+                        <Text size="xl" bold style={styles.dialogTitle}>
+                            {title}
+                        </Text>
+                    </View>
+                </AlertDialogHeader>
+                <AlertDialogBody>
+                    <Text size="sm" style={styles.dialogMessage}>
+                        {message}
+                    </Text>
+                </AlertDialogBody>
+                <AlertDialogFooter>
+                    <View style={styles.dialogButtonContainerVertical}>
+                        <TouchableOpacity
+                            style={styles.dialogSuccessButtonFull}
+                            onPress={onClose}
+                        >
+                            <LinearGradient
+                                colors={['#34d399', '#10b981']}
+                                style={StyleSheet.absoluteFill}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            />
+                            <Text size="sm" style={styles.dialogPrimaryButtonText}>
+                                OK
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+};
+
+// Error Alert Dialog
+interface ErrorAlertDialogProps {
+    visible: boolean;
+    onClose: () => void;
+    title: string;
+    message: string;
+}
+
+const ErrorAlertDialog: React.FC<ErrorAlertDialogProps> = ({
+    visible,
+    onClose,
+    title,
+    message
+}) => {
+    return (
+        <AlertDialog isOpen={visible} onClose={onClose}>
+            <AlertDialogBackdrop />
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <View style={styles.dialogHeader}>
+                        <Ionicons name="alert-circle" size={32} color="#ef4444" style={styles.dialogIcon} />
+                        <Text size="xl" bold style={styles.dialogTitle}>
+                            {title}
+                        </Text>
+                    </View>
+                </AlertDialogHeader>
+                <AlertDialogBody>
+                    <Text size="sm" style={styles.dialogMessage}>
+                        {message}
+                    </Text>
+                </AlertDialogBody>
+                <AlertDialogFooter>
+                    <View style={styles.dialogButtonContainerVertical}>
+                        <TouchableOpacity
+                            style={styles.dialogErrorButtonFull}
+                            onPress={onClose}
+                        >
+                            <LinearGradient
+                                colors={['#f87171', '#ef4444']}
+                                style={StyleSheet.absoluteFill}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            />
+                            <Text size="sm" style={styles.dialogPrimaryButtonText}>
+                                OK
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+};
+
+// Custom Export Options Dialog Component
+interface ExportOptionsDialogProps {
+    visible: boolean;
+    onClose: () => void;
+    onSaveToDevice: () => void;
+    onShare: () => void;
+    title: string;
+    message: string;
+}
+
+const ExportOptionsDialog: React.FC<ExportOptionsDialogProps> = ({
+    visible,
+    onClose,
+    onSaveToDevice,
+    onShare,
+    title,
+    message
+}) => {
+    return (
+        <AlertDialog isOpen={visible} onClose={onClose}>
+            <AlertDialogBackdrop />
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <View style={styles.dialogHeader}>
+                        <Ionicons name="options-outline" size={28} color="#3b82f6" style={styles.dialogIcon} />
+                        <Text size="xl" bold style={styles.dialogTitle}>
+                            {title}
+                        </Text>
+                    </View>
+                </AlertDialogHeader>
+                <AlertDialogBody>
+                    <Text size="sm" style={styles.dialogMessage}>
+                        {message}
+                    </Text>
+                </AlertDialogBody>
+                <AlertDialogFooter>
+                    <View style={styles.dialogButtonContainerVertical}>
+                        <TouchableOpacity
+                            style={styles.dialogPrimaryButtonFull}
+                            onPress={onSaveToDevice}
+                        >
+                            <LinearGradient
+                                colors={['#60a5fa', '#3b82f6']}
+                                style={StyleSheet.absoluteFill}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            />
+                            <View style={styles.buttonContentRow}>
+                                <Ionicons name="save-outline" size={18} color="white" style={{ marginRight: 8 }} />
+                                <Text size="sm" style={styles.dialogPrimaryButtonText}>
+                                    Simpan ke Perangkat
+                                </Text>
+                            </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.dialogPrimaryButtonFull}
+                            onPress={onShare}
+                        >
+                            <LinearGradient
+                                colors={['#3b82f6', '#2563eb']}
+                                style={StyleSheet.absoluteFill}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            />
+                            <View style={styles.buttonContentRow}>
+                                <Ionicons name="share-social-outline" size={18} color="white" style={{ marginRight: 8 }} />
+                                <Text size="sm" style={styles.dialogPrimaryButtonText}>
+                                    Bagikan
+                                </Text>
+                            </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.dialogSecondaryButtonFull}
+                            onPress={onClose}
+                        >
+                            <Text size="sm" style={styles.dialogSecondaryButtonText}>
+                                Batal
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+};
+
 const { width } = Dimensions.get('window');
 
 const SensorDataTable: React.FC<SensorDataTableProps> = ({
@@ -48,6 +335,17 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
     const pageSize = 25;
     const [isLoadingNextPage, setIsLoadingNextPage] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+
+    // Alert dialog states
+    const [showExportDialog, setShowExportDialog] = useState(false);
+    const [showExportOptionsDialog, setShowExportOptionsDialog] = useState(false);
+    const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+    const [showErrorDialog, setShowErrorDialog] = useState(false);
+    const [alertMessage, setAlertMessage] = useState('');
+    const [successTitle, setSuccessTitle] = useState('');
+    const [errorTitle, setErrorTitle] = useState('');
+    const [tempFilePath, setTempFilePath] = useState('');
+    const [fileName, setFileName] = useState('');
 
     // Update internal page when currentPage from props changes
     useEffect(() => {
@@ -149,104 +447,85 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
 
             // Create filename with timestamp
             const fileDate = moment().format('YYYY-MM-DD_HH-mm-ss');
-            const fileName = `water_sensor_data_${fileDate}.csv`;
+            const newFileName = `water_sensor_data_${fileDate}.csv`;
+            setFileName(newFileName);
 
             // Temporarily save file to app's cache directory
-            const tempFilePath = `${FileSystem.cacheDirectory}${fileName}`;
-            await FileSystem.writeAsStringAsync(tempFilePath, csvContent);
+            const newTempFilePath = `${FileSystem.cacheDirectory}${newFileName}`;
+            setTempFilePath(newTempFilePath);
+            await FileSystem.writeAsStringAsync(newTempFilePath, csvContent);
 
             // Show export options to user
-            Alert.alert(
-                'Ekspor Data',
-                'Pilih metode ekspor data',
-                [
-                    {
-                        text: 'Simpan ke Perangkat',
-                        onPress: async () => {
-                            try {
-                                if (Platform.OS === 'android') {
-                                    // Request directory permissions for Android
-                                    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-
-                                    if (permissions.granted) {
-                                        // Create file in the selected directory
-                                        const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
-                                            permissions.directoryUri,
-                                            fileName,
-                                            'text/csv'
-                                        );
-
-                                        // Read the cached file
-                                        const fileContent = await FileSystem.readAsStringAsync(tempFilePath);
-
-                                        // Write to the selected directory
-                                        await FileSystem.writeAsStringAsync(fileUri, fileContent, {
-                                            encoding: FileSystem.EncodingType.UTF8
-                                        });
-
-                                        Alert.alert(
-                                            '✅ Berhasil Disimpan',
-                                            `File ${fileName} telah disimpan ke folder yang Anda pilih.`,
-                                            [{ text: 'OK' }]
-                                        );
-                                    }
-                                } else {
-                                    // For iOS, use sharing API
-                                    await Sharing.shareAsync(tempFilePath, {
-                                        mimeType: 'text/csv',
-                                        dialogTitle: 'Simpan file CSV',
-                                        UTI: 'public.comma-separated-values-text'
-                                    });
-                                }
-                            } catch (error) {
-                                console.error('Error saving to selected folder:', error);
-                                Alert.alert(
-                                    'Ekspor Gagal',
-                                    `Terjadi kesalahan saat menyimpan file: ${error.message}`,
-                                    [{ text: 'OK' }]
-                                );
-                            }
-                        }
-                    },
-                    {
-                        text: 'Bagikan',
-                        onPress: async () => {
-                            try {
-                                if (await Sharing.isAvailableAsync()) {
-                                    await Sharing.shareAsync(tempFilePath, {
-                                        mimeType: 'text/csv',
-                                        dialogTitle: 'Bagikan Data Sensor',
-                                        UTI: 'public.comma-separated-values-text'
-                                    });
-                                }
-                            } catch (error) {
-                                console.error('Error sharing file:', error);
-                                Alert.alert(
-                                    'Bagikan Gagal',
-                                    `Terjadi kesalahan saat membagikan file: ${error.message}`,
-                                    [{ text: 'OK' }]
-                                );
-                            }
-                        }
-                    },
-                    {
-                        text: 'Batal',
-                        style: 'cancel'
-                    }
-                ]
-            );
+            setShowExportOptionsDialog(true);
 
             console.log(`Successfully prepared ${dataToExport.length} records for export`);
 
         } catch (error) {
             console.error('Error exporting data:', error);
-            Alert.alert(
-                'Ekspor Gagal',
-                `Terjadi kesalahan saat mengekspor data: ${error.message}`,
-                [{ text: 'OK' }]
-            );
+            setErrorTitle('Ekspor Gagal');
+            setAlertMessage(`Terjadi kesalahan saat mengekspor data: ${error.message}`);
+            setShowErrorDialog(true);
         } finally {
             setIsExporting(false);
+        }
+    };
+
+    const handleSaveToDevice = async () => {
+        try {
+            if (Platform.OS === 'android') {
+                // Request directory permissions for Android
+                const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+
+                if (permissions.granted) {
+                    // Create file in the selected directory
+                    const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+                        permissions.directoryUri,
+                        fileName,
+                        'text/csv'
+                    );
+
+                    // Read the cached file
+                    const fileContent = await FileSystem.readAsStringAsync(tempFilePath);
+
+                    // Write to the selected directory
+                    await FileSystem.writeAsStringAsync(fileUri, fileContent, {
+                        encoding: FileSystem.EncodingType.UTF8
+                    });
+
+                    setSuccessTitle('✅ Berhasil Disimpan');
+                    setAlertMessage(`File ${fileName} telah disimpan ke folder yang Anda pilih.`);
+                    setShowSuccessDialog(true);
+                }
+            } else {
+                // For iOS, use sharing API
+                await Sharing.shareAsync(tempFilePath, {
+                    mimeType: 'text/csv',
+                    dialogTitle: 'Simpan file CSV',
+                    UTI: 'public.comma-separated-values-text'
+                });
+            }
+        } catch (error) {
+            console.error('Error saving to selected folder:', error);
+            setErrorTitle('Ekspor Gagal');
+            setAlertMessage(`Terjadi kesalahan saat menyimpan file: ${error.message}`);
+            setShowErrorDialog(true);
+        }
+    };
+
+    const handleShare = async () => {
+        try {
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(tempFilePath, {
+                    mimeType: 'text/csv',
+                    dialogTitle: 'Bagikan Data Sensor',
+                    UTI: 'public.comma-separated-values-text'
+                });
+            }
+        } catch (error) {
+            console.error('Error sharing file:', error);
+            setErrorTitle('Bagikan Gagal');
+            setAlertMessage(`Terjadi kesalahan saat membagikan file: ${error.message}`);
+            setShowErrorDialog(true);
         }
     };
 
@@ -299,6 +578,54 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 500, delay: 600 }}
         >
+            {/* Export Dialog */}
+            <ExportAlertDialog
+                visible={showExportDialog}
+                onClose={() => setShowExportDialog(false)}
+                onExportCurrentPage={() => {
+                    setShowExportDialog(false);
+                    handleExport(true);
+                }}
+                onExportAllData={() => {
+                    setShowExportDialog(false);
+                    handleExport(false);
+                }}
+                title="Ekspor Data"
+                message="Pilih data yang ingin diekspor"
+            />
+
+            {/* Export Options Dialog */}
+            <ExportOptionsDialog
+                visible={showExportOptionsDialog}
+                onClose={() => setShowExportOptionsDialog(false)}
+                onSaveToDevice={() => {
+                    setShowExportOptionsDialog(false);
+                    handleSaveToDevice();
+                }}
+                onShare={() => {
+                    setShowExportOptionsDialog(false);
+                    handleShare();
+                }}
+                title="Ekspor Data"
+                message="Pilih metode ekspor data"
+            />
+
+            {/* Success Dialog */}
+            <SuccessAlertDialog
+                visible={showSuccessDialog}
+                onClose={() => setShowSuccessDialog(false)}
+                title={successTitle}
+                message={alertMessage}
+            />
+
+            {/* Error Dialog */}
+            <ErrorAlertDialog
+                visible={showErrorDialog}
+                onClose={() => setShowErrorDialog(false)}
+                title={errorTitle}
+                message={alertMessage}
+            />
+
             <View style={styles.card}>
                 <View style={styles.content}>
                     <View style={styles.headerContainer}>
@@ -322,26 +649,7 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
                                 transition={{ type: 'spring' }}
                             >
                                 <Pressable
-                                    onPress={() => {
-                                        Alert.alert(
-                                            'Ekspor Data',
-                                            'Pilih data yang ingin diekspor',
-                                            [
-                                                {
-                                                    text: 'Halaman Ini',
-                                                    onPress: () => handleExport(true)
-                                                },
-                                                {
-                                                    text: 'Semua Data',
-                                                    onPress: () => handleExport(false)
-                                                },
-                                                {
-                                                    text: 'Batal',
-                                                    style: 'cancel'
-                                                }
-                                            ]
-                                        );
-                                    }}
+                                    onPress={() => setShowExportDialog(true)}
                                     style={({ pressed }) => [
                                         styles.exportButtonContainer,
                                         pressed && styles.exportButtonPressed
@@ -398,7 +706,7 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
                             }
 
                             const timestamp = item.timestamp
-                                ? moment(item.timestamp).format('DD/MM HH:mm:ss')
+                                ? moment.utc(item.timestamp).format('DD/MM HH:mm:ss')
                                 : 'N/A';
                             const turbidity = typeof item.turbidity === 'number'
                                 ? `${item.turbidity.toFixed(1)} ${SENSOR_UNITS.turbidity}`
@@ -550,6 +858,155 @@ const SensorDataTable: React.FC<SensorDataTableProps> = ({
 };
 
 const styles = StyleSheet.create({
+    // Dialog styles
+    dialogHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    dialogIcon: {
+        marginRight: 12,
+    },
+    dialogTitle: {
+        color: '#1e293b',
+    },
+    dialogMessage: {
+        color: '#64748b',
+        textAlign: 'center',
+        marginVertical: 16,
+    },
+    dialogButtonContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 12,
+    },
+    dialogButtonContainerVertical: {
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'stretch',
+        width: '100%',
+        gap: 12,
+    },
+    buttonContentRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    dialogPrimaryButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        minWidth: 100,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    dialogPrimaryButtonFull: {
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    dialogSecondaryButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        minWidth: 100,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f1f5f9',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    dialogSecondaryButtonFull: {
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f1f5f9',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    dialogSuccessButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        minWidth: 120,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    dialogSuccessButtonFull: {
+        paddingVertical: 14,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    dialogErrorButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        minWidth: 120,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    dialogErrorButtonFull: {
+        paddingVertical: 14,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    dialogPrimaryButtonText: {
+        color: 'white',
+        fontWeight: '600',
+    },
+    dialogSecondaryButtonText: {
+        color: '#64748b',
+        fontWeight: '600',
+    },
+    dialogButtonIcon: {
+        marginRight: 8,
+    },
+
     container: {
         marginVertical: 16,
         width: '100%',

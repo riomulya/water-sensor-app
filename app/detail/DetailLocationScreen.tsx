@@ -19,6 +19,7 @@ import * as Notifications from 'expo-notifications';
 import WebView from 'react-native-webview';
 import { Asset } from 'expo-asset';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import moment from 'moment';
 
 // useEffect(() => {
 LogBox.ignoreLogs(["VirtualizedLists should never be nested"]);
@@ -919,16 +920,7 @@ const DetailLocationScreen = () => {
 
         return sortedData.map((item, index) => ({
             ...item,
-            formattedDate: new Date(item.tanggal).toLocaleString('id-ID', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false,
-            }),
+            formattedDate: moment.utc(item.tanggal).format('DD MMMM YYYY HH:mm:ss'),
             rowNumber: (page * itemsPerPage) + index + 1
         })) as EnhancedCombinedData[];
     }, [allCombinedData, page, itemsPerPage]);

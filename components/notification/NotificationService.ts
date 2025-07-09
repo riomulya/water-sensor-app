@@ -1,6 +1,11 @@
 import * as Notifications from 'expo-notifications';
 import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as BackgroundFetch from 'expo-background-fetch';
+import * as TaskManager from 'expo-task-manager';
+
+// API endpoint for fetching sensor data
+const API_ENDPOINT = 'https://api-watermon.onlimoni.online/getcurrentdata';
 
 type SensorData = {
     accel_x: number;
@@ -28,8 +33,86 @@ let lastWarningStatus = {
     warningThreshold: 0
 };
 
-// Periode minimum antar warning baru (dalam milidetik) - 30 menit
-const MIN_WARNING_INTERVAL = 30 * 60 * 1000;
+// Periode minimum antar warning baru (dalam milidetik) - 5 detik untuk testing
+const MIN_WARNING_INTERVAL = 5 * 1000;
+
+// Background task name
+const BACKGROUND_FETCH_TASK = 'background-sensor-fetch';
+
+// Register background task
+TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
+    try {
+        console.log('[BACKGROUND] Background fetch task running');
+
+        // Check if service is running
+        const isRunning = await AsyncStorage.getItem('SENSOR_SERVICE_RUNNING');
+        if (isRunning !== 'true') {
+            console.log('[BACKGROUND] Service not running, skipping fetch');
+            return BackgroundFetch.BackgroundFetchResult.NoData;
+        }
+
+        // Fetch data from API
+        const newData = await fetchSensorData();
+        if (!newData) {
+            console.log('[BACKGROUND] No data fetched');
+            return BackgroundFetch.BackgroundFetchResult.NoData;
+        }
+
+        // Save data for background access
+        await saveSensorDataForBackground(newData);
+
+        // Update notification with new data
+        await updateBackgroundNotification(newData);
+
+        // Check for warnings
+        await checkSensorWarnings(newData);
+
+        console.log('[BACKGROUND] Background fetch completed successfully');
+        return BackgroundFetch.BackgroundFetchResult.NewData;
+    } catch (error) {
+        console.error('[BACKGROUND] Error in background fetch task:', error);
+        return BackgroundFetch.BackgroundFetchResult.Failed;
+    }
+});
+
+// Register the background fetch task
+export const registerBackgroundFetch = async () => {
+    try {
+        await AsyncStorage.setItem('SENSOR_SERVICE_RUNNING', 'true');
+
+        // Register the task
+        await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
+            minimumInterval: 5, // 5 seconds
+            stopOnTerminate: false,
+            startOnBoot: true,
+        });
+
+        console.log('[BACKGROUND] Background fetch task registered');
+        return true;
+    } catch (error) {
+        console.error('[BACKGROUND] Error registering background fetch task:', error);
+        return false;
+    }
+};
+
+// Unregister the background fetch task
+export const unregisterBackgroundFetch = async () => {
+    try {
+        await AsyncStorage.setItem('SENSOR_SERVICE_RUNNING', 'false');
+
+        // Check if task is registered before unregistering
+        const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_FETCH_TASK);
+        if (isRegistered) {
+            await BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK);
+            console.log('[BACKGROUND] Background fetch task unregistered');
+        }
+
+        return true;
+    } catch (error) {
+        console.error('[BACKGROUND] Error unregistering background fetch task:', error);
+        return false;
+    }
+};
 
 // Inisialisasi notifikasi handler secara global
 Notifications.setNotificationHandler({
@@ -43,17 +126,31 @@ Notifications.setNotificationHandler({
 export const setupNotificationChannel = async () => {
     if (Platform.OS === 'android') {
         try {
+            console.log('[NOTIF] Setting up notification channel...');
             await Notifications.setNotificationChannelAsync('sensor_monitoring', {
                 name: 'Sensor Monitoring',
                 importance: Notifications.AndroidImportance.MAX,
-                // vibrationPattern: [0, 250, 250, 250],
+                vibrationPattern: [0, 250, 250, 250],
                 lightColor: '#FF231F7C',
-                // enableVibrate: true,
+                enableVibrate: true,
                 enableLights: true,
                 showBadge: true,
             });
             console.log('[NOTIF] Channel created successfully');
-            return true;
+
+            // Request permissions explicitly
+            const { status } = await Notifications.requestPermissionsAsync({
+                ios: {
+                    allowAlert: true,
+                    allowBadge: true,
+                    allowSound: true,
+                },
+                android: {},
+            });
+
+            console.log('[NOTIF] Notification permission status:', status);
+
+            return status === 'granted';
         } catch (error) {
             console.error('[NOTIF] Error creating channel:', error);
             return false;
@@ -121,11 +218,7 @@ export const saveSensorDataForBackground = async (data: Partial<SensorData> | nu
 // Fungsi untuk menampilkan notifikasi saat aplikasi di background
 export const showBackgroundNotification = async (sensorData: Partial<SensorData> | null | undefined) => {
     try {
-        // Cek terlebih dahulu apakah aplikasi berada di background
-        if (AppState.currentState !== 'background') {
-            console.log('[NOTIF] App is not in background, skipping notification');
-            return false;
-        }
+        console.log('[NOTIF] Attempting to show background notification with data:', sensorData);
 
         // Sanitize data to ensure all properties have valid values
         const sanitizedData = sanitizeSensorData(sensorData);
@@ -135,9 +228,7 @@ export const showBackgroundNotification = async (sensorData: Partial<SensorData>
 
         // Check for warnings first
         const hasWarning = await checkSensorWarnings(sanitizedData);
-
-        // If warning shown, still show the main notification but don't play sound
-        // to avoid too many sounds at once
+        console.log('[NOTIF] Warning check result:', hasWarning);
 
         // Create a persistent notification with safe value checking
         const ph = sanitizedData.ph.toFixed(2);
@@ -179,7 +270,7 @@ export const showBackgroundNotification = async (sensorData: Partial<SensorData>
                 badge: 1,
                 android: {
                     channelId: 'sensor_monitoring',
-                    priority: Notifications.AndroidNotificationPriority.LOW,
+                    priority: Notifications.AndroidNotificationPriority.HIGH,
                     color: getOverallWaterQualityColor(sanitizedData),
                     ongoing: true,
                     sticky: true,
@@ -214,11 +305,7 @@ export const showBackgroundNotification = async (sensorData: Partial<SensorData>
 // Fungsi untuk update data sensor saat aplikasi di background
 export const updateBackgroundNotification = async (sensorData: Partial<SensorData> | null | undefined) => {
     try {
-        // Cek terlebih dahulu apakah aplikasi berada di background
-        if (AppState.currentState !== 'background') {
-            console.log('[NOTIF] App is not in background, skipping update');
-            return false;
-        }
+        console.log('[NOTIF] Updating background notification with data:', sensorData);
 
         // Sanitize data to ensure all properties have valid values
         const sanitizedData = sanitizeSensorData(sensorData);
@@ -228,9 +315,11 @@ export const updateBackgroundNotification = async (sensorData: Partial<SensorDat
 
         // Check for warnings first - if warning detected, it will show warning notif
         const hasWarning = await checkSensorWarnings(sanitizedData);
+        console.log('[NOTIF] Warning check result on update:', hasWarning);
 
         // If warning shown, don't update the regular notification to avoid clutter
         if (hasWarning) {
+            console.log('[NOTIF] Warning detected, skipping regular notification update');
             return true;
         }
 
@@ -269,12 +358,12 @@ export const updateBackgroundNotification = async (sensorData: Partial<SensorDat
                     timestamp: Date.now(),
                     sensorData: sanitizedData
                 },
-                sound: 'default',
+                sound: false, // Don't play sound on updates
                 priority: 'max',
                 badge: 1,
                 android: {
                     channelId: 'sensor_monitoring',
-                    priority: Notifications.AndroidNotificationPriority.LOW,
+                    priority: Notifications.AndroidNotificationPriority.HIGH,
                     color: getOverallWaterQualityColor(sanitizedData),
                     ongoing: true,
                     sticky: true,
@@ -366,10 +455,14 @@ export const clearAllNotifications = async () => {
 // Fungsi untuk menyediakan kompabilitas dengan fungsi lama
 // tapi dimodifikasi untuk hanya berjalan saat di background
 export const startForegroundService = async (sensorData: Partial<SensorData> | null | undefined) => {
+    // Always show notification regardless of app state for testing
+    console.log('[NOTIF] Starting foreground service with data:', sensorData);
     return await showBackgroundNotification(sensorData);
 };
 
 export const updateForegroundNotification = async (sensorData: Partial<SensorData> | null | undefined) => {
+    // Always update notification regardless of app state for testing
+    console.log('[NOTIF] Updating foreground notification with data:', sensorData);
     return await updateBackgroundNotification(sensorData);
 };
 
@@ -659,5 +752,44 @@ const showNormalConditionNotification = async (sensorData: SensorData) => {
     } catch (error) {
         console.error('[NOTIF] Error showing normal condition notification:', error);
         return false;
+    }
+};
+
+// Function to fetch sensor data from the API
+export const fetchSensorData = async (): Promise<SensorData | null> => {
+    try {
+        console.log('[API] Fetching sensor data from:', API_ENDPOINT);
+        const response = await fetch(API_ENDPOINT);
+
+        if (!response.ok) {
+            throw new Error(`API responded with status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.success || !data.data || !data.data.message) {
+            console.error('[API] Invalid data structure:', data);
+            return null;
+        }
+
+        // Extract message from the response
+        const message = data.data.message;
+
+        // Convert string values to numbers
+        const sensorData: SensorData = {
+            accel_x: parseFloat(message.accel_x),
+            accel_y: parseFloat(message.accel_y),
+            accel_z: parseFloat(message.accel_z),
+            ph: parseFloat(message.ph),
+            turbidity: parseFloat(message.turbidity),
+            temperature: parseFloat(message.temperature),
+            speed: parseFloat(message.speed)
+        };
+
+        console.log('[API] Successfully fetched sensor data:', sensorData);
+        return sensorData;
+    } catch (error) {
+        console.error('[API] Error fetching sensor data:', error);
+        return null;
     }
 };

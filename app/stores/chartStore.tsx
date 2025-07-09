@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { port } from '@/constants/https';
 import moment from 'moment';
+import 'moment-timezone';
 import { Text } from 'react-native';
+
 
 // Types
 export interface DataPoint {
@@ -154,7 +156,9 @@ const createDataPoint = (item: any, as: string): DataPoint => {
     try {
         const value = parseFloat(item[as]);
         // Parse date correctly from ISO format
-        const date = moment(item.tanggal);
+        // moment.locale('id');
+        // moment.tz.setDefault('Asia/Jakarta');
+        const date = moment.utc(item.tanggal);
 
         if (isNaN(value)) {
             console.warn('Invalid value for', as, ':', item[as]);
