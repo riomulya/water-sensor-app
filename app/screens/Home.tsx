@@ -843,7 +843,7 @@ const HomeScreen = () => {
             console.log('[HOME] Initializing background service...');
             // Fetch data from API directly
             try {
-                const response = await fetch('https://api-watermon.onlimoni.online/getcurrentdata');
+                const response = await fetch(`${port}getcurrentdata`);
                 const data = await response.json();
 
                 if (data.success && data.data && data.data.message) {

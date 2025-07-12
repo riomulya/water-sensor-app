@@ -7,6 +7,7 @@ import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-rean
 import { BatteryOptimizationDialog } from '../components/AlertDialog';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as BackgroundFetch from 'expo-background-fetch';
 import LottieView from 'lottie-react-native';
 
 // This is the default configuration
