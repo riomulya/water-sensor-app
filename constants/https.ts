@@ -5,9 +5,13 @@
 // export const port = "https://server-water-sensors-production.up.railway.app/"
 // export const port = "https://server-water-sensors-production.up.railway.app/"
 
-export const port = "https://api-watermon.onlimoni.online/"
+// export const port = "https://api-watermon.onlimoni.online/"
 
-export const ml = "https://ml-watermon.onlimoni.online/"
+// export const ml = "https://ml-watermon.onlimoni.online/"
+
+export const port = "https://server-water-sensors.onrender.com/"
+
+export const ml = "https://pw-brin-ml.onrender.com"
 
 // For debugging:
 console.log('API Base URL:', port);
