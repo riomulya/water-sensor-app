@@ -305,9 +305,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👥 Team
 
-- **Lead Developer**: [Your Name]
-- **UI/UX Designer**: [Designer Name]
-- **Backend Developer**: [Backend Dev Name]
+- **Lead Developer**: RIO MULYA SYAWAL
+- **UI/UX Designer**: TEGUH SATRIO
+- **Backend Developer**: RIO MULYA SYAWAL
 
 ## 🙏 Acknowledgments
 
